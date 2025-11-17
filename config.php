@@ -1,0 +1,156 @@
+<?php
+/**
+ * Конфигурация базы данных SmartBizSell
+ * Настройте параметры подключения для вашего хостинга reg.ru
+ */
+
+// Настройки подключения к MySQL
+define('DB_HOST', 'localhost'); // Обычно localhost для reg.ru
+define('DB_NAME', 'smartbizsell');
+define('DB_USER', 'your_db_user'); // Замените на ваш пользователь БД
+define('DB_PASS', 'your_db_password'); // Замените на ваш пароль БД
+define('DB_CHARSET', 'utf8mb4');
+
+// Настройки сессий
+define('SESSION_LIFETIME', 3600 * 24 * 7); // 7 дней
+define('SESSION_NAME', 'smartbizsell_session');
+
+// Настройки безопасности
+define('PASSWORD_MIN_LENGTH', 8);
+define('BCRYPT_COST', 12);
+
+// Пути
+define('BASE_URL', 'https://smartbizsell.ru'); // Замените на ваш домен
+define('LOGIN_URL', BASE_URL . '/login.php');
+define('DASHBOARD_URL', BASE_URL . '/dashboard.php');
+
+// Настройки почты (для уведомлений)
+define('ADMIN_EMAIL', 'admin@smartbizsell.ru'); // Замените на ваш email
+
+/**
+ * Подключение к базе данных
+ */
+function getDBConnection() {
+    static $pdo = null;
+    
+    if ($pdo === null) {
+        try {
+            $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
+            $options = [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+            ];
+            
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        } catch (PDOException $e) {
+            error_log("Database connection error: " . $e->getMessage());
+            die("Ошибка подключения к базе данных. Пожалуйста, обратитесь к администратору.");
+        }
+    }
+    
+    return $pdo;
+}
+
+/**
+ * Инициализация сессии
+ */
+function initSession() {
+    if (session_status() === PHP_SESSION_NONE) {
+        ini_set('session.cookie_httponly', 1);
+        ini_set('session.use_only_cookies', 1);
+        // Используем HTTPS только если сайт работает по HTTPS
+        if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+            ini_set('session.cookie_secure', 1);
+        }
+        ini_set('session.gc_maxlifetime', SESSION_LIFETIME);
+        
+        session_name(SESSION_NAME);
+        session_start();
+        
+        // Обновление времени жизни сессии
+        if (isset($_SESSION['last_activity']) && 
+            (time() - $_SESSION['last_activity'] > SESSION_LIFETIME)) {
+            session_destroy();
+            session_start();
+        }
+        
+        $_SESSION['last_activity'] = time();
+    }
+}
+
+/**
+ * Проверка авторизации пользователя
+ */
+function isLoggedIn() {
+    initSession();
+    return isset($_SESSION['user_id']) && isset($_SESSION['user_email']);
+}
+
+/**
+ * Получение данных текущего пользователя
+ */
+function getCurrentUser() {
+    if (!isLoggedIn()) {
+        return null;
+    }
+    
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("SELECT id, email, full_name, phone, company_name, created_at FROM users WHERE id = ? AND is_active = 1");
+        $stmt->execute([$_SESSION['user_id']]);
+        return $stmt->fetch();
+    } catch (PDOException $e) {
+        error_log("Error getting current user: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Редирект на страницу входа
+ */
+function redirectToLogin() {
+    header('Location: ' . LOGIN_URL);
+    exit;
+}
+
+/**
+ * Редирект в личный кабинет
+ */
+function redirectToDashboard() {
+    header('Location: ' . DASHBOARD_URL);
+    exit;
+}
+
+/**
+ * Хеширование пароля
+ */
+function hashPassword($password) {
+    return password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
+}
+
+/**
+ * Проверка пароля
+ */
+function verifyPassword($password, $hash) {
+    return password_verify($password, $hash);
+}
+
+/**
+ * Санитизация данных
+ */
+function sanitizeInput($data) {
+    return htmlspecialchars(strip_tags(trim($data)), ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Валидация email
+ */
+function validateEmail($email) {
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
+
+// Инициализация сессии при подключении файла
+initSession();
+

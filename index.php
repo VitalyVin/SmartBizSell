@@ -1,3 +1,6 @@
+<?php
+require_once 'config.php';
+?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -25,6 +28,13 @@
                     <li><a href="#buy-business">Купить бизнес</a></li>
                     <li><a href="#seller-form">Продать бизнес</a></li>
                     <li><a href="#contact">Контакты</a></li>
+                    <?php if (isLoggedIn()): ?>
+                        <li><a href="dashboard.php">Личный кабинет</a></li>
+                        <li><a href="logout.php">Выйти</a></li>
+                    <?php else: ?>
+                        <li><a href="login.php">Войти</a></li>
+                        <li><a href="register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Регистрация</a></li>
+                    <?php endif; ?>
                 </ul>
                 <button class="nav-toggle" aria-label="Toggle menu">
                     <span></span>
@@ -757,7 +767,43 @@
                 $financialBudget2025 = array_pad($financialBudget2025, $financialRowCount, '');
                 $financialBudget2026 = array_pad($financialBudget2026, $financialRowCount, '');
 
-                
+                // Определение переменных формы
+                $asset_name = sanitizeInput($_POST['asset_name'] ?? '');
+                $deal_share_range = sanitizeInput($_POST['deal_share_range'] ?? '');
+                $deal_goal = $_POST['deal_goal'] ?? '';
+                $company_description = sanitizeInput($_POST['company_description'] ?? '');
+                $presence_regions = sanitizeInput($_POST['presence_regions'] ?? '');
+                $products_services = sanitizeInput($_POST['products_services'] ?? '');
+                $company_brands = sanitizeInput($_POST['company_brands'] ?? '');
+                $own_production = $_POST['own_production'] ?? '';
+                $production_sites_count = $_POST['production_sites_count'] ?? '';
+                $production_sites_region = sanitizeInput($_POST['production_sites_region'] ?? '');
+                $production_area = sanitizeInput($_POST['production_area'] ?? '');
+                $production_capacity = sanitizeInput($_POST['production_capacity'] ?? '');
+                $production_load = sanitizeInput($_POST['production_load'] ?? '');
+                $production_building_ownership = $_POST['production_building_ownership'] ?? '';
+                $production_land_ownership = $_POST['production_land_ownership'] ?? '';
+                $contract_production_usage = $_POST['contract_production_usage'] ?? '';
+                $contract_production_region = sanitizeInput($_POST['contract_production_region'] ?? '');
+                $contract_production_logistics = sanitizeInput($_POST['contract_production_logistics'] ?? '');
+                $own_retail_presence = $_POST['own_retail_presence'] ?? '';
+                $own_retail_points = $_POST['own_retail_points'] ?? '';
+                $own_retail_regions = sanitizeInput($_POST['own_retail_regions'] ?? '');
+                $own_retail_area = sanitizeInput($_POST['own_retail_area'] ?? '');
+                $online_sales_presence = $_POST['online_sales_presence'] ?? '';
+                $online_sales_share = sanitizeInput($_POST['online_sales_share'] ?? '');
+                $online_sales_channels = sanitizeInput($_POST['online_sales_channels'] ?? '');
+                $main_clients = sanitizeInput($_POST['main_clients'] ?? '');
+                $sales_share = sanitizeInput($_POST['sales_share'] ?? '');
+                $personnel_count = $_POST['personnel_count'] ?? '';
+                $company_website = sanitizeInput($_POST['company_website'] ?? '');
+                $additional_info = sanitizeInput($_POST['additional_info'] ?? '');
+                $debt_obligations = $_POST['debt_obligations'] ?? '';
+                $cash_balance = $_POST['cash_balance'] ?? '';
+                $net_assets = $_POST['net_assets'] ?? '';
+                $financial_source = $_POST['financial_source'] ?? '';
+                $agree = isset($_POST['agree']);
+
             if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($asset_name === '') $errors['asset_name'] = 'Укажите название актива';
                 if ($deal_share_range === '') $errors['deal_share_range'] = 'Укажите предмет сделки';
@@ -779,17 +825,126 @@
                 if (!$agree) $errors['agree'] = 'Необходимо согласие на обработку данных';
 
                 if (empty($errors)) {
-                    $success = true;
+                    // Сохранение в базу данных (если пользователь авторизован)
+                    if (isLoggedIn()) {
+                        try {
+                            $pdo = getDBConnection();
+                            
+                            // Подготовка данных для JSON полей
+                            $productionVolumes = [];
+                            for ($i = 0; $i < $productionRowCount; $i++) {
+                                if (!empty($productionColumns['product'][$i])) {
+                                    $productionVolumes[] = [
+                                        'product' => $productionColumns['product'][$i],
+                                        'unit' => $productionColumns['unit'][$i] ?? '',
+                                        'fact_2022' => $productionColumns['fact_2022'][$i] ?? '',
+                                        'fact_2023' => $productionColumns['fact_2023'][$i] ?? '',
+                                        'fact_2024' => $productionColumns['fact_2024'][$i] ?? '',
+                                        'fact_2025_9m' => $productionColumns['fact_2025_9m'][$i] ?? '',
+                                        'budget_2025' => $productionColumns['budget_2025'][$i] ?? '',
+                                        'budget_2026' => $productionColumns['budget_2026'][$i] ?? '',
+                                    ];
+                                }
+                            }
+                            
+                            $financialIndicators = [];
+                            for ($i = 0; $i < $financialRowCount; $i++) {
+                                if (!empty($financialMetrics[$i])) {
+                                    $financialIndicators[] = [
+                                        'metric' => $financialMetrics[$i],
+                                        'unit' => $financialUnits[$i] ?? '',
+                                        'fact_2022' => $financialFact2022[$i] ?? '',
+                                        'fact_2023' => $financialFact2023[$i] ?? '',
+                                        'fact_2024' => $financialFact2024[$i] ?? '',
+                                        'fact_2025_9m' => $financialFact2025_9m[$i] ?? '',
+                                        'budget_2025' => $financialBudget2025[$i] ?? '',
+                                        'budget_2026' => $financialBudget2026[$i] ?? '',
+                                    ];
+                                }
+                            }
+                            
+                            $stmt = $pdo->prepare("
+                                INSERT INTO seller_forms (
+                                    user_id, asset_name, deal_subject, deal_purpose,
+                                    company_description, presence_regions, products_services, company_brands,
+                                    own_production, production_sites_count, production_sites_region,
+                                    production_area, production_capacity, production_load,
+                                    production_building_ownership, production_land_ownership,
+                                    contract_production_usage, contract_production_region, contract_production_logistics,
+                                    own_retail_presence, own_retail_points, own_retail_regions, own_retail_area,
+                                    online_sales_presence, online_sales_share, online_sales_channels,
+                                    main_clients, sales_share, personnel_count, company_website, additional_info,
+                                    production_volumes, financial_indicators,
+                                    debt_obligations, cash_balance, net_assets, financial_source,
+                                    status, submitted_at
+                                ) VALUES (
+                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
+                                )
+                            ");
+                            
+                            $stmt->execute([
+                                $_SESSION['user_id'],
+                                $asset_name,
+                                $deal_share_range,
+                                $deal_goal === 'cash_out' ? 'cash-out' : ($deal_goal === 'cash_in' ? 'cash-in' : null),
+                                $company_description,
+                                $presence_regions,
+                                $products_services,
+                                $company_brands,
+                                $own_production ?: null,
+                                $production_sites_count ?: null,
+                                $production_sites_region,
+                                $production_area,
+                                $production_capacity,
+                                $production_load,
+                                $production_building_ownership ?: null,
+                                $production_land_ownership ?: null,
+                                $contract_production_usage ?: null,
+                                $contract_production_region,
+                                $contract_production_logistics,
+                                $own_retail_presence ?: null,
+                                $own_retail_points ?: null,
+                                $own_retail_regions,
+                                $own_retail_area,
+                                $online_sales_presence ?: null,
+                                $online_sales_share,
+                                $online_sales_channels,
+                                $main_clients,
+                                $sales_share,
+                                $personnel_count ?: null,
+                                $company_website,
+                                $additional_info,
+                                json_encode($productionVolumes, JSON_UNESCAPED_UNICODE),
+                                json_encode($financialIndicators, JSON_UNESCAPED_UNICODE),
+                                $debt_obligations ?: null,
+                                $cash_balance ?: null,
+                                $net_assets ?: null,
+                                $financial_source ?: null,
+                                'submitted'
+                            ]);
+                            
+                            $success = true;
+                            // Редирект в личный кабинет после успешной отправки
+                            header('Location: dashboard.php?success=1');
+                            exit;
+                        } catch (PDOException $e) {
+                            error_log("Error saving form: " . $e->getMessage());
+                            $errors['general'] = 'Ошибка сохранения анкеты. Попробуйте позже.';
+                        }
+                    } else {
+                        // Если не авторизован, просто показываем успех (можно добавить редирект на регистрацию)
+                        $success = true;
+                    }
                 }
             }
             ?>
-            <?php if ($success): ?>
+            <?php if ($success && !isLoggedIn()): ?>
                 <div class="success-message">
                     <div class="success-icon">✓</div>
                     <h3>Спасибо за заявку!</h3>
-                    <p>Мы получили обновлённую анкету. Команда SmartBizSell изучит информацию и свяжется с вами для обсуждения следующих шагов.</p>
+                    <p>Мы получили вашу анкету. Для сохранения и отслеживания статуса анкеты рекомендуем <a href="register.php" style="color: var(--primary-color); font-weight: 600;">зарегистрироваться</a> или <a href="login.php" style="color: var(--primary-color); font-weight: 600;">войти</a> в личный кабинет.</p>
                 </div>
-            <?php else: ?>
+            <?php elseif (!$success): ?>
                 <form class="seller-form" method="POST" action="#seller-form">
                     <div class="form-section">
                         <h3 class="form-section-title">I. Детали предполагаемой сделки</h3>
