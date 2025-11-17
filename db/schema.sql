@@ -1,8 +1,13 @@
 -- SmartBizSell Database Schema
--- MySQL 8.0
+-- MySQL 8.0 / Percona Server 8.0
+-- Для reg.ru хостинга
 
-CREATE DATABASE IF NOT EXISTS smartbizsell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE smartbizsell;
+-- ВАЖНО: Создайте базу данных через панель управления reg.ru
+-- Затем выполните этот скрипт, убрав строки CREATE DATABASE и USE
+-- Или замените 'smartbizsell' на имя вашей базы данных
+
+-- CREATE DATABASE IF NOT EXISTS smartbizsell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE smartbizsell;
 
 -- Таблица пользователей (продавцов)
 CREATE TABLE IF NOT EXISTS users (

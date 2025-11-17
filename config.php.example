@@ -1,15 +1,16 @@
 <?php
 /**
  * Конфигурация базы данных SmartBizSell
- * Настройте параметры подключения для вашего хостинга reg.ru
+ * Скопируйте этот файл в config.php и заполните данные вашей БД
  */
 
 // Настройки подключения к MySQL
-define('DB_HOST', 'localhost'); // Обычно localhost для reg.ru
-define('DB_NAME', 'smartbizsell');
-define('DB_USER', 'your_db_user'); // Замените на ваш пользователь БД
-define('DB_PASS', 'your_db_password'); // Замените на ваш пароль БД
-define('DB_CHARSET', 'utf8mb4');
+// Для reg.ru с Percona Server 8.0
+define('DB_HOST', 'localhost'); // Localhost via UNIX socket
+define('DB_NAME', 'your_database_name'); // Имя базы данных
+define('DB_USER', 'your_db_user'); // Пользователь БД
+define('DB_PASS', 'your_db_password'); // Пароль БД
+define('DB_CHARSET', 'utf8mb4'); // UTF-8 Unicode (utf8mb4)
 
 // Настройки сессий
 define('SESSION_LIFETIME', 3600 * 24 * 7); // 7 дней

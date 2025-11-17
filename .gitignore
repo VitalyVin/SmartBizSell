@@ -36,3 +36,6 @@ Temporary Items
 *.tmp
 *.temp
 
+# Config files with sensitive data
+config.php
+
