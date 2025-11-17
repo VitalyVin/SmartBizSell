@@ -1,14 +1,20 @@
--- SmartBizSell Database Schema
+-- SmartBizSell Database Installation Script
 -- MySQL 8.0 / Percona Server 8.0
 -- Для reg.ru хостинга
+-- 
+-- ИНСТРУКЦИЯ:
+-- 1. Откройте phpMyAdmin
+-- 2. Перейдите на вкладку "SQL"
+-- 3. Скопируйте и вставьте весь этот файл
+-- 4. Нажмите "Вперед" (Execute)
+--
+-- ВАЖНО: Если база данных уже существует, удалите строку CREATE DATABASE
 
--- ВАЖНО: Создайте базу данных через панель управления reg.ru
--- Название базы данных: u3064951_SmartBizSell
--- Затем выполните этот скрипт, убрав строки CREATE DATABASE и USE
--- Или замените 'u3064951_SmartBizSell' на имя вашей базы данных
+-- Создание базы данных
+CREATE DATABASE IF NOT EXISTS u3064951_SmartBizSell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CREATE DATABASE IF NOT EXISTS u3064951_SmartBizSell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
--- USE u3064951_SmartBizSell;
+-- Использование базы данных
+USE u3064951_SmartBizSell;
 
 -- Таблица пользователей (продавцов)
 CREATE TABLE IF NOT EXISTS users (
@@ -110,4 +116,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     INDEX idx_user_id (user_id),
     INDEX idx_last_activity (last_activity)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Сообщение об успешном завершении
+SELECT 'База данных u3064951_SmartBizSell успешно создана!' AS message;
 

@@ -61,6 +61,7 @@ $statusColors = [
             padding: 40px 0;
             color: white;
             margin-bottom: 40px;
+            margin-top: 80px;
         }
         .dashboard-header-content {
             max-width: 1200px;
