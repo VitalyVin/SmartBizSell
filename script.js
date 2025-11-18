@@ -486,7 +486,7 @@ addRowButtons.forEach(button => {
  * Обрабатывает следующие разделы:
  * - Собственные производственные мощности (own_production)
  * - Контрактное производство (contract_production_usage)
- * - Собственная розница (own_retail_presence)
+ * - Офлайн-продажи (offline_sales_presence)
  * - Онлайн-продажи (online_sales_presence)
  * 
  * При выборе "нет" соответствующие поля становятся неактивными

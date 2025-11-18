@@ -760,40 +760,79 @@ require_once 'config.php';
                     }
                 }
 
-                $defaultFinancialRows = [
-                    ['Выручка (без НДС)', '___'],
-                    ['EBITDA', '___'],
-                    ['Чистая прибыль', '___'],
+                // Инициализация переменных для финансовых результатов
+                $defaultFinancialResultsRows = [
+                    ['Выручка', '___'],
+                    ['Себестоимость продаж', '___'],
+                    ['Коммерческие расходы', '___'],
+                    ['Управленческие расходы', '___'],
+                    ['Прибыль от продаж', '___'],
+                    ['Амортизация', '___'],
+                    ['Приобретение основных средств', '___'],
                 ];
 
-                $financialMetrics = $_POST['financial_metric'] ?? [];
-                if (count($financialMetrics) === 0) {
-                    $financialMetrics = array_column($defaultFinancialRows, 0);
-                    $financialUnits = array_column($defaultFinancialRows, 1);
-                    $financialFact2022 = array_fill(0, count($financialMetrics), '');
-                    $financialFact2023 = array_fill(0, count($financialMetrics), '');
-                    $financialFact2024 = array_fill(0, count($financialMetrics), '');
-                    $financialFact2025_9m = array_fill(0, count($financialMetrics), '');
-                    $financialBudget2025 = array_fill(0, count($financialMetrics), '');
-                    $financialBudget2026 = array_fill(0, count($financialMetrics), '');
+                $financialResultsMetrics = $_POST['financial_results_metric'] ?? [];
+                if (count($financialResultsMetrics) === 0) {
+                    $financialResultsMetrics = array_column($defaultFinancialResultsRows, 0);
+                    $financialResultsUnits = array_column($defaultFinancialResultsRows, 1);
+                    $financialResultsFact2022 = array_fill(0, count($financialResultsMetrics), '');
+                    $financialResultsFact2023 = array_fill(0, count($financialResultsMetrics), '');
+                    $financialResultsFact2024 = array_fill(0, count($financialResultsMetrics), '');
+                    $financialResultsFact2025_9m = array_fill(0, count($financialResultsMetrics), '');
+                    $financialResultsBudget2025 = array_fill(0, count($financialResultsMetrics), '');
+                    $financialResultsBudget2026 = array_fill(0, count($financialResultsMetrics), '');
                 } else {
-                    $financialUnits = $_POST['financial_unit'] ?? [];
-                    $financialFact2022 = $_POST['financial_fact_2022'] ?? [];
-                    $financialFact2023 = $_POST['financial_fact_2023'] ?? [];
-                    $financialFact2024 = $_POST['financial_fact_2024'] ?? [];
-                    $financialFact2025_9m = $_POST['financial_fact_2025_9m'] ?? [];
-                    $financialBudget2025 = $_POST['financial_budget_2025'] ?? [];
-                    $financialBudget2026 = $_POST['financial_budget_2026'] ?? [];
+                    $financialResultsUnits = $_POST['financial_results_unit'] ?? [];
+                    $financialResultsFact2022 = $_POST['financial_results_fact_2022'] ?? [];
+                    $financialResultsFact2023 = $_POST['financial_results_fact_2023'] ?? [];
+                    $financialResultsFact2024 = $_POST['financial_results_fact_2024'] ?? [];
+                    $financialResultsFact2025_9m = $_POST['financial_results_fact_2025_9m'] ?? [];
+                    $financialResultsBudget2025 = $_POST['financial_results_budget_2025'] ?? [];
+                    $financialResultsBudget2026 = $_POST['financial_results_budget_2026'] ?? [];
                 }
 
-                $financialRowCount = count($financialMetrics);
-                $financialUnits = array_pad($financialUnits, $financialRowCount, '');
-                $financialFact2022 = array_pad($financialFact2022, $financialRowCount, '');
-                $financialFact2023 = array_pad($financialFact2023, $financialRowCount, '');
-                $financialFact2024 = array_pad($financialFact2024, $financialRowCount, '');
-                $financialFact2025_9m = array_pad($financialFact2025_9m, $financialRowCount, '');
-                $financialBudget2025 = array_pad($financialBudget2025, $financialRowCount, '');
-                $financialBudget2026 = array_pad($financialBudget2026, $financialRowCount, '');
+                $financialResultsRowCount = count($financialResultsMetrics);
+                $financialResultsUnits = array_pad($financialResultsUnits, $financialResultsRowCount, '');
+                $financialResultsFact2022 = array_pad($financialResultsFact2022, $financialResultsRowCount, '');
+                $financialResultsFact2023 = array_pad($financialResultsFact2023, $financialResultsRowCount, '');
+                $financialResultsFact2024 = array_pad($financialResultsFact2024, $financialResultsRowCount, '');
+                $financialResultsFact2025_9m = array_pad($financialResultsFact2025_9m, $financialResultsRowCount, '');
+                $financialResultsBudget2025 = array_pad($financialResultsBudget2025, $financialResultsRowCount, '');
+                $financialResultsBudget2026 = array_pad($financialResultsBudget2026, $financialResultsRowCount, '');
+
+                // Инициализация переменных для балансовых показателей
+                $defaultBalanceRows = [
+                    ['Основные средства', '___'],
+                    ['Запасы', '___'],
+                    ['Дебиторская задолженность', '___'],
+                    ['Кредиторская задолженность', '___'],
+                    ['Кредиты и займы', '___'],
+                    ['Денежные средства', '___'],
+                    ['Чистые активы', '___'],
+                ];
+
+                $balanceMetrics = $_POST['balance_metric'] ?? [];
+                if (count($balanceMetrics) === 0) {
+                    $balanceMetrics = array_column($defaultBalanceRows, 0);
+                    $balanceUnits = array_column($defaultBalanceRows, 1);
+                    $balanceFact2022 = array_fill(0, count($balanceMetrics), '');
+                    $balanceFact2023 = array_fill(0, count($balanceMetrics), '');
+                    $balanceFact2024 = array_fill(0, count($balanceMetrics), '');
+                    $balanceFact2025 = array_fill(0, count($balanceMetrics), '');
+                } else {
+                    $balanceUnits = $_POST['balance_unit'] ?? [];
+                    $balanceFact2022 = $_POST['balance_fact_2022'] ?? [];
+                    $balanceFact2023 = $_POST['balance_fact_2023'] ?? [];
+                    $balanceFact2024 = $_POST['balance_fact_2024'] ?? [];
+                    $balanceFact2025 = $_POST['balance_fact_2025'] ?? [];
+                }
+
+                $balanceRowCount = count($balanceMetrics);
+                $balanceUnits = array_pad($balanceUnits, $balanceRowCount, '');
+                $balanceFact2022 = array_pad($balanceFact2022, $balanceRowCount, '');
+                $balanceFact2023 = array_pad($balanceFact2023, $balanceRowCount, '');
+                $balanceFact2024 = array_pad($balanceFact2024, $balanceRowCount, '');
+                $balanceFact2025 = array_pad($balanceFact2025, $balanceRowCount, '');
 
                 /**
                  * Получение и санитизация данных формы
@@ -802,6 +841,7 @@ require_once 'config.php';
                 $asset_name = sanitizeInput($_POST['asset_name'] ?? '');
                 $deal_share_range = sanitizeInput($_POST['deal_share_range'] ?? '');
                 $deal_goal = $_POST['deal_goal'] ?? '';
+                $asset_disclosure = $_POST['asset_disclosure'] ?? '';
                 $company_description = sanitizeInput($_POST['company_description'] ?? '');
                 $presence_regions = sanitizeInput($_POST['presence_regions'] ?? '');
                 $products_services = sanitizeInput($_POST['products_services'] ?? '');
@@ -817,10 +857,12 @@ require_once 'config.php';
                 $contract_production_usage = $_POST['contract_production_usage'] ?? '';
                 $contract_production_region = sanitizeInput($_POST['contract_production_region'] ?? '');
                 $contract_production_logistics = sanitizeInput($_POST['contract_production_logistics'] ?? '');
-                $own_retail_presence = $_POST['own_retail_presence'] ?? '';
-                $own_retail_points = $_POST['own_retail_points'] ?? '';
-                $own_retail_regions = sanitizeInput($_POST['own_retail_regions'] ?? '');
-                $own_retail_area = sanitizeInput($_POST['own_retail_area'] ?? '');
+                $offline_sales_presence = $_POST['offline_sales_presence'] ?? '';
+                $offline_sales_points = $_POST['offline_sales_points'] ?? '';
+                $offline_sales_regions = sanitizeInput($_POST['offline_sales_regions'] ?? '');
+                $offline_sales_area = sanitizeInput($_POST['offline_sales_area'] ?? '');
+                $offline_sales_third_party = $_POST['offline_sales_third_party'] ?? '';
+                $offline_sales_distributors = $_POST['offline_sales_distributors'] ?? '';
                 $online_sales_presence = $_POST['online_sales_presence'] ?? '';
                 $online_sales_share = sanitizeInput($_POST['online_sales_share'] ?? '');
                 $online_sales_channels = sanitizeInput($_POST['online_sales_channels'] ?? '');
@@ -829,9 +871,7 @@ require_once 'config.php';
                 $personnel_count = $_POST['personnel_count'] ?? '';
                 $company_website = sanitizeInput($_POST['company_website'] ?? '');
                 $additional_info = sanitizeInput($_POST['additional_info'] ?? '');
-                $debt_obligations = $_POST['debt_obligations'] ?? '';
-                $cash_balance = $_POST['cash_balance'] ?? '';
-                $net_assets = $_POST['net_assets'] ?? '';
+                $financial_results_vat = $_POST['financial_results_vat'] ?? '';
                 $financial_source = $_POST['financial_source'] ?? '';
                 $agree = isset($_POST['agree']);
 
@@ -844,6 +884,7 @@ require_once 'config.php';
                 if ($asset_name === '') $errors['asset_name'] = 'Укажите название актива';
                 if ($deal_share_range === '') $errors['deal_share_range'] = 'Укажите предмет сделки';
                 if (!in_array($deal_goal, ['cash_out', 'cash_in'], true)) $errors['deal_goal'] = 'Выберите цель сделки';
+                if (!in_array($asset_disclosure, ['yes', 'no'], true)) $errors['asset_disclosure'] = 'Укажите раскрытие названия актива';
                 if ($company_description === '' || mb_strlen($company_description) < 20) $errors['company_description'] = 'Опишите деятельность компании (не менее 20 символов)';
                 if ($presence_regions === '') $errors['presence_regions'] = 'Укажите регионы присутствия';
                 if ($products_services === '') $errors['products_services'] = 'Опишите продукцию или услуги компании';
@@ -851,10 +892,8 @@ require_once 'config.php';
                 if ($personnel_count === '' || !is_numeric($personnel_count) || (float)$personnel_count < 0) $errors['personnel_count'] = 'Введите численность персонала';
                 if ($company_website !== '' && !filter_var($company_website, FILTER_VALIDATE_URL)) $errors['company_website'] = 'Введите корректный адрес сайта (https://...)';
                 if ($production_sites_count !== '' && (!is_numeric($production_sites_count) || (float)$production_sites_count < 0)) $errors['production_sites_count'] = 'Введите корректное количество производственных площадок';
-                if ($own_retail_points !== '' && (!is_numeric($own_retail_points) || (float)$own_retail_points < 0)) $errors['own_retail_points'] = 'Введите корректное количество розничных точек';
-                if ($debt_obligations !== '' && !is_numeric($debt_obligations)) $errors['debt_obligations'] = 'Введите числовое значение долговых обязательств';
-                if ($cash_balance !== '' && !is_numeric($cash_balance)) $errors['cash_balance'] = 'Введите числовое значение денежных средств';
-                if ($net_assets !== '' && !is_numeric($net_assets)) $errors['net_assets'] = 'Введите числовое значение чистых активов';
+                if ($offline_sales_points !== '' && (!is_numeric($offline_sales_points) || (float)$offline_sales_points < 0)) $errors['offline_sales_points'] = 'Введите корректное количество розничных точек';
+                if (!in_array($financial_results_vat, ['with_vat', 'without_vat'], true)) $errors['financial_results_vat'] = 'Выберите вариант НДС для финансовых результатов';
                 if ($financial_source === '' || !in_array($financial_source, ['rsbu', 'ifrs', 'management'], true)) {
                     $errors['financial_source'] = 'Выберите источник финансовых показателей';
                 }
@@ -891,38 +930,54 @@ require_once 'config.php';
                                 }
                             }
                             
-                            $financialIndicators = [];
-                            for ($i = 0; $i < $financialRowCount; $i++) {
-                                if (!empty($financialMetrics[$i])) {
-                                    $financialIndicators[] = [
-                                        'metric' => $financialMetrics[$i],
-                                        'unit' => $financialUnits[$i] ?? '',
-                                        'fact_2022' => $financialFact2022[$i] ?? '',
-                                        'fact_2023' => $financialFact2023[$i] ?? '',
-                                        'fact_2024' => $financialFact2024[$i] ?? '',
-                                        'fact_2025_9m' => $financialFact2025_9m[$i] ?? '',
-                                        'budget_2025' => $financialBudget2025[$i] ?? '',
-                                        'budget_2026' => $financialBudget2026[$i] ?? '',
+                            // Финансовые результаты
+                            $financialResults = [];
+                            for ($i = 0; $i < $financialResultsRowCount; $i++) {
+                                if (!empty($financialResultsMetrics[$i])) {
+                                    $financialResults[] = [
+                                        'metric' => $financialResultsMetrics[$i],
+                                        'unit' => $financialResultsUnits[$i] ?? '',
+                                        'fact_2022' => $financialResultsFact2022[$i] ?? '',
+                                        'fact_2023' => $financialResultsFact2023[$i] ?? '',
+                                        'fact_2024' => $financialResultsFact2024[$i] ?? '',
+                                        'fact_2025_9m' => $financialResultsFact2025_9m[$i] ?? '',
+                                        'budget_2025' => $financialResultsBudget2025[$i] ?? '',
+                                        'budget_2026' => $financialResultsBudget2026[$i] ?? '',
+                                    ];
+                                }
+                            }
+                            
+                            // Балансовые показатели
+                            $balanceIndicators = [];
+                            for ($i = 0; $i < $balanceRowCount; $i++) {
+                                if (!empty($balanceMetrics[$i])) {
+                                    $balanceIndicators[] = [
+                                        'metric' => $balanceMetrics[$i],
+                                        'unit' => $balanceUnits[$i] ?? '',
+                                        'fact_2022' => $balanceFact2022[$i] ?? '',
+                                        'fact_2023' => $balanceFact2023[$i] ?? '',
+                                        'fact_2024' => $balanceFact2024[$i] ?? '',
+                                        'fact_2025' => $balanceFact2025[$i] ?? '',
                                     ];
                                 }
                             }
                             
                             $stmt = $pdo->prepare("
                                 INSERT INTO seller_forms (
-                                    user_id, asset_name, deal_subject, deal_purpose,
+                                    user_id, asset_name, deal_subject, deal_purpose, asset_disclosure,
                                     company_description, presence_regions, products_services, company_brands,
                                     own_production, production_sites_count, production_sites_region,
                                     production_area, production_capacity, production_load,
                                     production_building_ownership, production_land_ownership,
                                     contract_production_usage, contract_production_region, contract_production_logistics,
-                                    own_retail_presence, own_retail_points, own_retail_regions, own_retail_area,
+                                    offline_sales_presence, offline_sales_points, offline_sales_regions, offline_sales_area,
+                                    offline_sales_third_party, offline_sales_distributors,
                                     online_sales_presence, online_sales_share, online_sales_channels,
                                     main_clients, sales_share, personnel_count, company_website, additional_info,
-                                    production_volumes, financial_indicators,
-                                    debt_obligations, cash_balance, net_assets, financial_source,
-                                    status, submitted_at
+                                    production_volumes, financial_results_vat, financial_results, balance_indicators,
+                                    financial_source, status, submitted_at
                                 ) VALUES (
-                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
+                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
                                 )
                             ");
                             
@@ -931,6 +986,7 @@ require_once 'config.php';
                                 $asset_name,
                                 $deal_share_range,
                                 $deal_goal === 'cash_out' ? 'cash-out' : ($deal_goal === 'cash_in' ? 'cash-in' : null),
+                                $asset_disclosure ?: null,
                                 $company_description,
                                 $presence_regions,
                                 $products_services,
@@ -946,10 +1002,12 @@ require_once 'config.php';
                                 $contract_production_usage ?: null,
                                 $contract_production_region,
                                 $contract_production_logistics,
-                                $own_retail_presence ?: null,
-                                $own_retail_points ?: null,
-                                $own_retail_regions,
-                                $own_retail_area,
+                                $offline_sales_presence ?: null,
+                                $offline_sales_points ?: null,
+                                $offline_sales_regions,
+                                $offline_sales_area,
+                                $offline_sales_third_party ?: null,
+                                $offline_sales_distributors ?: null,
                                 $online_sales_presence ?: null,
                                 $online_sales_share,
                                 $online_sales_channels,
@@ -959,10 +1017,9 @@ require_once 'config.php';
                                 $company_website,
                                 $additional_info,
                                 json_encode($productionVolumes, JSON_UNESCAPED_UNICODE),
-                                json_encode($financialIndicators, JSON_UNESCAPED_UNICODE),
-                                $debt_obligations ?: null,
-                                $cash_balance ?: null,
-                                $net_assets ?: null,
+                                $financial_results_vat ?: null,
+                                json_encode($financialResults, JSON_UNESCAPED_UNICODE),
+                                json_encode($balanceIndicators, JSON_UNESCAPED_UNICODE),
                                 $financial_source ?: null,
                                 'submitted'
                             ]);
@@ -994,7 +1051,7 @@ require_once 'config.php';
                         <h3 class="form-section-title">I. Детали предполагаемой сделки</h3>
 
                         <div class="form-group">
-                            <label for="asset_name">Название актива (название ЮЛ, группы компаний или бренда) *</label>
+                            <label for="asset_name">Название актива (название ЮЛ, группы компаний или бренда), ИНН *</label>
                             <input type="text" id="asset_name" name="asset_name" required
                                    value="<?php echo htmlspecialchars($_POST['asset_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <?php if (isset($errors['asset_name'])): ?>
@@ -1003,9 +1060,9 @@ require_once 'config.php';
                         </div>
 
                         <div class="form-group">
-                            <label for="deal_share_range">Предмет сделки: продажа доли от __% до __% *</label>
+                            <label for="deal_share_range">Предмет сделки: продажа доли от ___до ____ *</label>
                             <input type="text" id="deal_share_range" name="deal_share_range" required
-                                   placeholder="от __% до __%"
+                                   placeholder="от ___ до ____"
                                    value="<?php echo htmlspecialchars($_POST['deal_share_range'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <?php if (isset($errors['deal_share_range'])): ?>
                                 <span class="error-message"><?php echo $errors['deal_share_range']; ?></span>
@@ -1026,6 +1083,23 @@ require_once 'config.php';
                             </div>
                             <?php if (isset($errors['deal_goal'])): ?>
                                 <span class="error-message"><?php echo $errors['deal_goal']; ?></span>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="form-group">
+                            <span class="form-group-label">Раскрытие названия актива в анкете: да/нет *</span>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="asset_disclosure" value="yes" <?php echo (($_POST['asset_disclosure'] ?? '') === 'yes') ? 'checked' : ''; ?> required>
+                                    <span>да</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="asset_disclosure" value="no" <?php echo (($_POST['asset_disclosure'] ?? '') === 'no') ? 'checked' : ''; ?>>
+                                    <span>нет</span>
+                                </label>
+                            </div>
+                            <?php if (isset($errors['asset_disclosure'])): ?>
+                                <span class="error-message"><?php echo $errors['asset_disclosure']; ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -1174,38 +1248,64 @@ require_once 'config.php';
                         </div>
 
                         <div class="form-subsection">
-                            <h4 class="form-subsection-title">Собственная розница</h4>
+                            <h4 class="form-subsection-title">Офлайн-продажи</h4>
                             <div class="form-group">
                                 <span class="form-group-label">a. Наличие собственных магазинов</span>
                                 <div class="radio-group">
                                     <?php foreach ($yesNo as $value => $label): ?>
                                         <label class="radio-option">
-                                            <input type="radio" name="own_retail_presence" value="<?php echo $value; ?>"
-                                                <?php echo (($_POST['own_retail_presence'] ?? '') === $value) ? 'checked' : ''; ?>>
+                                            <input type="radio" name="offline_sales_presence" value="<?php echo $value; ?>"
+                                                <?php echo (($_POST['offline_sales_presence'] ?? '') === $value) ? 'checked' : ''; ?>>
                                             <span><?php echo $label; ?></span>
                                         </label>
                                     <?php endforeach; ?>
                                 </div>
                             </div>
-                            <div class="retail-details toggle-section" data-toggle-source="own_retail_presence">
+                            <div class="retail-details toggle-section" data-toggle-source="offline_sales_presence">
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="own_retail_points">b. Количество розничных точек</label>
-                                        <input type="number" id="own_retail_points" name="own_retail_points" min="0"
-                                               value="<?php echo htmlspecialchars($_POST['own_retail_points'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                        <?php if (isset($errors['own_retail_points'])): ?>
-                                            <span class="error-message"><?php echo $errors['own_retail_points']; ?></span>
+                                        <label for="offline_sales_points">b. Количество розничных точек</label>
+                                        <input type="number" id="offline_sales_points" name="offline_sales_points" min="0"
+                                               value="<?php echo htmlspecialchars($_POST['offline_sales_points'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                        <?php if (isset($errors['offline_sales_points'])): ?>
+                                            <span class="error-message"><?php echo $errors['offline_sales_points']; ?></span>
                                         <?php endif; ?>
                                     </div>
                                     <div class="form-group">
-                                        <label for="own_retail_regions">c. Регионы расположения розничных точек</label>
-                                        <input type="text" id="own_retail_regions" name="own_retail_regions"
-                                               value="<?php echo htmlspecialchars($_POST['own_retail_regions'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                        <label for="offline_sales_regions">c. Регионы расположения розничных точек</label>
+                                        <input type="text" id="offline_sales_regions" name="offline_sales_regions"
+                                               value="<?php echo htmlspecialchars($_POST['offline_sales_regions'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                                     </div>
                                     <div class="form-group">
-                                        <label for="own_retail_area">d. Общая площадь розничных точек</label>
-                                        <input type="text" id="own_retail_area" name="own_retail_area"
-                                               value="<?php echo htmlspecialchars($_POST['own_retail_area'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                        <label for="offline_sales_area">d. Общая площадь розничных точек</label>
+                                        <input type="text" id="offline_sales_area" name="offline_sales_area"
+                                               value="<?php echo htmlspecialchars($_POST['offline_sales_area'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <span class="form-group-label">e. Реализация через сторонние розничные магазины: да/нет</span>
+                                        <div class="radio-group">
+                                            <?php foreach ($yesNo as $value => $label): ?>
+                                                <label class="radio-option">
+                                                    <input type="radio" name="offline_sales_third_party" value="<?php echo $value; ?>"
+                                                        <?php echo (($_POST['offline_sales_third_party'] ?? '') === $value) ? 'checked' : ''; ?>>
+                                                    <span><?php echo $label; ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <span class="form-group-label">f. Реализация через дистрибьюторов: да/нет</span>
+                                        <div class="radio-group">
+                                            <?php foreach ($yesNo as $value => $label): ?>
+                                                <label class="radio-option">
+                                                    <input type="radio" name="offline_sales_distributors" value="<?php echo $value; ?>"
+                                                        <?php echo (($_POST['offline_sales_distributors'] ?? '') === $value) ? 'checked' : ''; ?>>
+                                                    <span><?php echo $label; ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1241,13 +1341,14 @@ require_once 'config.php';
                         </div>
 
                         <div class="form-group">
-                            <label for="main_clients">Основные клиенты/каналы продаж</label>
+                            <label for="main_clients">Основные клиенты</label>
                             <textarea id="main_clients" name="main_clients" rows="3"><?php echo htmlspecialchars($_POST['main_clients'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
                         <div class="form-group">
-                            <label for="sales_share">Доля продаж в РФ/экспорта</label>
+                            <label for="sales_share">Доля продаж в РФ/экспорта: __/__0%</label>
                             <input type="text" id="sales_share" name="sales_share"
+                                   placeholder="__/__0%"
                                    value="<?php echo htmlspecialchars($_POST['sales_share'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
 
@@ -1316,9 +1417,25 @@ require_once 'config.php';
                         </div>
 
                         <div class="form-subsection">
-                            <h4 class="form-subsection-title">Финансовые показатели</h4>
+                            <h4 class="form-subsection-title">Финансовые результаты</h4>
+                            <div class="form-group">
+                                <span class="form-group-label">Выберите: с НДС / без НДС *</span>
+                                <div class="radio-group">
+                                    <label class="radio-option">
+                                        <input type="radio" name="financial_results_vat" value="with_vat" <?php echo (($_POST['financial_results_vat'] ?? '') === 'with_vat') ? 'checked' : ''; ?> required>
+                                        <span>с НДС</span>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="financial_results_vat" value="without_vat" <?php echo (($_POST['financial_results_vat'] ?? '') === 'without_vat') ? 'checked' : ''; ?>>
+                                        <span>без НДС</span>
+                                    </label>
+                                </div>
+                                <?php if (isset($errors['financial_results_vat'])): ?>
+                                    <span class="error-message"><?php echo $errors['financial_results_vat']; ?></span>
+                                <?php endif; ?>
+                            </div>
                             <div class="table-wrapper">
-                                <table class="form-table" id="financial-table">
+                                <table class="form-table" id="financial-results-table">
                                     <thead>
                                         <tr>
                                             <th>Показатель</th>
@@ -1332,16 +1449,16 @@ require_once 'config.php';
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php for ($row = 0; $row < $financialRowCount; $row++): ?>
+                                        <?php for ($row = 0; $row < $financialResultsRowCount; $row++): ?>
                                             <tr>
-                                                <td><input type="text" name="financial_metric[]" value="<?php echo htmlspecialchars($financialMetrics[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_unit[]" value="<?php echo htmlspecialchars($financialUnits[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_fact_2022[]" value="<?php echo htmlspecialchars($financialFact2022[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_fact_2023[]" value="<?php echo htmlspecialchars($financialFact2023[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_fact_2024[]" value="<?php echo htmlspecialchars($financialFact2024[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_fact_2025_9m[]" value="<?php echo htmlspecialchars($financialFact2025_9m[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_budget_2025[]" value="<?php echo htmlspecialchars($financialBudget2025[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                                <td><input type="text" name="financial_budget_2026[]" value="<?php echo htmlspecialchars($financialBudget2026[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_metric[]" value="<?php echo htmlspecialchars($financialResultsMetrics[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_unit[]" value="<?php echo htmlspecialchars($financialResultsUnits[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_fact_2022[]" value="<?php echo htmlspecialchars($financialResultsFact2022[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_fact_2023[]" value="<?php echo htmlspecialchars($financialResultsFact2023[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_fact_2024[]" value="<?php echo htmlspecialchars($financialResultsFact2024[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_fact_2025_9m[]" value="<?php echo htmlspecialchars($financialResultsFact2025_9m[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_budget_2025[]" value="<?php echo htmlspecialchars($financialResultsBudget2025[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="financial_results_budget_2026[]" value="<?php echo htmlspecialchars($financialResultsBudget2026[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             </tr>
                                         <?php endfor; ?>
                                     </tbody>
@@ -1351,53 +1468,53 @@ require_once 'config.php';
 
                         <div class="form-subsection">
                             <h4 class="form-subsection-title">Балансовые показатели</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="debt_obligations">a. Долговые обязательства (кредиты, займы и т.п.), млн руб.</label>
-                                    <input type="number" step="0.01" id="debt_obligations" name="debt_obligations"
-                                           value="<?php echo htmlspecialchars($_POST['debt_obligations'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                    <?php if (isset($errors['debt_obligations'])): ?>
-                                        <span class="error-message"><?php echo $errors['debt_obligations']; ?></span>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="form-group">
-                                    <label for="cash_balance">b. Денежные средства на балансе, млн руб.</label>
-                                    <input type="number" step="0.01" id="cash_balance" name="cash_balance"
-                                           value="<?php echo htmlspecialchars($_POST['cash_balance'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                    <?php if (isset($errors['cash_balance'])): ?>
-                                        <span class="error-message"><?php echo $errors['cash_balance']; ?></span>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="form-group">
-                                    <label for="net_assets">c. Величина чистых активов, млн руб.</label>
-                                    <input type="number" step="0.01" id="net_assets" name="net_assets"
-                                           value="<?php echo htmlspecialchars($_POST['net_assets'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                    <?php if (isset($errors['net_assets'])): ?>
-                                        <span class="error-message"><?php echo $errors['net_assets']; ?></span>
-                                    <?php endif; ?>
-                                </div>
+                            <div class="table-wrapper">
+                                <table class="form-table" id="balance-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Показатель</th>
+                                            <th>Ед. изм.</th>
+                                            <th>31.12.2022 факт</th>
+                                            <th>31.12.2023 факт</th>
+                                            <th>31.12.2024 факт</th>
+                                            <th>30.09.2025 факт</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php for ($row = 0; $row < $balanceRowCount; $row++): ?>
+                                            <tr>
+                                                <td><input type="text" name="balance_metric[]" value="<?php echo htmlspecialchars($balanceMetrics[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="balance_unit[]" value="<?php echo htmlspecialchars($balanceUnits[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="balance_fact_2022[]" value="<?php echo htmlspecialchars($balanceFact2022[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="balance_fact_2023[]" value="<?php echo htmlspecialchars($balanceFact2023[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="balance_fact_2024[]" value="<?php echo htmlspecialchars($balanceFact2024[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                                <td><input type="text" name="balance_fact_2025[]" value="<?php echo htmlspecialchars($balanceFact2025[$row] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                            </tr>
+                                        <?php endfor; ?>
+                                    </tbody>
+                                </table>
                             </div>
+                        </div>
 
-                            <div class="form-group">
-                                <span class="form-group-label">Источник финансовых показателей</span>
-                                <div class="radio-group">
-                                    <label class="radio-option">
-                                        <input type="radio" name="financial_source" value="rsbu" <?php echo (($_POST['financial_source'] ?? '') === 'rsbu') ? 'checked' : ''; ?>>
-                                        <span>a. РСБУ</span>
-                                    </label>
-                                    <label class="radio-option">
-                                        <input type="radio" name="financial_source" value="ifrs" <?php echo (($_POST['financial_source'] ?? '') === 'ifrs') ? 'checked' : ''; ?>>
-                                        <span>b. МСФО</span>
-                                    </label>
-                                    <label class="radio-option">
-                                        <input type="radio" name="financial_source" value="management" <?php echo (($_POST['financial_source'] ?? '') === 'management') ? 'checked' : ''; ?>>
-                                        <span>c. Управленческая отчетность</span>
-                                    </label>
-                                </div>
-                                <?php if (isset($errors['financial_source'])): ?>
-                                    <span class="error-message"><?php echo $errors['financial_source']; ?></span>
-                                <?php endif; ?>
+                        <div class="form-group">
+                            <span class="form-group-label">Источник финансовых показателей *</span>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="financial_source" value="rsbu" <?php echo (($_POST['financial_source'] ?? '') === 'rsbu') ? 'checked' : ''; ?> required>
+                                    <span>a. РСБУ</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="financial_source" value="ifrs" <?php echo (($_POST['financial_source'] ?? '') === 'ifrs') ? 'checked' : ''; ?>>
+                                    <span>b. МСФО</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="financial_source" value="management" <?php echo (($_POST['financial_source'] ?? '') === 'management') ? 'checked' : ''; ?>>
+                                    <span>c. Управленческая отчетность</span>
+                                </label>
                             </div>
+                            <?php if (isset($errors['financial_source'])): ?>
+                                <span class="error-message"><?php echo $errors['financial_source']; ?></span>
+                            <?php endif; ?>
                         </div>
                     </div>
 

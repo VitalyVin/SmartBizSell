@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS seller_forms (
     asset_name VARCHAR(500) DEFAULT NULL,
     deal_subject VARCHAR(500) DEFAULT NULL,
     deal_purpose ENUM('cash-out', 'cash-in') DEFAULT NULL,
+    asset_disclosure ENUM('yes', 'no') DEFAULT NULL,
     
     -- II. Описание бизнеса компании
     company_description TEXT DEFAULT NULL,
@@ -57,11 +58,13 @@ CREATE TABLE IF NOT EXISTS seller_forms (
     contract_production_region VARCHAR(255) DEFAULT NULL,
     contract_production_logistics TEXT DEFAULT NULL,
     
-    -- Собственная розница
-    own_retail_presence ENUM('yes', 'no') DEFAULT NULL,
-    own_retail_points INT DEFAULT NULL,
-    own_retail_regions VARCHAR(255) DEFAULT NULL,
-    own_retail_area VARCHAR(255) DEFAULT NULL,
+    -- Офлайн-продажи
+    offline_sales_presence ENUM('yes', 'no') DEFAULT NULL,
+    offline_sales_points INT DEFAULT NULL,
+    offline_sales_regions VARCHAR(255) DEFAULT NULL,
+    offline_sales_area VARCHAR(255) DEFAULT NULL,
+    offline_sales_third_party ENUM('yes', 'no') DEFAULT NULL,
+    offline_sales_distributors ENUM('yes', 'no') DEFAULT NULL,
     
     -- Онлайн-продажи
     online_sales_presence ENUM('yes', 'no') DEFAULT NULL,
@@ -74,17 +77,18 @@ CREATE TABLE IF NOT EXISTS seller_forms (
     company_website VARCHAR(500) DEFAULT NULL,
     additional_info TEXT DEFAULT NULL,
     
-    -- III. Финансовые показатели
+    -- III. Основные операционные и финансовые показатели
     -- Объемы производства (JSON)
     production_volumes JSON DEFAULT NULL,
     
-    -- Финансовые показатели (JSON)
-    financial_indicators JSON DEFAULT NULL,
+    -- Финансовые результаты
+    financial_results_vat ENUM('with_vat', 'without_vat') DEFAULT NULL,
+    financial_results JSON DEFAULT NULL,
     
-    -- Балансовые показатели
-    debt_obligations DECIMAL(15,2) DEFAULT NULL,
-    cash_balance DECIMAL(15,2) DEFAULT NULL,
-    net_assets DECIMAL(15,2) DEFAULT NULL,
+    -- Балансовые показатели (JSON)
+    balance_indicators JSON DEFAULT NULL,
+    
+    -- Источник финансовых показателей
     financial_source ENUM('RSBU', 'IFRS', 'management') DEFAULT NULL,
     
     -- Статус и метаданные
