@@ -1,7 +1,23 @@
+/**
+ * SmartBizSell.ru - Основной JavaScript файл
+ * 
+ * Содержит:
+ * - Управление мобильным меню
+ * - Плавную прокрутку по якорям
+ * - Функциональность карточек бизнесов (фильтрация, модальные окна)
+ * - Динамическое добавление строк в таблицах формы
+ * - Условное отключение полей формы (production, retail, online)
+ * - Анимации карточек при загрузке
+ * 
+ * @version 1.0
+ */
+
 // Debug: Script loaded
 console.log('SmartBizSell script.js loaded at:', new Date().toISOString());
 
-// Mobile Menu Toggle
+/**
+ * Мобильное меню - переключение видимости на мобильных устройствах
+ */
 const navToggle = document.querySelector('.nav-toggle');
 const navMenu = document.querySelector('.nav-menu');
 
@@ -12,7 +28,9 @@ if (navToggle) {
     });
 }
 
-// Close mobile menu when clicking on a link
+/**
+ * Закрытие мобильного меню при клике на ссылку
+ */
 const navLinks = document.querySelectorAll('.nav-menu a');
 navLinks.forEach(link => {
     link.addEventListener('click', () => {
@@ -21,7 +39,10 @@ navLinks.forEach(link => {
     });
 });
 
-// Smooth scroll for anchor links
+/**
+ * Плавная прокрутка к якорным ссылкам
+ * Учитывает высоту фиксированной навигации (offset 80px)
+ */
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
@@ -36,7 +57,10 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
-// Navbar background on scroll
+/**
+ * Изменение стиля навигации при прокрутке страницы
+ * Добавляет тень при прокрутке вниз
+ */
 const navbar = document.querySelector('.navbar');
 let lastScroll = 0;
 
@@ -76,7 +100,10 @@ animateElements.forEach(el => {
     observer.observe(el);
 });
 
-// Form validation enhancement
+/**
+ * Улучшенная валидация формы на клиентской стороне
+ * Проверка полей в реальном времени при вводе данных
+ */
 const form = document.querySelector('.seller-form');
 if (form) {
     const inputs = form.querySelectorAll('input, select, textarea');
@@ -112,6 +139,12 @@ if (form) {
     });
 }
 
+/**
+ * Валидация отдельного поля формы
+ * Проверяет обязательность, формат и другие правила валидации
+ * @param {HTMLElement} field - Поле для валидации
+ * @returns {boolean} true если поле валидно, false если есть ошибки
+ */
 function validateField(field) {
     const value = field.value.trim();
     let isValid = true;
@@ -183,7 +216,10 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Parallax effect for hero section
+/**
+ * Параллакс эффект для hero секции
+ * Градиентные орбы двигаются с разной скоростью при прокрутке
+ */
 window.addEventListener('scroll', () => {
     const scrolled = window.pageYOffset;
     const hero = document.querySelector('.hero-background');
@@ -196,7 +232,13 @@ window.addEventListener('scroll', () => {
     }
 });
 
-// Number counter animation for stats
+/**
+ * Анимация счетчиков для статистики
+ * Плавное увеличение чисел от 0 до целевого значения
+ * @param {HTMLElement} element - Элемент для анимации
+ * @param {number} target - Целевое значение
+ * @param {number} duration - Длительность анимации в мс
+ */
 const animateCounter = (element, target, duration = 2000) => {
     let start = 0;
     const increment = target / (duration / 16);
@@ -296,7 +338,16 @@ if ('IntersectionObserver' in window) {
     });
 }
 
-// Business filtering functionality
+/**
+ * Функциональность фильтрации карточек бизнесов
+ * 
+ * Фильтры:
+ * - По отрасли (IT, рестораны, e-commerce и т.д.)
+ * - По максимальной цене
+ * - По городу/региону
+ * 
+ * Карточки скрываются/показываются в зависимости от выбранных фильтров
+ */
 const filterIndustry = document.getElementById('filter-industry');
 const filterPrice = document.getElementById('filter-price');
 const filterLocation = document.getElementById('filter-location');
@@ -304,6 +355,10 @@ const businessesGrid = document.getElementById('businesses-grid');
 const noResults = document.getElementById('no-results');
 const businessCards = document.querySelectorAll('.business-card');
 
+/**
+ * Фильтрация карточек бизнесов по выбранным критериям
+ * Показывает сообщение "Нет результатов", если ничего не найдено
+ */
 function filterBusinesses() {
     const industryValue = filterIndustry?.value || '';
     const priceValue = filterPrice?.value || '';
@@ -393,7 +448,15 @@ logos.forEach(logo => {
     }
 });
 
-// Dynamic rows for seller form tables
+/**
+ * Динамическое добавление строк в таблицах формы
+ * 
+ * Позволяет пользователю добавлять дополнительные строки в таблицы:
+ * - Объемы производства
+ * - Финансовые показатели
+ * 
+ * При добавлении новой строки все поля очищаются
+ */
 const addRowButtons = document.querySelectorAll('[data-add-row]');
 addRowButtons.forEach(button => {
     button.addEventListener('click', () => {
@@ -417,7 +480,17 @@ addRowButtons.forEach(button => {
     });
 });
 
-// Production details toggle functionality - runs after page load
+/**
+ * Инициализация функциональности условного отключения полей формы
+ * 
+ * Обрабатывает следующие разделы:
+ * - Собственные производственные мощности (own_production)
+ * - Контрактное производство (contract_production_usage)
+ * - Собственная розница (own_retail_presence)
+ * - Онлайн-продажи (online_sales_presence)
+ * 
+ * При выборе "нет" соответствующие поля становятся неактивными
+ */
 function initProductionToggle() {
     console.log('>>> TOGGLE: initProductionToggle called at', new Date().toISOString());
 
@@ -476,13 +549,19 @@ function initProductionToggle() {
     });
 }
 
-// Initialize production toggle when DOM is ready
+/**
+ * Инициализация функциональности переключения полей при загрузке DOM
+ * Используется задержка 100ms для гарантии полной загрузки PHP-сгенерированного контента
+ */
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOMContentLoaded fired, initializing toggle sections');
     setTimeout(initProductionToggle, 100);
 });
 
-// Also try on window load as backup
+/**
+ * Резервная инициализация при полной загрузке страницы
+ * Проверяет, не осталось ли неинициализированных секций
+ */
 window.addEventListener('load', function() {
     console.log('Window load fired, verifying toggle sections');
     setTimeout(function() {
@@ -494,24 +573,40 @@ window.addEventListener('load', function() {
     }, 200);
 });
 
-// Business Modal Functionality
+/**
+ * Функциональность модальных окон для карточек бизнесов
+ * 
+ * Позволяет открывать детальную информацию о бизнесе в модальном окне
+ * Данные берутся из data-атрибутов карточки
+ */
 const businessModal = document.getElementById('business-modal');
 const modalCloseBtn = document.querySelector('.modal-close');
 const modalCloseBtnFooter = document.getElementById('modal-close-btn');
 const modalContactBtn = document.getElementById('modal-contact-btn');
 const viewDetailsButtons = document.querySelectorAll('.card-button, .btn-view-details');
 
-// Format number with spaces
+/**
+ * Форматирование чисел с пробелами (разделитель тысяч)
+ * @param {number} num - Число для форматирования
+ * @returns {string} Отформатированное число
+ */
 function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
-// Format currency
+/**
+ * Форматирование валюты
+ * @param {number} num - Сумма
+ * @returns {string} Отформатированная сумма с символом рубля
+ */
 function formatCurrency(num) {
     return formatNumber(num) + ' ₽';
 }
 
-// Open modal with business data
+/**
+ * Открытие модального окна с данными о бизнесе
+ * @param {HTMLElement} card - Элемент карточки бизнеса
+ */
 function openBusinessModal(card) {
     const iconElement = card.querySelector('.card-icon');
     const icon = iconElement ? iconElement.textContent : '💼';
@@ -593,7 +688,10 @@ function openBusinessModal(card) {
     document.body.style.overflow = 'hidden';
 }
 
-// Close modal
+/**
+ * Закрытие модального окна с информацией о бизнесе
+ * Восстанавливает прокрутку страницы
+ */
 function closeBusinessModal() {
     businessModal.classList.remove('active');
     document.body.style.overflow = '';
@@ -652,7 +750,10 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Animate cards on page load
+/**
+ * Анимация карточек бизнесов при загрузке страницы
+ * Карточки появляются с эффектом плавного появления снизу вверх
+ */
 function animateCardsOnLoad() {
     const cards = document.querySelectorAll('.business-card');
     cards.forEach((card, index) => {

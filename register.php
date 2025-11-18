@@ -1,9 +1,27 @@
 <?php
+/**
+ * Страница регистрации нового пользователя
+ * 
+ * Функциональность:
+ * - Регистрация нового аккаунта продавца
+ * - Валидация email (уникальность, формат)
+ * - Валидация пароля (минимальная длина)
+ * - Автоматический вход после успешной регистрации
+ * 
+ * @package SmartBizSell
+ * @version 1.0
+ */
+
 require_once 'config.php';
 
+// Инициализация переменных для обработки формы
 $errors = [];
 $success = false;
 
+/**
+ * Обработка формы регистрации
+ * Валидация данных, проверка уникальности email, создание пользователя
+ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = sanitizeInput($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -44,7 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Регистрация пользователя
+    /**
+     * Создание нового пользователя в базе данных
+     * Пароль хешируется перед сохранением
+     * После успешной регистрации пользователь автоматически входит в систему
+     */
     if (empty($errors)) {
         try {
             $pdo = getDBConnection();
@@ -53,10 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, ?, ?, ?, ?)
             ");
             
+            // Хеширование пароля перед сохранением
             $password_hash = hashPassword($password);
             $stmt->execute([$email, $password_hash, $full_name, $phone, $company_name]);
             
-            // Автоматический вход после регистрации
+            /**
+             * Автоматический вход после регистрации
+             * Создание сессии с данными нового пользователя
+             */
             $_SESSION['user_id'] = $pdo->lastInsertId();
             $_SESSION['user_email'] = $email;
             $_SESSION['user_name'] = $full_name;
@@ -66,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$_SESSION['user_id']]);
             
             $success = true;
+            // Редирект в личный кабинет
             header('Location: dashboard.php');
             exit;
         } catch (PDOException $e) {

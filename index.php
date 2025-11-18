@@ -1,4 +1,20 @@
 <?php
+/**
+ * Главная страница SmartBizSell.ru
+ * 
+ * Содержит:
+ * - Навигацию с условным отображением для авторизованных/неавторизованных пользователей
+ * - Hero секцию с описанием платформы
+ * - Секцию возможностей
+ * - Секцию "Как это работает"
+ * - Каталог бизнесов для покупки
+ * - Форму анкеты для продавцов (с сохранением в БД)
+ * - Секцию контактов
+ * 
+ * @package SmartBizSell
+ * @version 1.0
+ */
+
 require_once 'config.php';
 ?>
 <!DOCTYPE html>
@@ -707,6 +723,18 @@ require_once 'config.php';
             </div>
             <div class="form-wrapper">
                 <?php
+                /**
+                 * Обработка формы анкеты продавца
+                 * 
+                 * Форма содержит три основных раздела:
+                 * I. Детали предполагаемой сделки
+                 * II. Описание бизнеса компании
+                 * III. Основные операционные и финансовые показатели
+                 * 
+                 * После успешной валидации данные сохраняются в БД (если пользователь авторизован)
+                 */
+                
+                // Инициализация переменных
                 $errors = [];
                 $success = false;
                 $yesNo = ['yes' => 'да', 'no' => 'нет'];
@@ -767,7 +795,10 @@ require_once 'config.php';
                 $financialBudget2025 = array_pad($financialBudget2025, $financialRowCount, '');
                 $financialBudget2026 = array_pad($financialBudget2026, $financialRowCount, '');
 
-                // Определение переменных формы
+                /**
+                 * Получение и санитизация данных формы
+                 * Все данные проходят через функцию sanitizeInput для безопасности
+                 */
                 $asset_name = sanitizeInput($_POST['asset_name'] ?? '');
                 $deal_share_range = sanitizeInput($_POST['deal_share_range'] ?? '');
                 $deal_goal = $_POST['deal_goal'] ?? '';
@@ -804,7 +835,12 @@ require_once 'config.php';
                 $financial_source = $_POST['financial_source'] ?? '';
                 $agree = isset($_POST['agree']);
 
+            /**
+             * Валидация данных формы
+             * Проверяются все обязательные поля и корректность введенных данных
+             */
             if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                // Валидация обязательных полей
                 if ($asset_name === '') $errors['asset_name'] = 'Укажите название актива';
                 if ($deal_share_range === '') $errors['deal_share_range'] = 'Укажите предмет сделки';
                 if (!in_array($deal_goal, ['cash_out', 'cash_in'], true)) $errors['deal_goal'] = 'Выберите цель сделки';
@@ -824,13 +860,21 @@ require_once 'config.php';
                 }
                 if (!$agree) $errors['agree'] = 'Необходимо согласие на обработку данных';
 
+                /**
+                 * Сохранение данных в базу данных
+                 * Выполняется только если пользователь авторизован
+                 * Данные сохраняются в таблицу seller_forms
+                 */
                 if (empty($errors)) {
                     // Сохранение в базу данных (если пользователь авторизован)
                     if (isLoggedIn()) {
                         try {
                             $pdo = getDBConnection();
                             
-                            // Подготовка данных для JSON полей
+                            /**
+                             * Подготовка данных для JSON полей
+                             * Объемы производства и финансовые показатели сохраняются в формате JSON
+                             */
                             $productionVolumes = [];
                             for ($i = 0; $i < $productionRowCount; $i++) {
                                 if (!empty($productionColumns['product'][$i])) {
