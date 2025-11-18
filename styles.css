@@ -1243,6 +1243,28 @@ section {
 
 .table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+    margin: 0 -20px;
+    padding: 0 20px;
+}
+
+.table-wrapper::-webkit-scrollbar {
+    height: 8px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 .form-table {
@@ -1260,15 +1282,24 @@ section {
     padding: 12px 16px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
+    word-break: break-word;
+    white-space: normal;
 }
 
 .form-table th {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-secondary);
     background: rgba(245, 247, 250, 0.8);
+    line-height: 1.4;
+}
+
+.form-table td {
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.5;
 }
 
 .form-table td input {
@@ -1276,16 +1307,45 @@ section {
     padding: 10px 12px;
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    font-size: 14px;
+    font-size: 13px;
     font-family: inherit;
     background: var(--bg-primary);
     color: var(--text-primary);
     transition: border 0.3s ease, box-shadow 0.3s ease;
+    min-height: 40px;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .form-table td input:focus {
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+#financial-results-table th:first-child,
+#financial-results-table td:first-child,
+#balance-table th:first-child,
+#balance-table td:first-child {
+    min-width: 220px;
+    width: 240px;
+}
+
+#financial-results-table th:not(:first-child),
+#financial-results-table td:not(:first-child) {
+    min-width: 140px;
+}
+
+#production-table th:first-child,
+#production-table td:first-child {
+    min-width: 260px;
+    width: 25%;
+}
+
+#production-table th:not(:first-child),
+#production-table td:not(:first-child) {
+    width: calc(75% / 7);
+    min-width: 110px;
 }
 
 .add-row-button {
@@ -1542,8 +1602,59 @@ section {
         padding: 16px;
     }
 
+    .table-wrapper {
+        margin: 0 -16px;
+        padding: 0 16px;
+    }
+
     .form-table {
-        min-width: 560px;
+        min-width: 800px;
+        font-size: 12px;
+    }
+
+    .form-table th,
+    .form-table td {
+        padding: 10px 8px;
+    }
+
+    .form-table th {
+        font-size: 10px;
+        padding: 12px 8px;
+    }
+
+    .form-table td {
+        font-size: 12px;
+    }
+
+    .form-table td input {
+        padding: 12px 10px;
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    #production-table th:first-child,
+    #production-table td:first-child {
+        min-width: 180px;
+        width: 22%;
+    }
+
+    #production-table th:not(:first-child),
+    #production-table td:not(:first-child) {
+        width: calc(78% / 7);
+        min-width: 90px;
+    }
+
+    #financial-results-table th:first-child,
+    #financial-results-table td:first-child,
+    #balance-table th:first-child,
+    #balance-table td:first-child {
+        min-width: 180px;
+        width: 200px;
+    }
+
+    #financial-results-table th:not(:first-child),
+    #financial-results-table td:not(:first-child) {
+        min-width: 110px;
     }
 
 
@@ -1642,12 +1753,64 @@ section {
         padding: 14px;
     }
 
+    .table-wrapper {
+        margin: 0 -12px;
+        padding: 0 12px;
+    }
+
     .form-table {
-        min-width: 420px;
+        min-width: 700px;
+    }
+
+    .form-table th,
+    .form-table td {
+        padding: 8px 6px;
+    }
+
+    .form-table th {
+        font-size: 9px;
+        padding: 10px 6px;
+    }
+
+    .form-table td {
+        font-size: 11px;
+    }
+
+    .form-table td input {
+        padding: 14px 8px;
+        font-size: 16px;
+        min-height: 48px;
+    }
+
+    #production-table th:first-child,
+    #production-table td:first-child {
+        min-width: 150px;
+        width: 20%;
+    }
+
+    #production-table th:not(:first-child),
+    #production-table td:not(:first-child) {
+        width: calc(80% / 7);
+        min-width: 80px;
+    }
+
+    #financial-results-table th:first-child,
+    #financial-results-table td:first-child,
+    #balance-table th:first-child,
+    #balance-table td:first-child {
+        min-width: 160px;
+        width: 180px;
+    }
+
+    #financial-results-table th:not(:first-child),
+    #financial-results-table td:not(:first-child) {
+        min-width: 100px;
     }
 
     .add-row-button {
         width: 100%;
+        padding: 14px;
+        font-size: 16px;
     }
 
     .form-row {

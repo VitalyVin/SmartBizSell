@@ -42,7 +42,11 @@ require_once 'config.php';
                     <li><a href="#features">Возможности</a></li>
                     <li><a href="#how-it-works">Как это работает</a></li>
                     <li><a href="#buy-business">Купить бизнес</a></li>
-                    <li><a href="#seller-form">Продать бизнес</a></li>
+                    <?php if (isLoggedIn()): ?>
+                        <li><a href="dashboard.php">Продать бизнес</a></li>
+                    <?php else: ?>
+                        <li><a href="login.php">Продать бизнес</a></li>
+                    <?php endif; ?>
                     <li><a href="#contact">Контакты</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="dashboard.php">Личный кабинет</a></li>
