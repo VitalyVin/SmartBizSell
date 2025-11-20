@@ -103,6 +103,130 @@ function dcf_build_series(array $row, array $order): array {
     return $series;
 }
 
+/**
+ * Унификация значений (поддержка новых ключей 2022_fact и legacy fact_2022)
+ */
+function pickValue(array $row, array $keys): string
+{
+    foreach ($keys as $key) {
+        if (isset($row[$key]) && $row[$key] !== '') {
+            return $row[$key];
+        }
+    }
+    return '';
+}
+
+function convertFinancialRows(array $financial): array
+{
+    if (empty($financial)) {
+        return [];
+    }
+
+    $first = reset($financial);
+    if (is_array($first) && isset($first['metric'])) {
+        return $financial;
+    }
+
+    $map = [
+        'revenue' => 'Выручка',
+        'cost_of_sales' => 'Себестоимость продаж',
+        'commercial_expenses' => 'Коммерческие расходы',
+        'management_expenses' => 'Управленческие расходы',
+        'sales_profit' => 'Прибыль от продаж',
+        'depreciation' => 'Амортизация',
+        'fixed_assets_acquisition' => 'Приобретение основных средств',
+    ];
+
+    $fields = [
+        'unit'         => ['unit'],
+        'fact_2022'    => ['fact_2022', '2022_fact'],
+        'fact_2023'    => ['fact_2023', '2023_fact'],
+        'fact_2024'    => ['fact_2024', '2024_fact'],
+        'fact_2025_9m' => ['fact_2025_9m', '2025_q3_fact'],
+        'budget_2025'  => ['budget_2025', '2025_budget'],
+        'budget_2026'  => ['budget_2026', '2026_budget'],
+    ];
+
+    $result = [];
+    foreach ($map as $key => $metric) {
+        if (!isset($financial[$key]) || !is_array($financial[$key])) {
+            continue;
+        }
+        $row = ['metric' => $metric];
+        foreach ($fields as $legacyKey => $aliases) {
+            $row[$legacyKey] = pickValue($financial[$key], $aliases);
+        }
+        $result[] = $row;
+    }
+
+    return $result;
+}
+
+function convertBalanceRows(array $balance): array
+{
+    if (empty($balance)) {
+        return [];
+    }
+
+    $first = reset($balance);
+    if (is_array($first) && isset($first['metric'])) {
+        return $balance;
+    }
+
+    $map = [
+        'fixed_assets' => 'Основные средства',
+        'inventory'    => 'Запасы',
+        'receivables'  => 'Дебиторская задолженность',
+        'payables'     => 'Кредиторская задолженность',
+        'loans'        => 'Кредиты и займы',
+        'cash'         => 'Денежные средства',
+        'net_assets'   => 'Чистые активы',
+    ];
+
+    $fields = [
+        'unit'         => ['unit'],
+        'fact_2022'    => ['fact_2022', '2022_fact'],
+        'fact_2023'    => ['fact_2023', '2023_fact'],
+        'fact_2024'    => ['fact_2024', '2024_fact'],
+        'fact_2025_9m' => ['fact_2025_9m', '2025_q3_fact'],
+    ];
+
+    $result = [];
+    foreach ($map as $key => $metric) {
+        if (!isset($balance[$key]) || !is_array($balance[$key])) {
+            continue;
+        }
+        $row = ['metric' => $metric];
+        foreach ($fields as $legacyKey => $aliases) {
+            $row[$legacyKey] = pickValue($balance[$key], $aliases);
+        }
+        $result[] = $row;
+    }
+
+    return $result;
+}
+
+function extractFinancialAndBalance(array $form): array
+{
+    $financial = json_decode($form['financial_results'] ?? '[]', true);
+    $balance   = json_decode($form['balance_indicators'] ?? '[]', true);
+
+    if (empty($form['data_json']) === false) {
+        $decoded = json_decode($form['data_json'], true);
+        if (empty($financial) && isset($decoded['financial']) && is_array($decoded['financial'])) {
+            $financial = $decoded['financial'];
+        }
+        if (empty($balance) && isset($decoded['balance']) && is_array($decoded['balance'])) {
+            $balance = $decoded['balance'];
+        }
+    }
+
+    $financial = convertFinancialRows($financial);
+    $balance   = convertBalanceRows($balance);
+
+    return [$financial, $balance];
+}
+
 function calculateUserDCF(array $form): array {
     $defaults = [
         'wacc' => 0.10,
@@ -119,8 +243,7 @@ function calculateUserDCF(array $form): array {
         'budget_2026'  => '2026',
     ];
 
-    $financial = json_decode($form['financial_results'] ?? '[]', true);
-    $balance   = json_decode($form['balance_indicators'] ?? '[]', true);
+    list($financial, $balance) = extractFinancialAndBalance($form);
 
     if (!$financial || !$balance) {
         return ['error' => 'Недостаточно данных анкеты для построения DCF.'];
@@ -600,8 +723,9 @@ if ($latestForm) {
                                     <div style="font-size: 12px; color: var(--text-secondary);">Не отправлена</div>
                                 <?php endif; ?>
                             </div>
-                            <div>
-                                <a href="form-view.php?id=<?php echo $form['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">Просмотр</a>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <a href="view_form.php?id=<?php echo $form['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">Просмотр</a>
+                                <a href="seller_form.php?form_id=<?php echo $form['id']; ?>" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">Редактировать</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -675,24 +799,32 @@ if ($latestForm) {
                         </tbody>
                     </table>
 
-                    <table class="dcf-table" style="max-width: 480px;">
+                    <table class="dcf-table dcf-table--params">
                         <tbody>
                             <tr>
-                                <th>Enterprise Value (EV)</th>
-                                <td><?php echo number_format($dcfData['enterprise_value'], 2, '.', ' '); ?></td>
-                            </tr>
-                            <tr>
-                                <th>− Debt</th>
-                                <td><?php echo number_format($dcfData['debt'], 2, '.', ' '); ?></td>
-                            </tr>
-                            <tr>
-                                <th>+ Cash</th>
-                                <td><?php echo number_format($dcfData['cash'], 2, '.', ' '); ?></td>
-                            </tr>
-                            <tr>
-                                <th><strong>Equity Value</strong></th>
-                                <td><strong><?php echo number_format($dcfData['equity'], 2, '.', ' '); ?></strong></td>
-                            </tr>
+                <th>Ставка дисконтирования (WACC)</th>
+                <td>10.00%</td>
+            </tr>
+            <tr>
+                <th>Темп долгосрочного роста (g)</th>
+                <td>2.50%</td>
+            </tr>
+            <tr>
+                <th>Период прогноза</th>
+                <td>5 лет (2027–2031) + Terminal Value</td>
+            </tr>
+            <tr>
+                <th>Enterprise Value (EV)</th>
+                <td><?php echo number_format($dcfData['enterprise_value'], 2, '.', ' '); ?> млн ₽</td>
+            </tr>
+            <tr>
+                <th>Чистый долг</th>
+                <td><?php echo number_format(max(($dcfData['debt'] ?? 0) - ($dcfData['cash'] ?? 0), 0), 2, '.', ' '); ?> млн ₽</td>
+            </tr>
+            <tr>
+                <th>Equity Value</th>
+                <td><?php echo number_format($dcfData['enterprise_value'] - (($dcfData['debt'] ?? 0) - ($dcfData['cash'] ?? 0)), 2, '.', ' '); ?> млн ₽</td>
+            </tr>
                         </tbody>
                     </table>
 
