@@ -18,11 +18,20 @@ DEALLOCATE PREPARE stmt;
 
 -- Переименование полей "Собственная розница" в "Офлайн-продажи"
 -- Выполняйте только если поля еще не переименованы
-ALTER TABLE seller_forms 
-CHANGE COLUMN own_retail_presence offline_sales_presence ENUM('yes', 'no') DEFAULT NULL,
-CHANGE COLUMN own_retail_points offline_sales_points INT DEFAULT NULL,
-CHANGE COLUMN own_retail_regions offline_sales_regions VARCHAR(255) DEFAULT NULL,
-CHANGE COLUMN own_retail_area offline_sales_area VARCHAR(255) DEFAULT NULL;
+SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA = 'u3064951_SmartBizSell' 
+    AND TABLE_NAME = 'seller_forms' 
+    AND COLUMN_NAME = 'own_retail_presence');
+SET @sql = IF(@col_exists > 0, 
+    'ALTER TABLE `seller_forms`
+        CHANGE COLUMN `own_retail_presence`  `offline_sales_presence`  ENUM(''yes'',''no'') DEFAULT NULL,
+        CHANGE COLUMN `own_retail_points`    `offline_sales_points`    INT                     DEFAULT NULL,
+        CHANGE COLUMN `own_retail_regions`   `offline_sales_regions`   VARCHAR(255)            DEFAULT NULL,
+        CHANGE COLUMN `own_retail_area`      `offline_sales_area`      VARCHAR(255)            DEFAULT NULL;',
+    'SELECT ''Columns already renamed'' AS message');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- Добавление новых полей для офлайн-продаж
 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
@@ -113,6 +122,18 @@ SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 SET @sql = IF(@col_exists = 0, 
     'ALTER TABLE seller_forms ADD COLUMN balance_indicators JSON DEFAULT NULL AFTER financial_results',
     'SELECT ''Column balance_indicators already exists'' AS message');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Добавление поля data_json для сохранения черновиков
+SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA = 'u3064951_SmartBizSell' 
+    AND TABLE_NAME = 'seller_forms' 
+    AND COLUMN_NAME = 'data_json');
+SET @sql = IF(@col_exists = 0, 
+    'ALTER TABLE seller_forms ADD COLUMN data_json JSON DEFAULT NULL AFTER submitted_at',
+    'SELECT ''Column data_json already exists'' AS message');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;

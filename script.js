@@ -107,6 +107,18 @@ animateElements.forEach(el => {
 const form = document.querySelector('.seller-form');
 if (form) {
     const inputs = form.querySelectorAll('input, select, textarea');
+    const saveDraftButton = form.querySelector('button[name="save_draft"]');
+    const saveDraftFlagInput = form.querySelector('input[name="save_draft_flag"]');
+    let skipClientValidation = false;
+
+    if (saveDraftButton) {
+        saveDraftButton.addEventListener('click', () => {
+            skipClientValidation = true;
+            if (saveDraftFlagInput) {
+                saveDraftFlagInput.value = '1';
+            }
+        });
+    }
     
     inputs.forEach(input => {
         input.addEventListener('blur', () => {
@@ -121,6 +133,17 @@ if (form) {
     });
     
     form.addEventListener('submit', (e) => {
+        const isDraftSubmit = skipClientValidation || (e.submitter && e.submitter.name === 'save_draft');
+        
+        if (isDraftSubmit) {
+            skipClientValidation = false;
+            return; // Пропускаем клиентскую валидацию для черновика
+        }
+
+        if (saveDraftFlagInput) {
+            saveDraftFlagInput.value = '0';
+        }
+        
         let isValid = true;
         
         inputs.forEach(input => {
