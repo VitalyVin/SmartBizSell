@@ -10,6 +10,39 @@ $formId = null;
 $existingForm = null;
 $draftMessage = false;
 
+// Поля, обязательные для отправки анкеты (не применяются к сохранению черновика)
+$requiredFields = [
+    'asset_name',
+    'deal_share_range',
+    'deal_goal',
+    'asset_disclosure',
+    'company_description',
+    'presence_regions',
+    'products_services',
+    'main_clients',
+    'sales_share',
+    'personnel_count',
+    'financial_results_vat',
+    'financial_source',
+    'agree',
+];
+
+function isFieldRequired(string $field): bool
+{
+    global $requiredFields;
+    return in_array($field, $requiredFields, true);
+}
+
+function requiredAttr(string $field): string
+{
+    return isFieldRequired($field) ? ' required' : '';
+}
+
+function requiredClass(string $field): string
+{
+    return isFieldRequired($field) ? ' required-field' : '';
+}
+
 /**
  * Рекурсивная нормализация значений для корректного JSON
  */
@@ -113,7 +146,7 @@ function hydrateFormFromDb(array $form): void
             error_log("HYDRATING FORM - loaded data keys: " . implode(', ', array_keys($decodedData)));
             error_log("HYDRATING FORM - production data: " . (isset($_POST['production']) ? 'EXISTS (' . count($_POST['production']) . ' items)' : 'NOT SET'));
             return; // Если data_json есть, используем только его
-        } else {
+                } else {
             error_log("HYDRATING FORM - failed to decode JSON");
         }
     } else {
@@ -614,6 +647,13 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     </div>
                 <?php endif; ?>
 
+                <div class="form-legend">
+                    <span class="legend-marker"></span>
+                    <div>
+                        <strong>Легенда:</strong> поля с бирюзовой полосой и отметкой * обязательны для заполнения при отправке анкеты
+                    </div>
+                </div>
+
                 <form class="seller-form" method="POST" action="seller_form.php">
                     <input type="hidden" name="form_id" value="<?php echo htmlspecialchars($formId ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                     <input type="hidden" name="save_draft_flag" value="0" id="save-draft-flag">
@@ -625,26 +665,26 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                     <div class="form-section">
                         <h3 class="form-section-title">I. Детали предполагаемой сделки</h3>
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('asset_name'); ?>">
                             <label for="asset_name">Название актива (название ЮЛ, группы компаний или бренда), ИНН:</label>
-                            <input type="text" id="asset_name" name="asset_name"
+                            <input type="text" id="asset_name" name="asset_name"<?php echo requiredAttr('asset_name'); ?>
                                    value="<?php echo htmlspecialchars($_POST['asset_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <?php if (isset($errors['asset_name'])): ?>
                                 <span class="error-message"><?php echo $errors['asset_name']; ?></span>
                             <?php endif; ?>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('deal_share_range'); ?>">
                             <label for="deal_share_range">Предмет сделки: продажа доли от ___до ____</label>
-                            <input type="text" id="deal_share_range" name="deal_share_range" placeholder="от ___ до ____"
+                            <input type="text" id="deal_share_range" name="deal_share_range" placeholder="от ___ до ____"<?php echo requiredAttr('deal_share_range'); ?>
                                    value="<?php echo htmlspecialchars($_POST['deal_share_range'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('deal_goal'); ?>">
                             <label>Цель сделки:</label>
                             <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="deal_goal" value="cash_out" <?php echo (($_POST['deal_goal'] ?? '') === 'cash_out') ? 'checked' : ''; ?>>
+                                    <input type="radio" name="deal_goal" value="cash_out" <?php echo (($_POST['deal_goal'] ?? '') === 'cash_out') ? 'checked' : ''; ?><?php echo requiredAttr('deal_goal'); ?>>
                                     <span>a. Продажа бизнеса (cash-out)</span>
                                 </label>
                                 <label class="radio-label">
@@ -654,11 +694,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             </div>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('asset_disclosure'); ?>">
                             <label>Раскрытие названия актива в анкете: да/нет</label>
                             <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="asset_disclosure" value="yes" <?php echo (($_POST['asset_disclosure'] ?? '') === 'yes') ? 'checked' : ''; ?>>
+                                    <input type="radio" name="asset_disclosure" value="yes" <?php echo (($_POST['asset_disclosure'] ?? '') === 'yes') ? 'checked' : ''; ?><?php echo requiredAttr('asset_disclosure'); ?>>
                                     <span>да</span>
                                 </label>
                                 <label class="radio-label">
@@ -671,20 +711,20 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                     <div class="form-section">
                         <h3 class="form-section-title">II. Описание бизнеса компании</h3>
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('company_description'); ?>">
                             <label for="company_description">Краткое описание деятельности компании:</label>
-                            <textarea id="company_description" name="company_description" rows="4"><?php echo htmlspecialchars($_POST['company_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <textarea id="company_description" name="company_description" rows="4"<?php echo requiredAttr('company_description'); ?>><?php echo htmlspecialchars($_POST['company_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('presence_regions'); ?>">
                             <label for="presence_regions">Регионы присутствия:</label>
-                            <input type="text" id="presence_regions" name="presence_regions"
+                            <input type="text" id="presence_regions" name="presence_regions"<?php echo requiredAttr('presence_regions'); ?>
                                    value="<?php echo htmlspecialchars($_POST['presence_regions'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('products_services'); ?>">
                             <label for="products_services">Продукция/услуги компании:</label>
-                            <textarea id="products_services" name="products_services" rows="3"><?php echo htmlspecialchars($_POST['products_services'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <textarea id="products_services" name="products_services" rows="3"<?php echo requiredAttr('products_services'); ?>><?php echo htmlspecialchars($_POST['products_services'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
                         <div class="form-group">
@@ -875,20 +915,20 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                         <textarea id="online_sales_channels" name="online_sales_channels" rows="3"><?php echo htmlspecialchars($_POST['online_sales_channels'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('main_clients'); ?>">
                             <label for="main_clients">Основные клиенты:</label>
-                            <textarea id="main_clients" name="main_clients" rows="3"><?php echo htmlspecialchars($_POST['main_clients'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <textarea id="main_clients" name="main_clients" rows="3"<?php echo requiredAttr('main_clients'); ?>><?php echo htmlspecialchars($_POST['main_clients'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('sales_share'); ?>">
                             <label for="sales_share">Доля продаж в РФ/экспорта:</label>
-                            <input type="text" id="sales_share" name="sales_share" placeholder="__/__0%"
+                            <input type="text" id="sales_share" name="sales_share" placeholder="__/__0%"<?php echo requiredAttr('sales_share'); ?>
                                    value="<?php echo htmlspecialchars($_POST['sales_share'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
 
-                            <div class="form-group">
+                            <div class="form-group<?php echo requiredClass('personnel_count'); ?>">
                             <label for="personnel_count">Численность персонала:</label>
-                            <input type="number" id="personnel_count" name="personnel_count" min="0"
+                            <input type="number" id="personnel_count" name="personnel_count" min="0"<?php echo requiredAttr('personnel_count'); ?>
                                        value="<?php echo htmlspecialchars($_POST['personnel_count'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
 
@@ -962,11 +1002,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             </div>
                         </div>
 
-                            <div class="form-group">
+                            <div class="form-group<?php echo requiredClass('financial_results_vat'); ?>">
                             <label>Финансовые результаты:</label>
                                 <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="financial_results_vat" value="with_vat" <?php echo (($_POST['financial_results_vat'] ?? '') === 'with_vat') ? 'checked' : ''; ?>>
+                                    <input type="radio" name="financial_results_vat" value="with_vat" <?php echo (($_POST['financial_results_vat'] ?? '') === 'with_vat') ? 'checked' : ''; ?><?php echo requiredAttr('financial_results_vat'); ?>>
                                         <span>с НДС</span>
                                     </label>
                                 <label class="radio-label">
@@ -1088,11 +1128,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             </div>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group<?php echo requiredClass('financial_source'); ?>">
                             <label>Источник финансовых показателей:</label>
                             <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="financial_source" value="rsbu" <?php echo (($_POST['financial_source'] ?? '') === 'rsbu') ? 'checked' : ''; ?>>
+                                    <input type="radio" name="financial_source" value="rsbu" <?php echo (($_POST['financial_source'] ?? '') === 'rsbu') ? 'checked' : ''; ?><?php echo requiredAttr('financial_source'); ?>>
                                     <span>a. РСБУ</span>
                                 </label>
                                 <label class="radio-label">
@@ -1107,10 +1147,10 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         </div>
                     </div>
 
-                    <div class="form-group checkbox-group">
+                    <div class="form-group checkbox-group<?php echo requiredClass('agree'); ?>">
                         <label class="checkbox-label">
-                            <input type="checkbox" name="agree" <?php echo isset($_POST['agree']) ? 'checked' : ''; ?>>
-                            <span>Я соглашаюсь на обработку персональных данных и использование ИИ для подготовки материалов *</span>
+                            <input type="checkbox" name="agree" <?php echo isset($_POST['agree']) ? 'checked' : ''; ?><?php echo requiredAttr('agree'); ?>>
+                            <span>Я соглашаюсь на обработку персональных данных и использование ИИ для подготовки материалов</span>
                         </label>
                         <?php if (isset($errors['agree'])): ?>
                             <span class="error-message"><?php echo $errors['agree']; ?></span>
@@ -1132,6 +1172,45 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
     <script src="script.js?v=<?php echo time(); ?>"></script>
     <style>
+        .form-legend {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: rgba(20, 184, 166, 0.08);
+            border: 1px solid rgba(20, 184, 166, 0.2);
+        }
+
+        .legend-marker {
+            width: 18px;
+            height: 18px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #2dd4bf, #0ea5e9);
+            box-shadow: 0 0 12px rgba(45, 212, 191, 0.4);
+        }
+
+        .form-group.required-field,
+        .checkbox-group.required-field {
+            border-left: 4px solid #14b8a6;
+            padding-left: 18px;
+            background: rgba(20, 184, 166, 0.06);
+            border-radius: 16px;
+        }
+
+        .form-group.required-field > label::after {
+            content: ' *';
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .checkbox-group.required-field .checkbox-label span::after {
+            content: ' *';
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
         @keyframes fadeOut {
             from {
                 opacity: 1;

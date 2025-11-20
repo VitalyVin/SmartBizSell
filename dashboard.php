@@ -227,20 +227,30 @@ function extractFinancialAndBalance(array $form): array
     return [$financial, $balance];
 }
 
+function stableRandFloat(string $seed, int $offset, float $min, float $max): float
+{
+    $hash = crc32($seed . '|' . $offset);
+    $normalized = fmod(abs(sin($hash + $offset * 12.9898)), 1);
+    return $min + ($max - $min) * $normalized;
+}
+
+function clampFloat(float $value, float $min, float $max): float
+{
+    return max($min, min($max, $value));
+}
+
 /**
  * Строит полную DCF-модель на основе последней отправленной анкеты пользователя.
  * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
  * для отображения в личном кабинете.
  */
 function calculateUserDCF(array $form): array {
-    // Базовые допущения модели: повышенный риск (WACC 24%) и долгосрочный рост 4%.
     $defaults = [
         'wacc' => 0.24,
-        'tax_rate' => 0.20,
+        'tax_rate' => 0.25,
         'perpetual_growth' => 0.04,
     ];
 
-    // Сопоставление новых ключей с временными метками, которые ожидает модель.
     $periodMap = [
         'fact_2022'    => '2022',
         'fact_2023'    => '2023',
@@ -250,207 +260,508 @@ function calculateUserDCF(array $form): array {
         'budget_2026'  => '2026',
     ];
 
-    // Собираем нормализованные таблицы из БД / data_json
     list($financial, $balance) = extractFinancialAndBalance($form);
-
     if (!$financial || !$balance) {
-        return ['error' => 'Недостаточно данных анкеты для построения DCF.'];
+        return ['error' => 'Недостаточно финансовых данных для построения модели.'];
     }
 
     $finRows = dcf_rows_by_metric($financial);
     $balRows = dcf_rows_by_metric($balance);
 
-    if (!isset($finRows['Выручка'], $finRows['Себестоимость продаж'])) {
-        return ['error' => 'Отсутствуют ключевые строки финансовой таблицы.'];
+    $requiredMetrics = ['Выручка', 'Себестоимость продаж', 'Коммерческие расходы'];
+    foreach ($requiredMetrics as $metric) {
+        if (!isset($finRows[$metric])) {
+            return ['error' => 'Не заполнены обязательные строки финансовой таблицы (выручка/расходы).'];
+        }
     }
 
-    // Корректируем данные на случай, если пользователь заполнял показатели с НДС
-    $vatMode = $form['financial_results_vat'] ?? 'without_vat';
-    $vatFactor = ($vatMode === 'with_vat' || $vatMode === 'с НДС') ? 1 / 1.20 : 1.0;
+    $revenueSeries   = dcf_build_series($finRows['Выручка'], $periodMap);
+    $cogsSeries      = dcf_build_series($finRows['Себестоимость продаж'], $periodMap);
+    $commercialSeries= dcf_build_series($finRows['Коммерческие расходы'], $periodMap);
+    $adminSeries     = isset($finRows['Управленческие расходы']) ? dcf_build_series($finRows['Управленческие расходы'], $periodMap) : [];
+    $deprSeries      = isset($finRows['Амортизация']) ? dcf_build_series($finRows['Амортизация'], $periodMap) : [];
 
-    $revenue = dcf_build_series($finRows['Выручка'], $periodMap);
-    $cogs    = dcf_build_series($finRows['Себестоимость продаж'] ?? [], $periodMap);
-    $commercial = dcf_build_series($finRows['Коммерческие расходы'] ?? [], $periodMap);
-    $admin      = dcf_build_series($finRows['Управленческие расходы'] ?? [], $periodMap);
-    $deprRow    = dcf_build_series($finRows['Амортизация'] ?? [], $periodMap);
-    $capexRow   = dcf_build_series($finRows['Приобретение основных средств'] ?? [], $periodMap);
-
-    foreach ($revenue as $key => $value) {
-        $revenue[$key]   = $value * $vatFactor;
-        $cogs[$key]      = ($cogs[$key] ?? 0) * $vatFactor;
-        $commercial[$key]= ($commercial[$key] ?? 0) * $vatFactor;
-        $admin[$key]     = ($admin[$key] ?? 0) * $vatFactor;
-        $deprRow[$key]   = ($deprRow[$key] ?? 0) * $vatFactor;
-        $capexRow[$key]  = ($capexRow[$key] ?? 0) * $vatFactor;
-    }
-
-    $ebitda = [];
-    $ebit   = [];
-    foreach ($revenue as $key => $value) {
-        $ebitda[$key] = $value - ($cogs[$key] ?? 0) - ($commercial[$key] ?? 0) - ($admin[$key] ?? 0);
-        $ebit[$key]   = $ebitda[$key] - ($deprRow[$key] ?? 0);
-    }
-
-    // Сводим баланс к серии по годам – пригодится для NWC, долга и основных средств
     $balanceSeries = [];
     foreach ($balRows as $metric => $row) {
         $balanceSeries[$metric] = dcf_build_series($row, $periodMap);
     }
 
-    // Рассчитываем рабочий капитал для каждого периода
-    $nwc = [];
-    foreach ($periodMap as $label) {
-        $inv = $balanceSeries['Запасы'][$label] ?? 0;
-        $ar  = $balanceSeries['Дебиторская задолженность'][$label] ?? 0;
-        $ap  = $balanceSeries['Кредиторская задолженность'][$label] ?? 0;
-        $nwc[$label] = $inv + $ar - $ap;
+    $factYears = ['2022', '2023', '2024'];
+    $forecastLabels = ['P1', 'P2', 'P3', 'P4', 'P5'];
+    $columns = [];
+    foreach ($factYears as $label) {
+        $columns[] = ['key' => $label, 'label' => $label, 'type' => 'fact'];
     }
+    foreach ($forecastLabels as $label) {
+        $columns[] = ['key' => $label, 'label' => $label, 'type' => 'forecast'];
+    }
+    $columns[] = ['key' => 'TV', 'label' => 'TV', 'type' => 'tv'];
 
     $lastFactLabel = '2024';
-    $rev2024 = $revenue[$lastFactLabel] ?? 0;
-    $nwcRatio = ($rev2024 > 0) ? ($nwc[$lastFactLabel] ?? 0) / $rev2024 : 0.1;
-
-    // Рост выручки – будем использовать как базу для прогнозных периодов
-    $growth23 = ($revenue['2022'] ?? 0) > 0 ? ($revenue['2023'] - $revenue['2022']) / max($revenue['2022'], 1e-6) : 0;
-    $growth24 = ($revenue['2023'] ?? 0) > 0 ? ($revenue['2024'] - $revenue['2023']) / max($revenue['2023'], 1e-6) : 0;
-    $gAvg = ($growth23 + $growth24) / 2;
-
-    $revenue2025Annual = 0;
-    if (($revenue['9M2025'] ?? 0) > 0) {
-        $revenue2025Annual = ($revenue['9M2025'] / 9) * 12;
-    }
-    if (($revenue['2025'] ?? 0) > 0) {
-        $revenue2025Annual = ($revenue2025Annual + $revenue['2025']) / 2;
-    }
-    $gLastFact = ($revenue['2024'] ?? 0) > 0 ? ($revenue2025Annual - $revenue['2024']) / max($revenue['2024'], 1e-6) : 0;
-
-    // Список замечаний, которые подсвечиваем пользователю
-    $warnings = [];
-    if ($gAvg <= $gLastFact) {
-        $warnings[] = 'Рост первого прогнозного периода не превышает последний фактический рост.';
-    }
-    if (abs($gAvg - $gLastFact) > 0.20) {
-        $warnings[] = 'Отклонение P1 от g_last_fact превышает 20 п.п.';
+    if (($revenueSeries[$lastFactLabel] ?? 0) <= 0) {
+        return ['error' => 'Укажите выручку минимум за три последних года (включая 2024).'];
     }
 
-    $adminPositive = (($admin['2022'] ?? 0) > 0) || (($admin['2023'] ?? 0) > 0) || (($admin['2024'] ?? 0) > 0);
-    if ($adminPositive) {
-        $warnings[] = 'Рост маржи EBITDA ограничен из-за наличия управленческих расходов.';
+    $factData = [
+        'revenue' => [],
+        'cogs' => [],
+        'commercial' => [],
+        'admin' => [],
+        'depr' => [],
+        'ebitda' => [],
+        'ebit' => [],
+        'margin' => [],
+    ];
+
+    foreach ($factYears as $year) {
+        $factData['revenue'][$year]    = $revenueSeries[$year] ?? 0;
+        $factData['cogs'][$year]       = $cogsSeries[$year] ?? 0;
+        $factData['commercial'][$year] = $commercialSeries[$year] ?? 0;
+        $factData['admin'][$year]      = $adminSeries[$year] ?? 0;
+        $factData['depr'][$year]       = $deprSeries[$year] ?? 0;
+        $factData['ebitda'][$year]     = $factData['revenue'][$year] - $factData['cogs'][$year] - $factData['commercial'][$year] - $factData['admin'][$year];
+        $factData['ebit'][$year]       = $factData['ebitda'][$year] - $factData['depr'][$year];
+        $factData['margin'][$year]     = ($factData['revenue'][$year] > 0) ? $factData['ebitda'][$year] / $factData['revenue'][$year] : null;
     }
 
-    $ebitdaMargin2024 = ($revenue['2024'] ?? 0) > 0 ? ($ebitda['2024'] ?? 0) / max($revenue['2024'], 1e-6) : 0.2;
-    $depRatio2024     = ($revenue['2024'] ?? 0) > 0 ? ($deprRow['2024'] ?? 0) / max($revenue['2024'], 1e-6) : 0.05;
-    $capexRatio2025   = ($revenue['2025'] ?? 0) > 0 ? ($capexRow['2025'] ?? 0) / max($revenue['2025'], 1e-6) : 0.05;
-
-    // Горизонт прогноза — фиксируем 5 лет вперёд
-    $projYears = [2027, 2028, 2029, 2030, 2031];
-    $stubFraction = 10.5 / 12;
-    $projData = [];
-    $prevRevenue = $revenue2025Annual > 0 ? $revenue2025Annual : ($revenue['2026'] ?? 0);
-    $prevNwc = $nwc['2026'] ?? ($nwc[$lastFactLabel] ?? 0);
-
-    foreach ($projYears as $index => $year) {
-        $growth = $index === 0 ? $gAvg : max(min($projData[$projYears[$index - 1]]['growth'] ?? $gAvg, 0.30), 0.01);
-        $yearRevenue = $prevRevenue * (1 + $growth);
-        $yearEBITDA  = $yearRevenue * $ebitdaMargin2024;
-        if ($adminPositive) {
-            $yearEBITDA = min($yearEBITDA, $ebitda['2024'] ?? $yearEBITDA);
+    $factGrowth = [];
+    $prevRevenue = null;
+    foreach ($factYears as $year) {
+        $current = $factData['revenue'][$year];
+        if ($prevRevenue !== null && abs($prevRevenue) > 1e-6) {
+            $factGrowth[$year] = ($current - $prevRevenue) / $prevRevenue;
+        } else {
+            $factGrowth[$year] = null;
         }
-        $yearDEP  = $yearRevenue * $depRatio2024;
-        $yearEBIT = $yearEBITDA - $yearDEP;
-        $yearTax  = max(0, $yearEBIT * $defaults['tax_rate']);
-        $yearCapex= $yearRevenue * $capexRatio2025;
-        $yearNwc  = $yearRevenue * $nwcRatio;
-        $deltaNwc = $yearNwc - $prevNwc;
-        $yearFCF  = $yearEBITDA - $yearTax + $yearDEP - $yearCapex - $deltaNwc;
+        $prevRevenue = $current;
+    }
+    $growthValues = array_values(array_filter($factGrowth, fn($value) => $value !== null));
+    $gAvg = !empty($growthValues) ? array_sum($growthValues) / count($growthValues) : 0.05;
+    $gLastFact = $factGrowth[$lastFactLabel] ?? 0.05;
 
-        $projData[$year] = [
-            'revenue' => $yearRevenue,
-            'ebitda'  => $yearEBITDA,
-            'ebit'    => $yearEBIT,
-            'tax'     => $yearTax,
-            'dep'     => $yearDEP,
-            'capex'   => $yearCapex,
-            'nwc'     => $yearNwc,
-            'delta_nwc' => $deltaNwc,
-            'fcf'     => $yearFCF,
-            'growth'  => $growth,
-        ];
-
-        $prevRevenue = $yearRevenue;
-        $prevNwc = $yearNwc;
+    $seedKey = ($form['asset_name'] ?? '') . '|' . ($form['id'] ?? '0');
+    $growthAnchors = [];
+    if ($gAvg <= -0.20) {
+        $growthAnchors[2] = 0.022;
+        $growthAnchors[3] = 0.0315;
+        $growthAnchors[4] = 0.04;
+    } elseif ($gAvg <= 0) {
+        $growthAnchors[3] = 0.0525;
+        $growthAnchors[4] = 0.04;
+    } elseif ($gAvg <= 0.1275) {
+        $growthAnchors[0] = 0.1275;
+        $growthAnchors[3] = 0.066;
+        $growthAnchors[4] = 0.04;
+    } else {
+        $growthAnchors[3] = 0.066;
+        $growthAnchors[4] = 0.04;
+    }
+    if (!isset($growthAnchors[4])) {
+        $growthAnchors[4] = 0.04;
     }
 
-    // Дисконтируем каждый прогнозный год, учитывая усечённый первый период
-    $discounted = [];
+    $p1Candidate = $growthAnchors[0] ?? clampFloat($gAvg, -0.20, 0.35);
+    $p1Candidate = max($p1Candidate, $gLastFact + 0.0001);
+    $p1Candidate = min($p1Candidate, $gLastFact + 0.10);
+    if (abs($p1Candidate - $gLastFact) < 0.0001) {
+        $p1Candidate = $gLastFact + 0.005;
+    }
+    $growthAnchors[0] = $p1Candidate;
+
+    $forecastGrowth = array_fill(0, 5, null);
+    for ($i = 0; $i < 5; $i++) {
+        if (isset($growthAnchors[$i])) {
+            $forecastGrowth[$i] = $growthAnchors[$i];
+            continue;
+        }
+        $prev = null;
+        for ($j = $i - 1; $j >= 0; $j--) {
+            if (isset($growthAnchors[$j])) {
+                $prev = [$j, $growthAnchors[$j]];
+                break;
+            }
+        }
+        $next = null;
+        for ($j = $i + 1; $j < 5; $j++) {
+            if (isset($growthAnchors[$j])) {
+                $next = [$j, $growthAnchors[$j]];
+                break;
+            }
+        }
+        if ($prev && $next && $next[0] !== $prev[0]) {
+            $ratio = ($i - $prev[0]) / ($next[0] - $prev[0]);
+            $forecastGrowth[$i] = $prev[1] + ($next[1] - $prev[1]) * $ratio;
+        } elseif ($prev) {
+            $forecastGrowth[$i] = $prev[1];
+        } elseif ($next) {
+            $forecastGrowth[$i] = $next[1];
+        } else {
+            $forecastGrowth[$i] = $p1Candidate;
+        }
+    }
+
+    foreach ($forecastGrowth as $idx => $value) {
+        $forecastGrowth[$idx] = clampFloat(
+            $value + stableRandFloat($seedKey, $idx, -0.002, 0.002),
+            -0.30,
+            0.40
+        );
+    }
+    for ($i = 1; $i < count($forecastGrowth); $i++) {
+        if ($forecastGrowth[$i] > $forecastGrowth[$i - 1]) {
+            $forecastGrowth[$i] = $forecastGrowth[$i - 1] - 0.003;
+        }
+    }
+    $forecastGrowth[0] = max($forecastGrowth[0], $gLastFact + 0.0001);
+    $forecastGrowth[0] = min($forecastGrowth[0], $gLastFact + 0.10);
+
+    $forecastRevenue = [];
+    $prevRevenue = $factData['revenue'][$lastFactLabel];
+    foreach ($forecastLabels as $index => $label) {
+        $prevRevenue = $prevRevenue * (1 + $forecastGrowth[$index]);
+        $forecastRevenue[$label] = max(0, $prevRevenue);
+    }
+
+    $computeShare = function (array $values, array $bases, array $years, float $fallback) {
+        $ratios = [];
+        $lastRatio = null;
+        foreach ($years as $year) {
+            $base = $bases[$year] ?? 0;
+            if ($base > 0) {
+                $ratio = ($values[$year] ?? 0) / $base;
+                $ratios[] = $ratio;
+                $lastRatio = $ratio;
+            }
+        }
+        if (empty($ratios)) {
+            return $fallback;
+        }
+        $avg = array_sum($ratios) / count($ratios);
+        foreach ($ratios as $ratio) {
+            if (abs($ratio - $avg) >= 0.10) {
+                return $lastRatio ?? $avg;
+            }
+        }
+        return $avg;
+    };
+
+    $cogsShare = $computeShare($factData['cogs'], $factData['revenue'], $factYears, 0.6);
+    $commercialShare = $computeShare($factData['commercial'], $factData['revenue'], $factYears, 0.12);
+
+    $forecastCogs = [];
+    $forecastCommercial = [];
+    foreach ($forecastLabels as $label) {
+        $forecastCogs[$label] = $forecastRevenue[$label] * $cogsShare;
+        $forecastCommercial[$label] = $forecastRevenue[$label] * $commercialShare;
+    }
+
+    $adminExists = ($factData['admin']['2022'] ?? 0) > 0 || ($factData['admin']['2023'] ?? 0) > 0 || ($factData['admin']['2024'] ?? 0) > 0;
+    $adminForecast = [];
+    $ebitdaForecast = [];
+    $ebitdaMarginForecast = [];
+    $inflationPath = [0.091, 0.055, 0.045, 0.04, 0.04];
+
+    if ($adminExists) {
+        $prevAdmin = $factData['admin'][$lastFactLabel] ?? 0;
+        foreach ($forecastLabels as $idx => $label) {
+            $prevAdmin *= (1 + $inflationPath[$idx]);
+            $adminForecast[$label] = $prevAdmin;
+            $ebitdaForecast[$label] = $forecastRevenue[$label] - $forecastCogs[$label] - $forecastCommercial[$label] - $adminForecast[$label];
+            $ebitdaMarginForecast[$label] = ($forecastRevenue[$label] > 0)
+                ? $ebitdaForecast[$label] / $forecastRevenue[$label]
+                : null;
+        }
+    } else {
+        $baseMargin = $factData['margin'][$lastFactLabel] ?? 0.2;
+        $increment = stableRandFloat($seedKey, 99, 0.005, 0.008);
+        foreach ($forecastLabels as $idx => $label) {
+            $targetMargin = clampFloat($baseMargin + $increment * ($idx + 1), 0, 0.6);
+            $baseCosts = $forecastRevenue[$label] - ($forecastCogs[$label] + $forecastCommercial[$label]);
+            $desiredEbitda = $forecastRevenue[$label] * $targetMargin;
+            $delta = $desiredEbitda - $baseCosts;
+            if ($delta > 0) {
+                $costSum = max($forecastCogs[$label] + $forecastCommercial[$label], 1e-6);
+                $adjustFactor = clampFloat($delta / $costSum, 0, 0.2);
+                $forecastCogs[$label] *= (1 - $adjustFactor * 0.7);
+                $forecastCommercial[$label] *= (1 - $adjustFactor * 0.3);
+            }
+            $adminForecast[$label] = 0;
+            $ebitdaForecast[$label] = $forecastRevenue[$label] - $forecastCogs[$label] - $forecastCommercial[$label];
+            $ebitdaMarginForecast[$label] = ($forecastRevenue[$label] > 0)
+                ? $ebitdaForecast[$label] / $forecastRevenue[$label]
+                : null;
+        }
+    }
+
+    $osLastFact = $balanceSeries['Основные средства'][$lastFactLabel] ?? null;
+    if ($osLastFact === null || $osLastFact <= 0) {
+        return ['error' => 'Не заполнены данные по основным средствам (баланс).'];
+    }
+
+    $deprForecast = [];
+    $supportCapex = [];
+    $osTrend = [];
+    $prevOS = $osLastFact;
+    foreach ($forecastLabels as $label) {
+        $dep = 0.10 * $prevOS;
+        $capex = 0.5 * $dep;
+        $currentOS = $prevOS + $capex;
+        $deprForecast[$label] = $dep;
+        $supportCapex[$label] = $capex;
+        $osTrend[$label] = $currentOS;
+        $prevOS = $currentOS;
+    }
+
+    $ebitForecast = [];
+    $taxForecast = [];
+    foreach ($forecastLabels as $label) {
+        $ebitForecast[$label] = $ebitdaForecast[$label] - $deprForecast[$label];
+        $taxForecast[$label] = max(0, $ebitForecast[$label]) * $defaults['tax_rate'];
+    }
+
+    $tailYears = array_slice($factYears, -2);
+    $factCostBase = [];
+    foreach ($factYears as $year) {
+        $factCostBase[$year] = ($factData['cogs'][$year] ?? 0) + ($factData['commercial'][$year] ?? 0) + ($factData['admin'][$year] ?? 0);
+    }
+    $avgArRatio = $computeShare($balanceSeries['Дебиторская задолженность'] ?? [], $factData['revenue'], $tailYears, 0.15);
+    $avgInvRatio = $computeShare($balanceSeries['Запасы'] ?? [], $factData['cogs'], $tailYears, 0.12);
+    $avgApRatio = $computeShare($balanceSeries['Кредиторская задолженность'] ?? [], $factCostBase, $tailYears, 0.09);
+
+    $factNwc = [];
+    foreach ($factYears as $year) {
+        $ar = $balanceSeries['Дебиторская задолженность'][$year] ?? 0;
+        $inv = $balanceSeries['Запасы'][$year] ?? 0;
+        $ap = $balanceSeries['Кредиторская задолженность'][$year] ?? 0;
+        $factNwc[$year] = $ar + $inv - $ap;
+    }
+    $nwcLastFact = $factNwc[$lastFactLabel] ?? 0;
+
+    $nwcForecast = [];
+    $deltaNwcForecast = [];
+    foreach ($forecastLabels as $index => $label) {
+        $ar = $forecastRevenue[$label] * $avgArRatio;
+        $inv = $forecastCogs[$label] * $avgInvRatio;
+        $apBase = $forecastCogs[$label] + $forecastCommercial[$label] + $adminForecast[$label];
+        $ap = $apBase * $avgApRatio;
+        $nwcForecast[$label] = $ar + $inv - $ap;
+        if ($index === 0) {
+            $deltaNwcForecast[$label] = $nwcForecast[$label] - $nwcLastFact;
+        } else {
+            $prevLabel = $forecastLabels[$index - 1];
+            $deltaNwcForecast[$label] = $nwcForecast[$label] - $nwcForecast[$prevLabel];
+        }
+    }
+
+    $fcffForecast = [];
+    foreach ($forecastLabels as $label) {
+        $fcffForecast[$label] = $ebitdaForecast[$label]
+            - $taxForecast[$label]
+            - $supportCapex[$label]
+            - $deltaNwcForecast[$label];
+    }
+
+    $currentDate = new DateTime();
+    $currentMonth = (int)$currentDate->format('n');
+    $currentDay = (int)$currentDate->format('j');
+    $elapsedFraction = clampFloat((($currentMonth - 1) + ($currentDay / 30)) / 12, 0, 0.99);
+    $remainingFraction = 1 - $elapsedFraction;
+    $stubFraction = clampFloat((12 - $currentMonth) / 12, 0, 1);
+
+    $fcffDisplay = $fcffForecast;
+    $fcffDisplay[$forecastLabels[0]] = $fcffForecast[$forecastLabels[0]] * $remainingFraction;
+
+    $discountFactors = [];
+    $discountedCf = [];
     $pvSum = 0;
-    foreach ($projYears as $idx => $year) {
-        $t = ($year - 2025) + 0.5;
-        if ($idx === 0) {
-            $t -= $stubFraction;
-        }
-        $df = pow(1 + $defaults['wacc'], $t);
-        $pv = $projData[$year]['fcf'] / $df;
-        $discounted[$year] = [
-            'fcf' => $projData[$year]['fcf'],
-            'pv'  => $pv,
-        ];
-        $pvSum += $pv;
+    foreach ($forecastLabels as $index => $label) {
+        $t = ($index + 1) + $stubFraction;
+        $df = 1 / pow(1 + $defaults['wacc'], $t);
+        $discountFactors[$label] = $df;
+        $discountedCf[$label] = $fcffDisplay[$label] * $df;
+        $pvSum += $discountedCf[$label];
     }
 
-    // Terminal Value по модели Гордона
-    $terminalFCF = end($projData)['fcf'] * (1 + $defaults['perpetual_growth']);
-    $terminalValue = $terminalFCF / ($defaults['wacc'] - $defaults['perpetual_growth']);
-    $terminalDF = pow(1 + $defaults['wacc'], count($projYears) + 0.5);
-    $terminalPV = $terminalValue / $terminalDF;
+    $terminalFcff = end($fcffForecast);
+    $terminalValue = $terminalFcff * (1 + $defaults['perpetual_growth']) / ($defaults['wacc'] - $defaults['perpetual_growth']);
+    $terminalDf = 1 / pow(1 + $defaults['wacc'], count($forecastLabels) + $stubFraction);
+    $terminalPv = $terminalValue * $terminalDf;
+    $discountFactors['TV'] = $terminalDf;
+    $discountedCf['TV'] = $terminalPv;
 
-    $enterpriseValue = $pvSum + $terminalPV;
-    $debt = $balanceSeries['Кредиты и займы']['2026'] ?? 0;
-    $cash = $balanceSeries['Денежные средства']['2026'] ?? 0;
+    $debt = $balanceSeries['Кредиты и займы'][$lastFactLabel] ?? 0;
+    $cash = $balanceSeries['Денежные средства'][$lastFactLabel] ?? 0;
+    $enterpriseValue = $pvSum + $terminalPv;
     $equityValue = $enterpriseValue - $debt + $cash;
 
-    // Отдельно строим прогноз по основным средствам для дополнительной визуализации
-    $osDynamics = [];
-    $prevOS = $balanceSeries['Основные средства']['2026'] ?? 0;
-    foreach ($projYears as $year) {
-        $currOS = $prevOS + $projData[$year]['capex'] - $projData[$year]['dep'];
-        $osDynamics[] = [
-            'year' => $year,
-            'os'   => $currOS,
-            'capex'=> $projData[$year]['capex'],
-            'dep'  => $projData[$year]['dep'],
-        ];
-        $prevOS = $currOS;
+    $buildValues = function (array $factValues, array $forecastValues, $tvValue = null) use ($factYears, $forecastLabels) {
+        $values = [];
+        foreach ($factYears as $year) {
+            $values[$year] = $factValues[$year] ?? null;
+        }
+        foreach ($forecastLabels as $label) {
+            $values[$label] = $forecastValues[$label] ?? null;
+        }
+        $values['TV'] = $tvValue;
+        return $values;
+    };
+
+    $nullFact = array_fill_keys($factYears, null);
+    $nullForecast = array_fill_keys($forecastLabels, null);
+
+    $forecastGrowthAssoc = array_combine($forecastLabels, $forecastGrowth);
+    $factTax = [];
+    foreach ($factYears as $year) {
+        $factTax[$year] = max(0, $factData['ebit'][$year] ?? 0) * $defaults['tax_rate'];
+    }
+
+    $rows = [
+        [
+            'label' => 'Выручка',
+            'format' => 'money',
+            'is_expense' => false,
+            'values' => $buildValues($factData['revenue'], $forecastRevenue),
+        ],
+        [
+            'label' => 'Темп роста, %',
+            'format' => 'percent',
+            'italic' => true,
+            'values' => $buildValues(
+                $factGrowth + [$factYears[0] => null],
+                $forecastGrowthAssoc
+            ),
+        ],
+        [
+            'label' => 'Себестоимость',
+            'format' => 'money',
+            'is_expense' => true,
+            'values' => $buildValues($factData['cogs'], $forecastCogs),
+        ],
+        [
+            'label' => 'Коммерческие',
+            'format' => 'money',
+            'is_expense' => true,
+            'values' => $buildValues($factData['commercial'], $forecastCommercial),
+        ],
+        [
+            'label' => 'Административные',
+            'format' => 'money',
+            'is_expense' => true,
+            'values' => $buildValues($factData['admin'], $adminForecast),
+        ],
+        [
+            'label' => 'EBITDA',
+            'format' => 'money',
+            'is_expense' => false,
+            'values' => $buildValues($factData['ebitda'], $ebitdaForecast),
+        ],
+        [
+            'label' => 'EBITDA-маржа, %',
+            'format' => 'percent',
+            'italic' => true,
+            'values' => $buildValues($factData['margin'], $ebitdaMarginForecast),
+        ],
+        [
+            'label' => 'Налог (от EBIT)',
+            'format' => 'money',
+            'is_expense' => true,
+            'values' => $buildValues($factTax, $taxForecast),
+        ],
+        [
+            'label' => 'Поддерживающий CAPEX',
+            'format' => 'money',
+            'is_expense' => true,
+            'values' => $buildValues($nullFact, $supportCapex),
+        ],
+        [
+            'label' => 'ΔNWC',
+            'format' => 'money',
+            'is_expense' => true,
+            'values' => $buildValues($nullFact, $deltaNwcForecast),
+        ],
+        [
+            'label' => 'FCFF',
+            'format' => 'money',
+            'is_expense' => false,
+            'star_columns' => [$forecastLabels[0]],
+            'values' => $buildValues($nullFact, $fcffDisplay, $terminalFcff),
+        ],
+        [
+            'label' => 'Фактор дисконтирования',
+            'format' => 'decimal',
+            'values' => $buildValues($nullFact, $discountFactors, $discountFactors['TV']),
+        ],
+        [
+            'label' => 'Discounted FCFF',
+            'format' => 'money',
+            'is_expense' => false,
+            'values' => $buildValues($nullFact, $discountedCf, $terminalPv),
+        ],
+    ];
+
+    $warnings = [];
+    if ($forecastGrowth[0] <= $gLastFact) {
+        $warnings[] = 'P1 скорректирован, чтобы быть выше фактического темпа 2024 года.';
+    }
+    if (abs($forecastGrowth[0] - $gLastFact) > 0.10) {
+        $warnings[] = 'Отклонение P1 от g_last_fact ограничено 10 п.п. согласно регламенту.';
     }
 
     return [
-        'discounted' => $discounted,
-        'terminal_value' => $terminalValue,
-        'terminal_pv'    => $terminalPV,
-        'enterprise_value' => $enterpriseValue,
-        'debt' => $debt,
-        'cash' => $cash,
-        'equity' => $equityValue,
-        'warnings' => $warnings,
-        'os_dynamics' => $osDynamics,
+        'columns' => $columns,
+        'rows' => $rows,
         'wacc' => $defaults['wacc'],
         'perpetual_growth' => $defaults['perpetual_growth'],
-        'forecast_years' => $projYears,
+        'footnotes' => ['* FCFF₁ скорректирован на оставшуюся часть года'],
+        'warnings' => $warnings,
+        'ev_breakdown' => [
+            'ev' => $enterpriseValue,
+            'debt' => $debt,
+            'cash' => $cash,
+            'equity' => $equityValue,
+            'terminal_value' => $terminalValue,
+            'terminal_pv' => $terminalPv,
+            'discounted_sum' => $pvSum,
+        ],
     ];
 }
 
-$latestFormStmt = $pdo->prepare("
+$latestForm = null;
+$dcfData = null;
+$dcfSourceStatus = null;
+
+$latestSubmittedStmt = $pdo->prepare("
     SELECT *
     FROM seller_forms
     WHERE user_id = ?
+      AND status IN ('submitted','review','approved')
     ORDER BY submitted_at DESC, updated_at DESC
     LIMIT 1
 ");
-$latestFormStmt->execute([$user['id']]);
-    $latestForm = $latestFormStmt->fetch();
-$dcfData = null;
+$latestSubmittedStmt->execute([$user['id']]);
+$latestForm = $latestSubmittedStmt->fetch();
+
 if ($latestForm) {
+    $dcfSourceStatus = $latestForm['status'];
     $dcfData = calculateUserDCF($latestForm);
+} else {
+    $latestAnyStmt = $pdo->prepare("
+        SELECT *
+        FROM seller_forms
+        WHERE user_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+    ");
+    $latestAnyStmt->execute([$user['id']]);
+    $latestForm = $latestAnyStmt->fetch();
+    if ($latestForm) {
+        $dcfSourceStatus = $latestForm['status'] ?? null;
+        if (in_array($dcfSourceStatus, ['submitted','review','approved'], true)) {
+            $dcfData = calculateUserDCF($latestForm);
+        } else {
+            $dcfData = ['error' => 'DCF рассчитывается только по отправленным анкетам. Отправьте анкету, чтобы увидеть модель.'];
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -618,6 +929,19 @@ if ($latestForm) {
             font-size: 24px;
             margin-bottom: 16px;
         }
+        .dcf-card__actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 16px;
+        }
+        .btn-export-pdf {
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            background: white;
+        }
+        .btn-export-pdf:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
         .dcf-table {
             width: 100%;
             border-collapse: collapse;
@@ -632,6 +956,93 @@ if ($latestForm) {
         .dcf-table th {
             background: rgba(245,247,250,0.8);
             font-weight: 600;
+        }
+        .dcf-table--full th:first-child {
+            width: 220px;
+        }
+        .dcf-table--full td {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .dcf-table--full td:first-child {
+            text-align: left;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .dcf-col-fact {
+            background: rgba(248,250,252,0.6);
+        }
+        .dcf-col-forecast {
+            background: rgba(255,255,255,0.8);
+        }
+        .dcf-col-tv {
+            background: rgba(20,184,166,0.08);
+        }
+        .dcf-cell-tv {
+            font-weight: 600;
+        }
+        .dcf-params-strip {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .dcf-footnote {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: -12px;
+            margin-bottom: 16px;
+        }
+        .dcf-table--ev {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 0;
+        }
+        .dcf-table--ev td {
+            border: none;
+            padding: 6px 12px;
+            text-align: right;
+        }
+        .dcf-table--ev td:first-child {
+            text-align: left;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        @media print {
+            body.print-dcf * {
+                visibility: hidden !important;
+            }
+            body.print-dcf #dcf-card,
+            body.print-dcf #dcf-card * {
+                visibility: visible !important;
+            }
+            body.print-dcf #dcf-card {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                box-shadow: none;
+                border: none;
+            }
+        }
+        .dcf-source-note {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: -8px 0 16px;
+        }
+        .dcf-source-note strong {
+            color: var(--text-primary);
+        }
+        .dcf-source-note--warning {
+            color: #ad6800;
+        }
+        .dcf-print-hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
         }
         .warnings {
             margin-top: 16px;
@@ -786,105 +1197,162 @@ if ($latestForm) {
         <?php endif; ?>
 
         <?php if ($dcfData): ?>
-            <div class="dcf-card">
-                <h2>DCF Model</h2>
+            <div class="dcf-card" id="dcf-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <div>
+                        <h2 style="margin-bottom:4px;">DCF Model</h2>
+                        <small class="dcf-print-hint">Сохраните PDF через системный диалог печати (⌘+P / Ctrl+P).</small>
+                    </div>
+                    <button
+                        type="button"
+                        class="btn btn-export-pdf"
+                        id="export-dcf-pdf"
+                        data-asset-name="<?php echo htmlspecialchars($latestForm['asset_name'] ?? 'DCF', ENT_QUOTES, 'UTF-8'); ?>"
+                        data-date-label="<?php echo isset($latestForm['submitted_at']) ? date('d.m.Y', strtotime($latestForm['submitted_at'])) : date('d.m.Y'); ?>"
+                    >
+                        Сохранить DCF в PDF
+                    </button>
+                </div>
+                <?php if ($latestForm): ?>
+                    <?php
+                        $dcfAssetName = $latestForm['asset_name'] ?: 'Без названия';
+                        $dcfDate = null;
+                        if (!empty($latestForm['submitted_at'])) {
+                            $dcfDate = date('d.m.Y', strtotime($latestForm['submitted_at']));
+                        } elseif (!empty($latestForm['updated_at'])) {
+                            $dcfDate = date('d.m.Y', strtotime($latestForm['updated_at']));
+                        }
+                        $dcfStatusLabel = $statusLabels[$dcfSourceStatus] ?? $dcfSourceStatus ?? 'Черновик';
+                        $noteClasses = 'dcf-source-note';
+                        if (!in_array($dcfSourceStatus, ['submitted','review','approved'], true)) {
+                            $noteClasses .= ' dcf-source-note--warning';
+                        }
+                    ?>
+                    <p class="<?php echo $noteClasses; ?>">
+                        <?php if (in_array($dcfSourceStatus, ['submitted','review','approved'], true)): ?>
+                            Расчёт построен по анкете «<?php echo htmlspecialchars($dcfAssetName, ENT_QUOTES, 'UTF-8'); ?>»
+                            <?php if ($dcfDate): ?>от <?php echo $dcfDate; ?><?php endif; ?>
+                            (статус: <?php echo htmlspecialchars($dcfStatusLabel, ENT_QUOTES, 'UTF-8'); ?>).
+                        <?php else: ?>
+                            Последняя анкета «<?php echo htmlspecialchars($dcfAssetName, ENT_QUOTES, 'UTF-8'); ?>»
+                            имеет статус «<?php echo htmlspecialchars($dcfStatusLabel, ENT_QUOTES, 'UTF-8'); ?>». Отправьте анкету, чтобы рассчитать модель.
+                        <?php endif; ?>
+                    </p>
+                <?php endif; ?>
                 <?php if (isset($dcfData['error'])): ?>
                     <div class="warnings"><?php echo htmlspecialchars($dcfData['error'], ENT_QUOTES, 'UTF-8'); ?></div>
                 <?php else: ?>
-                    <table class="dcf-table">
-                        <thead>
-                            <tr>
-                                <th>Год</th>
-                                <th>FCF (млн ₽)</th>
-                                <th>PV FCF (млн ₽)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($dcfData['discounted'] as $year => $row): ?>
-                                <tr>
-                                    <td><?php echo htmlspecialchars($year, ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo number_format($row['fcf'], 2, '.', ' '); ?></td>
-                                    <td><?php echo number_format($row['pv'], 2, '.', ' '); ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                            <tr>
-                                <td>Terminal Value</td>
-                                <td><?php echo number_format($dcfData['terminal_value'], 2, '.', ' '); ?></td>
-                                <td><?php echo number_format($dcfData['terminal_pv'], 2, '.', ' '); ?></td>
-                            </tr>
-                            <tr>
-                                <td colspan="2"><strong>Enterprise Value (EV)</strong></td>
-                                <td><strong><?php echo number_format($dcfData['enterprise_value'], 2, '.', ' '); ?></strong></td>
-                            </tr>
-                        </tbody>
-                    </table>
-
                     <?php
-                        // Собираем параметры модели, чтобы пользователь видел ключевые допущения:
-                        // WACC, долгосрочный рост и фактический диапазон прогнозных лет.
-                        $waccPercent = isset($dcfData['wacc']) ? number_format($dcfData['wacc'] * 100, 2, '.', ' ') . '%' : '—';
-                        $growthPercent = isset($dcfData['perpetual_growth']) ? number_format($dcfData['perpetual_growth'] * 100, 2, '.', ' ') . '%' : '—';
-                        $forecastYears = $dcfData['forecast_years'] ?? [];
-                        $forecastLabel = '—';
-                        if (!empty($forecastYears)) {
-                            $startYear = reset($forecastYears);
-                            $endYear = end($forecastYears);
-                            $forecastLabel = sprintf('%d лет (%s–%s) + Terminal Value', count($forecastYears), $startYear, $endYear);
-                        }
-                        $netDebt = ($dcfData['debt'] ?? 0) - ($dcfData['cash'] ?? 0);
-                        $equityValue = $dcfData['enterprise_value'] - $netDebt;
+                        $columnsMeta = $dcfData['columns'] ?? [];
+                        $rows = $dcfData['rows'] ?? [];
+                        $evData = $dcfData['ev_breakdown'] ?? null;
+                        $formatMoney = static function ($value, bool $isExpense = false): string {
+                            if ($value === null) {
+                                return '—';
+                            }
+                            $rounded = round($value);
+                            $formatted = number_format(abs($rounded), 0, '.', ' ');
+                            if ($isExpense && $rounded > 0) {
+                                return '(' . $formatted . ')';
+                            }
+                            if ($isExpense && $rounded < 0) {
+                                return '−(' . $formatted . ')';
+                            }
+                            return ($rounded < 0 ? '−' : '') . $formatted;
+                        };
+                        $formatPercent = static function ($value, bool $italic = false): string {
+                            if ($value === null) {
+                                return '—';
+                            }
+                            $formatted = number_format($value * 100, 2, '.', ' ') . '%';
+                            return $italic ? '<em>' . $formatted . '</em>' : $formatted;
+                        };
+                        $formatDecimal = static function ($value): string {
+                            if ($value === null) {
+                                return '—';
+                            }
+                            return number_format($value, 4, '.', ' ');
+                        };
+                        $formatEvRow = static function ($value) use ($formatMoney): string {
+                            if ($value === null) {
+                                return '—';
+                            }
+                            return $formatMoney($value) . ' млн ₽';
+                        };
                     ?>
-                    <table class="dcf-table dcf-table--params">
-                        <tbody>
-                            <tr>
-                                <th>Ставка дисконтирования (WACC)</th>
-                                <td><?php echo $waccPercent; ?></td>
-                            </tr>
-                            <tr>
-                                <th>Темп долгосрочного роста (g)</th>
-                                <td><?php echo $growthPercent; ?></td>
-                            </tr>
-                            <tr>
-                                <th>Период прогноза</th>
-                                <td><?php echo $forecastLabel; ?></td>
-                            </tr>
-                            <tr>
-                                <th>Enterprise Value (EV)</th>
-                                <td><?php echo number_format($dcfData['enterprise_value'], 2, '.', ' '); ?> млн ₽</td>
-                            </tr>
-                            <tr>
-                                <th>Чистый долг</th>
-                                <td><?php echo number_format(max($netDebt, 0), 2, '.', ' '); ?> млн ₽</td>
-                            </tr>
-                            <tr>
-                                <th>Equity Value</th>
-                                <td><?php echo number_format($equityValue, 2, '.', ' '); ?> млн ₽</td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <h3>Динамика основных средств</h3>
-                    <table class="dcf-table">
+                    <div class="dcf-params-strip">
+                        <span>WACC: <?php echo number_format(($dcfData['wacc'] ?? 0) * 100, 2, '.', ' '); ?>%</span>
+                        <span>g: <?php echo number_format(($dcfData['perpetual_growth'] ?? 0) * 100, 2, '.', ' '); ?>%</span>
+                    </div>
+                    <table class="dcf-table dcf-table--full">
                         <thead>
                             <tr>
-                                <th>Год</th>
-                                <th>Основные средства</th>
-                                <th>CAPEX</th>
-                                <th>Амортизация</th>
+                                <th>Показатель</th>
+                                <?php foreach ($columnsMeta as $column): ?>
+                                    <th class="dcf-col-<?php echo htmlspecialchars($column['type'], ENT_QUOTES, 'UTF-8'); ?>">
+                                        <?php echo htmlspecialchars($column['label'], ENT_QUOTES, 'UTF-8'); ?>
+                                    </th>
+                                <?php endforeach; ?>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($dcfData['os_dynamics'] as $row): ?>
+                            <?php foreach ($rows as $row): ?>
                                 <tr>
-                                    <td><?php echo htmlspecialchars($row['year'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo number_format($row['os'], 2, '.', ' '); ?></td>
-                                    <td><?php echo number_format($row['capex'], 2, '.', ' '); ?></td>
-                                    <td><?php echo number_format($row['dep'], 2, '.', ' '); ?></td>
+                                    <td><?php echo htmlspecialchars($row['label'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <?php foreach ($columnsMeta as $column): ?>
+                                        <?php
+                                            $value = $row['values'][$column['key']] ?? null;
+                                            $formattedValue = '—';
+                                            if ($row['format'] === 'money') {
+                                                $formattedValue = $formatMoney($value, $row['is_expense'] ?? false);
+                                            } elseif ($row['format'] === 'percent') {
+                                                $formattedValue = $formatPercent($value, $row['italic'] ?? false);
+                                            } elseif ($row['format'] === 'decimal') {
+                                                $formattedValue = $formatDecimal($value);
+                                            } else {
+                                                $formattedValue = htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+                                            }
+                                            if (!empty($row['star_columns']) && in_array($column['key'], $row['star_columns'], true) && $formattedValue !== '—') {
+                                                $formattedValue .= '*';
+                                            }
+                                        ?>
+                                        <td class="dcf-cell-<?php echo htmlspecialchars($column['type'], ENT_QUOTES, 'UTF-8'); ?>">
+                                            <?php echo $formattedValue; ?>
+                                        </td>
+                                    <?php endforeach; ?>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
-
+                    <?php if (!empty($dcfData['footnotes'])): ?>
+                        <p class="dcf-footnote">
+                            <?php foreach ($dcfData['footnotes'] as $note): ?>
+                                <?php echo htmlspecialchars($note, ENT_QUOTES, 'UTF-8'); ?><br>
+                            <?php endforeach; ?>
+                        </p>
+                    <?php endif; ?>
+                    <?php if ($evData): ?>
+                        <table class="dcf-table dcf-table--ev">
+                            <tbody>
+                                <tr>
+                                    <td>Enterprise Value (EV)</td>
+                                    <td><?php echo $formatEvRow($evData['ev'] ?? null); ?></td>
+                                </tr>
+                                <tr>
+                                    <td>− Debt</td>
+                                    <td>(<?php echo $formatMoney($evData['debt'] ?? 0); ?> млн ₽)</td>
+                                </tr>
+                                <tr>
+                                    <td>Cash</td>
+                                    <td><?php echo $formatEvRow($evData['cash'] ?? null); ?></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Equity Value</strong></td>
+                                    <td><strong><?php echo $formatEvRow($evData['equity'] ?? null); ?></strong></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
                     <?php if (!empty($dcfData['warnings'])): ?>
                         <div class="warnings">
                             <strong>Контрольные замечания:</strong>
@@ -900,6 +1368,42 @@ if ($latestForm) {
         <?php endif; ?>
     </div>
 
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const card = document.getElementById('dcf-card');
+            const exportBtn = document.getElementById('export-dcf-pdf');
+            if (!card || !exportBtn) {
+                return;
+            }
+
+            const originalText = exportBtn.textContent;
+
+            const restoreState = () => {
+                document.body.classList.remove('print-dcf');
+                exportBtn.disabled = false;
+                exportBtn.textContent = originalText;
+            };
+
+            const handleAfterPrint = () => {
+                restoreState();
+                window.removeEventListener('afterprint', handleAfterPrint);
+            };
+
+            exportBtn.addEventListener('click', () => {
+                document.body.classList.add('print-dcf');
+                exportBtn.disabled = true;
+                exportBtn.textContent = 'Открывается диалог...';
+
+                window.addEventListener('afterprint', handleAfterPrint);
+
+                setTimeout(() => {
+                    window.print();
+                    // На некоторых iOS/Safari события afterprint нет — возвращаем состояние сами
+                    setTimeout(restoreState, 1000);
+                }, 50);
+            });
+        });
+    </script>
     <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>
