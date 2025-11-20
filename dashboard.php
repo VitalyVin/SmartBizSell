@@ -227,13 +227,20 @@ function extractFinancialAndBalance(array $form): array
     return [$financial, $balance];
 }
 
+/**
+ * Строит полную DCF-модель на основе последней отправленной анкеты пользователя.
+ * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
+ * для отображения в личном кабинете.
+ */
 function calculateUserDCF(array $form): array {
+    // Базовые допущения модели: повышенный риск (WACC 24%) и долгосрочный рост 4%.
     $defaults = [
-        'wacc' => 0.10,
+        'wacc' => 0.24,
         'tax_rate' => 0.20,
-        'perpetual_growth' => 0.03,
+        'perpetual_growth' => 0.04,
     ];
 
+    // Сопоставление новых ключей с временными метками, которые ожидает модель.
     $periodMap = [
         'fact_2022'    => '2022',
         'fact_2023'    => '2023',
@@ -243,6 +250,7 @@ function calculateUserDCF(array $form): array {
         'budget_2026'  => '2026',
     ];
 
+    // Собираем нормализованные таблицы из БД / data_json
     list($financial, $balance) = extractFinancialAndBalance($form);
 
     if (!$financial || !$balance) {
@@ -256,6 +264,7 @@ function calculateUserDCF(array $form): array {
         return ['error' => 'Отсутствуют ключевые строки финансовой таблицы.'];
     }
 
+    // Корректируем данные на случай, если пользователь заполнял показатели с НДС
     $vatMode = $form['financial_results_vat'] ?? 'without_vat';
     $vatFactor = ($vatMode === 'with_vat' || $vatMode === 'с НДС') ? 1 / 1.20 : 1.0;
 
@@ -282,11 +291,13 @@ function calculateUserDCF(array $form): array {
         $ebit[$key]   = $ebitda[$key] - ($deprRow[$key] ?? 0);
     }
 
+    // Сводим баланс к серии по годам – пригодится для NWC, долга и основных средств
     $balanceSeries = [];
     foreach ($balRows as $metric => $row) {
         $balanceSeries[$metric] = dcf_build_series($row, $periodMap);
     }
 
+    // Рассчитываем рабочий капитал для каждого периода
     $nwc = [];
     foreach ($periodMap as $label) {
         $inv = $balanceSeries['Запасы'][$label] ?? 0;
@@ -299,6 +310,7 @@ function calculateUserDCF(array $form): array {
     $rev2024 = $revenue[$lastFactLabel] ?? 0;
     $nwcRatio = ($rev2024 > 0) ? ($nwc[$lastFactLabel] ?? 0) / $rev2024 : 0.1;
 
+    // Рост выручки – будем использовать как базу для прогнозных периодов
     $growth23 = ($revenue['2022'] ?? 0) > 0 ? ($revenue['2023'] - $revenue['2022']) / max($revenue['2022'], 1e-6) : 0;
     $growth24 = ($revenue['2023'] ?? 0) > 0 ? ($revenue['2024'] - $revenue['2023']) / max($revenue['2023'], 1e-6) : 0;
     $gAvg = ($growth23 + $growth24) / 2;
@@ -312,6 +324,7 @@ function calculateUserDCF(array $form): array {
     }
     $gLastFact = ($revenue['2024'] ?? 0) > 0 ? ($revenue2025Annual - $revenue['2024']) / max($revenue['2024'], 1e-6) : 0;
 
+    // Список замечаний, которые подсвечиваем пользователю
     $warnings = [];
     if ($gAvg <= $gLastFact) {
         $warnings[] = 'Рост первого прогнозного периода не превышает последний фактический рост.';
@@ -329,6 +342,7 @@ function calculateUserDCF(array $form): array {
     $depRatio2024     = ($revenue['2024'] ?? 0) > 0 ? ($deprRow['2024'] ?? 0) / max($revenue['2024'], 1e-6) : 0.05;
     $capexRatio2025   = ($revenue['2025'] ?? 0) > 0 ? ($capexRow['2025'] ?? 0) / max($revenue['2025'], 1e-6) : 0.05;
 
+    // Горизонт прогноза — фиксируем 5 лет вперёд
     $projYears = [2027, 2028, 2029, 2030, 2031];
     $stubFraction = 10.5 / 12;
     $projData = [];
@@ -367,6 +381,7 @@ function calculateUserDCF(array $form): array {
         $prevNwc = $yearNwc;
     }
 
+    // Дисконтируем каждый прогнозный год, учитывая усечённый первый период
     $discounted = [];
     $pvSum = 0;
     foreach ($projYears as $idx => $year) {
@@ -383,6 +398,7 @@ function calculateUserDCF(array $form): array {
         $pvSum += $pv;
     }
 
+    // Terminal Value по модели Гордона
     $terminalFCF = end($projData)['fcf'] * (1 + $defaults['perpetual_growth']);
     $terminalValue = $terminalFCF / ($defaults['wacc'] - $defaults['perpetual_growth']);
     $terminalDF = pow(1 + $defaults['wacc'], count($projYears) + 0.5);
@@ -393,6 +409,7 @@ function calculateUserDCF(array $form): array {
     $cash = $balanceSeries['Денежные средства']['2026'] ?? 0;
     $equityValue = $enterpriseValue - $debt + $cash;
 
+    // Отдельно строим прогноз по основным средствам для дополнительной визуализации
     $osDynamics = [];
     $prevOS = $balanceSeries['Основные средства']['2026'] ?? 0;
     foreach ($projYears as $year) {
@@ -416,6 +433,9 @@ function calculateUserDCF(array $form): array {
         'equity' => $equityValue,
         'warnings' => $warnings,
         'os_dynamics' => $osDynamics,
+        'wacc' => $defaults['wacc'],
+        'perpetual_growth' => $defaults['perpetual_growth'],
+        'forecast_years' => $projYears,
     ];
 }
 
@@ -427,7 +447,7 @@ $latestFormStmt = $pdo->prepare("
     LIMIT 1
 ");
 $latestFormStmt->execute([$user['id']]);
-$latestForm = $latestFormStmt->fetch();
+    $latestForm = $latestFormStmt->fetch();
 $dcfData = null;
 if ($latestForm) {
     $dcfData = calculateUserDCF($latestForm);
@@ -799,32 +819,47 @@ if ($latestForm) {
                         </tbody>
                     </table>
 
+                    <?php
+                        // Собираем параметры модели, чтобы пользователь видел ключевые допущения:
+                        // WACC, долгосрочный рост и фактический диапазон прогнозных лет.
+                        $waccPercent = isset($dcfData['wacc']) ? number_format($dcfData['wacc'] * 100, 2, '.', ' ') . '%' : '—';
+                        $growthPercent = isset($dcfData['perpetual_growth']) ? number_format($dcfData['perpetual_growth'] * 100, 2, '.', ' ') . '%' : '—';
+                        $forecastYears = $dcfData['forecast_years'] ?? [];
+                        $forecastLabel = '—';
+                        if (!empty($forecastYears)) {
+                            $startYear = reset($forecastYears);
+                            $endYear = end($forecastYears);
+                            $forecastLabel = sprintf('%d лет (%s–%s) + Terminal Value', count($forecastYears), $startYear, $endYear);
+                        }
+                        $netDebt = ($dcfData['debt'] ?? 0) - ($dcfData['cash'] ?? 0);
+                        $equityValue = $dcfData['enterprise_value'] - $netDebt;
+                    ?>
                     <table class="dcf-table dcf-table--params">
                         <tbody>
                             <tr>
-                <th>Ставка дисконтирования (WACC)</th>
-                <td>10.00%</td>
-            </tr>
-            <tr>
-                <th>Темп долгосрочного роста (g)</th>
-                <td>2.50%</td>
-            </tr>
-            <tr>
-                <th>Период прогноза</th>
-                <td>5 лет (2027–2031) + Terminal Value</td>
-            </tr>
-            <tr>
-                <th>Enterprise Value (EV)</th>
-                <td><?php echo number_format($dcfData['enterprise_value'], 2, '.', ' '); ?> млн ₽</td>
-            </tr>
-            <tr>
-                <th>Чистый долг</th>
-                <td><?php echo number_format(max(($dcfData['debt'] ?? 0) - ($dcfData['cash'] ?? 0), 0), 2, '.', ' '); ?> млн ₽</td>
-            </tr>
-            <tr>
-                <th>Equity Value</th>
-                <td><?php echo number_format($dcfData['enterprise_value'] - (($dcfData['debt'] ?? 0) - ($dcfData['cash'] ?? 0)), 2, '.', ' '); ?> млн ₽</td>
-            </tr>
+                                <th>Ставка дисконтирования (WACC)</th>
+                                <td><?php echo $waccPercent; ?></td>
+                            </tr>
+                            <tr>
+                                <th>Темп долгосрочного роста (g)</th>
+                                <td><?php echo $growthPercent; ?></td>
+                            </tr>
+                            <tr>
+                                <th>Период прогноза</th>
+                                <td><?php echo $forecastLabel; ?></td>
+                            </tr>
+                            <tr>
+                                <th>Enterprise Value (EV)</th>
+                                <td><?php echo number_format($dcfData['enterprise_value'], 2, '.', ' '); ?> млн ₽</td>
+                            </tr>
+                            <tr>
+                                <th>Чистый долг</th>
+                                <td><?php echo number_format(max($netDebt, 0), 2, '.', ' '); ?> млн ₽</td>
+                            </tr>
+                            <tr>
+                                <th>Equity Value</th>
+                                <td><?php echo number_format($equityValue, 2, '.', ' '); ?> млн ₽</td>
+                            </tr>
                         </tbody>
                     </table>
 
