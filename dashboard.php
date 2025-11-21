@@ -575,16 +575,39 @@ function calculateUserDCF(array $form): array {
     $discountedCf = [];
     $pvSum = 0;
     foreach ($forecastLabels as $index => $label) {
-        $t = ($index + 1) + $stubFraction;
+        // Period t for discounting: P1 is at stubFraction years, P2 at 1+stubFraction, etc.
+        // For P1 (index=0): t = stubFraction (remaining part of current year)
+        // For P2 (index=1): t = 1 + stubFraction (end of next year)
+        // For P3 (index=2): t = 2 + stubFraction (end of year after next), etc.
+        $t = $index + $stubFraction;
         $df = 1 / pow(1 + $defaults['wacc'], $t);
         $discountFactors[$label] = $df;
         $discountedCf[$label] = $fcffDisplay[$label] * $df;
         $pvSum += $discountedCf[$label];
     }
 
+    // Terminal Value calculation using Gordon Growth Model
+    // TV = FCF(n) * (1 + g) / (WACC - g)
+    // where FCF(n) is the FCF of the last forecast year, g is perpetual growth rate
     $terminalFcff = end($fcffForecast);
-    $terminalValue = $terminalFcff * (1 + $defaults['perpetual_growth']) / ($defaults['wacc'] - $defaults['perpetual_growth']);
-    $terminalDf = 1 / pow(1 + $defaults['wacc'], count($forecastLabels) + $stubFraction);
+    
+    // Ensure WACC > perpetual_growth for the formula to work
+    $wacc = $defaults['wacc'];
+    $perpetualGrowth = $defaults['perpetual_growth'];
+    if ($wacc <= $perpetualGrowth) {
+        // If WACC <= growth, set growth to WACC - 0.01 to avoid division by zero
+        $perpetualGrowth = max(0, $wacc - 0.01);
+    }
+    
+    // Calculate Terminal Value at the end of the last forecast year
+    $terminalValue = $terminalFcff * (1 + $perpetualGrowth) / ($wacc - $perpetualGrowth);
+    
+    // Discount TV to present value
+    // TV is at the end of the last forecast period (same moment as last P period)
+    // If we have 5 periods (P1-P5), P5 is discounted at (4 + stubFraction)
+    // TV should be discounted at the same moment: (count - 1 + stubFraction)
+    $terminalPeriod = (count($forecastLabels) - 1) + $stubFraction;
+    $terminalDf = 1 / pow(1 + $wacc, $terminalPeriod);
     $terminalPv = $terminalValue * $terminalDf;
     $discountFactors['TV'] = $terminalDf;
     $discountedCf['TV'] = $terminalPv;
@@ -684,7 +707,7 @@ function calculateUserDCF(array $form): array {
             'format' => 'money',
             'is_expense' => false,
             'star_columns' => [$forecastLabels[0]],
-            'values' => $buildValues($nullFact, $fcffDisplay, $terminalFcff),
+            'values' => $buildValues($nullFact, $fcffDisplay, null), // TV не относится к FCFF, это отдельный показатель
         ],
         [
             'label' => 'Фактор дисконтирования',
@@ -914,6 +937,65 @@ if ($latestForm) {
             }
             .dashboard-stats {
                 grid-template-columns: 1fr;
+            }
+            .dcf-card {
+                padding: 16px;
+                margin-top: 24px;
+            }
+            .dcf-card h2 {
+                font-size: 20px;
+            }
+            .dcf-card__actions {
+                flex-direction: column;
+                gap: 8px;
+            }
+            .dcf-card__actions .btn {
+                width: 100%;
+            }
+            .dcf-params-strip {
+                flex-direction: column;
+                gap: 8px;
+            }
+            /* Обертка для горизонтальной прокрутки таблиц DCF */
+            .dcf-table-wrapper {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                margin: 0 -16px;
+                padding: 0 16px;
+            }
+            .dcf-table {
+                min-width: 600px;
+                font-size: 12px;
+            }
+            .dcf-table th,
+            .dcf-table td {
+                padding: 8px 6px;
+                white-space: nowrap;
+            }
+            .dcf-table--full th:first-child {
+                width: 140px;
+                min-width: 140px;
+                position: sticky;
+                left: 0;
+                z-index: 10;
+                background: rgba(245,247,250,0.98);
+                box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+            }
+            .dcf-table--full td:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 9;
+                background: white;
+                box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+            }
+            .dcf-table--full tr:nth-child(even) td:first-child {
+                background: rgba(248,250,252,0.98);
+            }
+            .dcf-table--ev {
+                font-size: 12px;
+            }
+            .dcf-table--ev td {
+                padding: 4px 6px;
             }
         }
         .dcf-card {
@@ -1157,6 +1239,7 @@ if ($latestForm) {
                             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                 <a href="view_form.php?id=<?php echo $form['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">Просмотр</a>
                                 <a href="seller_form.php?form_id=<?php echo $form['id']; ?>" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">Редактировать</a>
+                                <a href="export_form_json.php?id=<?php echo $form['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">📥 JSON</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -1185,10 +1268,11 @@ if ($latestForm) {
                         <div style="font-size: 12px; color: var(--text-secondary);">Создан:</div>
                         <div style="font-size: 14px;"><?php echo date('d.m.Y', strtotime($form['created_at'])); ?></div>
                     </div>
-                    <div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <a href="seller_form.php?form_id=<?php echo $form['id']; ?>" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
                             Продолжить заполнение
                         </a>
+                        <a href="export_form_json.php?id=<?php echo $form['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">📥 JSON</a>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -1284,6 +1368,7 @@ if ($latestForm) {
                         <span>WACC: <?php echo number_format(($dcfData['wacc'] ?? 0) * 100, 2, '.', ' '); ?>%</span>
                         <span>g: <?php echo number_format(($dcfData['perpetual_growth'] ?? 0) * 100, 2, '.', ' '); ?>%</span>
                     </div>
+                    <div class="dcf-table-wrapper">
                     <table class="dcf-table dcf-table--full">
                         <thead>
                             <tr>
@@ -1324,6 +1409,7 @@ if ($latestForm) {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
                     <?php if (!empty($dcfData['footnotes'])): ?>
                         <p class="dcf-footnote">
                             <?php foreach ($dcfData['footnotes'] as $note): ?>
@@ -1332,6 +1418,7 @@ if ($latestForm) {
                         </p>
                     <?php endif; ?>
                     <?php if ($evData): ?>
+                        <div class="dcf-table-wrapper">
                         <table class="dcf-table dcf-table--ev">
                             <tbody>
                                 <tr>
@@ -1352,6 +1439,7 @@ if ($latestForm) {
                                 </tr>
                             </tbody>
                         </table>
+                        </div>
                     <?php endif; ?>
                     <?php if (!empty($dcfData['warnings'])): ?>
                         <div class="warnings">

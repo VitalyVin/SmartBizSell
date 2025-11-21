@@ -295,6 +295,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
             </div>
             <div class="view-actions">
                 <a class="btn btn-secondary" href="dashboard.php">← Назад в кабинет</a>
+                <a class="btn btn-secondary" href="export_form_json.php?id=<?php echo $form['id']; ?>">📥 Скачать JSON</a>
                 <a class="btn btn-primary" href="seller_form.php?form_id=<?php echo $form['id']; ?>">Редактировать анкету</a>
             </div>
         </div>
