@@ -415,10 +415,21 @@ function calculateUserDCF(array $form): array {
     $forecastGrowth[0] = max($forecastGrowth[0], $gLastFact + 0.0001);
     $forecastGrowth[0] = min($forecastGrowth[0], $gLastFact + 0.10);
 
+    $budgetRevenue = $revenueSeries['2025'] ?? null;
+    $lastFactRevenue = $factData['revenue'][$lastFactLabel] ?? 0;
+    $hasBudgetOverride = $budgetRevenue !== null && $budgetRevenue > 0;
+    if ($hasBudgetOverride && $lastFactRevenue > 0) {
+        $forecastGrowth[0] = ($budgetRevenue - $lastFactRevenue) / $lastFactRevenue;
+    }
+
     $forecastRevenue = [];
-    $prevRevenue = $factData['revenue'][$lastFactLabel];
+    $prevRevenue = $lastFactRevenue;
     foreach ($forecastLabels as $index => $label) {
-        $prevRevenue = $prevRevenue * (1 + $forecastGrowth[$index]);
+        if ($index === 0 && $hasBudgetOverride) {
+            $prevRevenue = $budgetRevenue;
+        } else {
+            $prevRevenue = $prevRevenue * (1 + ($forecastGrowth[$index] ?? 0));
+        }
         $forecastRevenue[$label] = max(0, $prevRevenue);
     }
 
@@ -930,20 +941,92 @@ if ($latestForm) {
             margin-bottom: 8px;
             color: var(--text-primary);
         }
+        .ev-label-short {
+            display: none;
+        }
+        .ev-label-full {
+            display: inline;
+        }
         @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 24px 0;
+                margin-top: 60px;
+                margin-bottom: 24px;
+            }
+            .dashboard-header h1 {
+                font-size: 24px;
+            }
+            .dashboard-header p {
+                font-size: 14px;
+            }
+            .dashboard-container {
+                padding: 0 16px 24px;
+            }
+            .dashboard-stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+                margin-bottom: 24px;
+            }
+            .stat-card {
+                padding: 16px;
+            }
+            .stat-value {
+                font-size: 24px;
+            }
+            .stat-label {
+                font-size: 12px;
+            }
+            .dashboard-actions {
+                flex-direction: column;
+                gap: 12px;
+                margin-bottom: 24px;
+            }
+            .dashboard-actions .btn {
+                width: 100%;
+                text-align: center;
+            }
             .table-row {
                 grid-template-columns: 1fr;
                 gap: 12px;
+                padding: 16px;
             }
-            .dashboard-stats {
-                grid-template-columns: 1fr;
+            .table-header {
+                padding: 16px;
+                font-size: 16px;
+            }
+            .forms-table {
+                border-radius: 12px;
             }
             .dcf-card {
                 padding: 16px;
                 margin-top: 24px;
+                border-radius: 12px;
             }
             .dcf-card h2 {
-                font-size: 20px;
+                font-size: 18px;
+                margin-bottom: 12px;
+            }
+            /* Кнопка PDF на мобильных - размещаем сверху */
+            .dcf-card > div[style*="display:flex"] {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 12px !important;
+            }
+            .dcf-card .btn-export-pdf {
+                width: 100% !important;
+                padding: 14px 20px !important;
+                font-size: 15px !important;
+                order: -1 !important; /* Кнопка сверху */
+                margin-bottom: 8px;
+            }
+            .dcf-card > div[style*="display:flex"] > div:first-child {
+                width: 100%;
+            }
+            .dcf-print-hint {
+                display: block;
+                margin-top: 8px;
+                font-size: 12px;
+                opacity: 0.7;
             }
             .dcf-card__actions {
                 flex-direction: column;
@@ -955,6 +1038,7 @@ if ($latestForm) {
             .dcf-params-strip {
                 flex-direction: column;
                 gap: 8px;
+                font-size: 12px;
             }
             /* Обертка для горизонтальной прокрутки таблиц DCF */
             .dcf-table-wrapper {
@@ -992,10 +1076,182 @@ if ($latestForm) {
                 background: rgba(248,250,252,0.98);
             }
             .dcf-table--ev {
-                font-size: 12px;
+                font-size: 10px;
+                width: 100%;
+                margin-bottom: 0;
+                border-collapse: collapse;
+                table-layout: fixed; /* Фиксированная ширина колонок */
             }
             .dcf-table--ev td {
-                padding: 4px 6px;
+                padding: 2px 4px;
+                line-height: 1.15;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+            .dcf-table--ev td:first-child {
+                font-size: 10px;
+                width: 50%;
+                padding-right: 2px;
+                max-width: 50%;
+            }
+            .dcf-table--ev td:last-child {
+                font-size: 11px;
+                font-weight: 500;
+                text-align: right;
+                width: 50%;
+                padding-left: 2px;
+                white-space: nowrap; /* Числа не переносятся */
+            }
+            .dcf-table--ev tr:last-child td {
+                font-weight: 600;
+                font-size: 12px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                border-top: 2px solid var(--border-color);
+            }
+            .dcf-table--ev tr:last-child td:first-child {
+                width: 45%;
+            }
+            .dcf-table--ev tr:last-child td:last-child {
+                width: 55%;
+            }
+            /* Убираем обертку для таблицы EV на мобильных, чтобы она была видна полностью */
+            .dcf-table-wrapper--ev {
+                overflow-x: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100%;
+                max-width: 100%;
+            }
+            /* Улучшаем читаемость таблицы EV */
+            .dcf-table--ev tr {
+                border-bottom: 1px solid rgba(0,0,0,0.05);
+            }
+            .dcf-table--ev tr:last-child {
+                border-bottom: none;
+            }
+            /* Компактные карточки для EV показателей */
+            .dcf-table-wrapper--ev {
+                width: 100%;
+                max-width: 100%;
+            }
+            .dcf-table--ev,
+            .dcf-table--ev tbody {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                width: 100%;
+            }
+            .dcf-table--ev {
+                border-collapse: collapse;
+                font-size: 11px;
+            }
+            .dcf-table--ev tr {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                padding: 6px 8px;
+                background: white;
+                box-shadow: var(--shadow-sm);
+                min-width: 0; /* Позволяет сжиматься */
+            }
+            .dcf-table--ev tr + tr {
+                margin-top: 8px;
+            }
+            .dcf-table--ev td {
+                width: 100% !important;
+                padding: 0 !important;
+                border: none !important;
+                text-align: left !important;
+                line-height: 1.2;
+                min-width: 0; /* Позволяет сжиматься */
+                overflow: hidden;
+            }
+            .dcf-table--ev td:first-child {
+                font-size: 10px;
+                color: var(--text-secondary);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .dcf-table--ev td:last-child {
+                margin-top: 4px;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-primary);
+                white-space: normal;
+                text-align: left !important;
+            }
+            .dcf-table--ev tr:last-child td:last-child {
+                font-size: 15px;
+            }
+            .ev-label-short {
+                display: inline;
+            }
+            .ev-label-full {
+                display: none;
+            }
+            .debt-label-short {
+                display: none;
+            }
+            .debt-label-full {
+                display: inline;
+            }
+            /* На мобильных показываем короткие версии */
+            @media (max-width: 768px) {
+                .debt-label-short {
+                    display: inline;
+                }
+                .debt-label-full {
+                    display: none;
+                }
+            }
+            /* Компактные отступы для DCF карточки */
+            .dcf-footnote {
+                font-size: 11px;
+                margin-top: 8px;
+                margin-bottom: 12px;
+                line-height: 1.5;
+            }
+            /* Улучшаем отображение кнопок в таблице форм */
+            .table-row > div:last-child {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .table-row .btn {
+                width: 100%;
+                padding: 10px 16px;
+                font-size: 13px;
+            }
+            /* Дополнительные улучшения для мобильной версии */
+            .dashboard-header-content {
+                padding: 0 16px;
+            }
+            .empty-state {
+                padding: 40px 16px;
+            }
+            .empty-state-icon {
+                font-size: 48px;
+            }
+            .empty-state h3 {
+                font-size: 18px;
+            }
+        }
+        @media (max-width: 375px) {
+            .dcf-table--ev tr {
+                padding: 5px 6px !important;
+            }
+            .dcf-table--ev td:first-child {
+                font-size: 9px !important;
+            }
+            .dcf-table--ev td:last-child {
+                font-size: 12px !important;
+            }
+            .dcf-table--ev tr:last-child td:last-child {
+                font-size: 13px !important;
             }
         }
         .dcf-card {
@@ -1285,7 +1541,6 @@ if ($latestForm) {
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
                     <div>
                         <h2 style="margin-bottom:4px;">DCF Model</h2>
-                        <small class="dcf-print-hint">Сохраните PDF через системный диалог печати (⌘+P / Ctrl+P).</small>
                     </div>
                     <button
                         type="button"
@@ -1418,15 +1673,15 @@ if ($latestForm) {
                         </p>
                     <?php endif; ?>
                     <?php if ($evData): ?>
-                        <div class="dcf-table-wrapper">
+                        <div class="dcf-table-wrapper dcf-table-wrapper--ev">
                         <table class="dcf-table dcf-table--ev">
                             <tbody>
                                 <tr>
-                                    <td>Enterprise Value (EV)</td>
+                                    <td><span class="ev-label-full">Enterprise Value (EV)</span><span class="ev-label-short">EV</span></td>
                                     <td><?php echo $formatEvRow($evData['ev'] ?? null); ?></td>
                                 </tr>
                                 <tr>
-                                    <td>− Debt</td>
+                                    <td><span class="debt-label-full">− Debt</span><span class="debt-label-short">Debt</span></td>
                                     <td>(<?php echo $formatMoney($evData['debt'] ?? 0); ?> млн ₽)</td>
                                 </tr>
                                 <tr>
@@ -1434,7 +1689,7 @@ if ($latestForm) {
                                     <td><?php echo $formatEvRow($evData['cash'] ?? null); ?></td>
                                 </tr>
                                 <tr>
-                                    <td><strong>Equity Value</strong></td>
+                                    <td><strong><span class="ev-label-full">Equity Value</span><span class="ev-label-short">Equity</span></strong></td>
                                     <td><strong><?php echo $formatEvRow($evData['equity'] ?? null); ?></strong></td>
                                 </tr>
                             </tbody>
