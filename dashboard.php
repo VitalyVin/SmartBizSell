@@ -73,6 +73,14 @@ $statusColors = [
 /**
  * Вспомогательные функции для DCF
  */
+
+/**
+ * Преобразует значение в число с плавающей точкой
+ * Обрабатывает различные форматы: null, пустые строки, числа, строки с пробелами и запятыми
+ * 
+ * @param mixed $value Значение для преобразования
+ * @return float Преобразованное число (0.0 если значение невалидно)
+ */
 function dcf_to_float($value): float {
     if ($value === null || $value === '') {
         return 0.0;
@@ -80,11 +88,19 @@ function dcf_to_float($value): float {
     if (is_numeric($value)) {
         return (float)$value;
     }
-    $normalized = str_replace([' ', ' '], '', (string)$value);
+    // Нормализация: удаление пробелов и замена запятой на точку
+    $normalized = str_replace([' ', ' '], '', (string)$value);
     $normalized = str_replace(',', '.', $normalized);
     return is_numeric($normalized) ? (float)$normalized : 0.0;
 }
 
+/**
+ * Преобразует массив строк в ассоциативный массив по метрикам
+ * Используется для быстрого доступа к данным по названию метрики
+ * 
+ * @param array|null $rows Массив строк с полем 'metric'
+ * @return array Ассоциативный массив [метрика => строка данных]
+ */
 function dcf_rows_by_metric(?array $rows): array {
     $result = [];
     foreach ($rows ?? [] as $row) {
@@ -95,6 +111,14 @@ function dcf_rows_by_metric(?array $rows): array {
     return $result;
 }
 
+/**
+ * Строит временной ряд значений из строки данных
+ * Преобразует данные из формата с ключами (fact_2022, budget_2025 и т.д.) в временной ряд
+ * 
+ * @param array $row Строка данных с ключами периодов
+ * @param array $order Маппинг ключей периодов на метки (например, 'fact_2022' => '2022')
+ * @return array Временной ряд [метка => значение]
+ */
 function dcf_build_series(array $row, array $order): array {
     $series = [];
     foreach ($order as $key => $label) {
@@ -105,6 +129,11 @@ function dcf_build_series(array $row, array $order): array {
 
 /**
  * Унификация значений (поддержка новых ключей 2022_fact и legacy fact_2022)
+ * Позволяет использовать как старый формат (fact_2022), так и новый (2022_fact)
+ * 
+ * @param array $row Строка данных
+ * @param array $keys Массив ключей для проверки (в порядке приоритета)
+ * @return string Первое найденное непустое значение или пустая строка
  */
 function pickValue(array $row, array $keys): string
 {
@@ -116,12 +145,21 @@ function pickValue(array $row, array $keys): string
     return '';
 }
 
+/**
+ * Конвертирует финансовые данные из нового формата (ключи: revenue, cost_of_sales и т.д.)
+ * в старый формат (массив строк с полем 'metric')
+ * Обеспечивает обратную совместимость с существующей логикой DCF
+ * 
+ * @param array $financial Финансовые данные в новом или старом формате
+ * @return array Финансовые данные в старом формате (массив строк с 'metric')
+ */
 function convertFinancialRows(array $financial): array
 {
     if (empty($financial)) {
         return [];
     }
 
+    // Если данные уже в старом формате, возвращаем как есть
     $first = reset($financial);
     if (is_array($first) && isset($first['metric'])) {
         return $financial;
@@ -162,12 +200,21 @@ function convertFinancialRows(array $financial): array
     return $result;
 }
 
+/**
+ * Конвертирует балансовые данные из нового формата (ключи: fixed_assets, inventory и т.д.)
+ * в старый формат (массив строк с полем 'metric')
+ * Обеспечивает обратную совместимость с существующей логикой DCF
+ * 
+ * @param array $balance Балансовые данные в новом или старом формате
+ * @return array Балансовые данные в старом формате (массив строк с 'metric')
+ */
 function convertBalanceRows(array $balance): array
 {
     if (empty($balance)) {
         return [];
     }
 
+    // Если данные уже в старом формате, возвращаем как есть
     $first = reset($balance);
     if (is_array($first) && isset($first['metric'])) {
         return $balance;
@@ -206,11 +253,21 @@ function convertBalanceRows(array $balance): array
     return $result;
 }
 
+/**
+ * Извлекает финансовые и балансовые данные из формы
+ * Приоритет: сначала проверяет старые поля (financial_results, balance_indicators),
+ * затем data_json (новый формат хранения всех данных формы)
+ * 
+ * @param array $form Данные формы из базы данных
+ * @return array Массив [финансовые данные, балансовые данные] в унифицированном формате
+ */
 function extractFinancialAndBalance(array $form): array
 {
+    // Пытаемся получить данные из старых полей
     $financial = json_decode($form['financial_results'] ?? '[]', true);
     $balance   = json_decode($form['balance_indicators'] ?? '[]', true);
 
+    // Если старые поля пусты, пытаемся получить из data_json (новый формат)
     if (empty($form['data_json']) === false) {
         $decoded = json_decode($form['data_json'], true);
         if (empty($financial) && isset($decoded['financial']) && is_array($decoded['financial'])) {
@@ -221,12 +278,24 @@ function extractFinancialAndBalance(array $form): array
         }
     }
 
+    // Конвертируем в унифицированный формат (старый формат с полем 'metric')
     $financial = convertFinancialRows($financial);
     $balance   = convertBalanceRows($balance);
 
     return [$financial, $balance];
 }
 
+/**
+ * Генерирует псевдослучайное число на основе seed и offset
+ * Гарантирует детерминированность: одинаковые seed и offset дают одинаковый результат
+ * Используется для добавления небольших случайных вариаций в расчеты DCF
+ * 
+ * @param string $seed Строка-ключ для генерации (обычно название актива + ID формы)
+ * @param int $offset Смещение для получения разных значений при одном seed
+ * @param float $min Минимальное значение
+ * @param float $max Максимальное значение
+ * @return float Псевдослучайное число в диапазоне [min, max]
+ */
 function stableRandFloat(string $seed, int $offset, float $min, float $max): float
 {
     $hash = crc32($seed . '|' . $offset);
@@ -234,6 +303,14 @@ function stableRandFloat(string $seed, int $offset, float $min, float $max): flo
     return $min + ($max - $min) * $normalized;
 }
 
+/**
+ * Ограничивает значение заданными границами
+ * 
+ * @param float $value Значение для ограничения
+ * @param float $min Минимальное значение
+ * @param float $max Максимальное значение
+ * @return float Значение в диапазоне [min, max]
+ */
 function clampFloat(float $value, float $min, float $max): float
 {
     return max($min, min($max, $value));
@@ -244,30 +321,53 @@ function clampFloat(float $value, float $min, float $max): float
  * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
  * для отображения в личном кабинете.
  */
+/**
+ * Строит полную DCF-модель на основе последней отправленной анкеты пользователя.
+ * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
+ * для отображения в личном кабинете.
+ * 
+ * Алгоритм:
+ * 1. Извлечение и нормализация финансовых и балансовых данных
+ * 2. Расчет фактических показателей за 2022-2024 годы
+ * 3. Расчет темпов роста на основе исторических данных
+ * 4. Построение прогноза на 5 лет (P1-P5) с учетом бюджета 2025
+ * 5. Расчет FCFF (Free Cash Flow to Firm) для каждого прогнозного периода
+ * 6. Дисконтирование FCFF к текущей стоимости
+ * 7. Расчет Terminal Value по модели Гордона
+ * 8. Расчет Enterprise Value и Equity Value
+ * 
+ * @param array $form Данные формы из базы данных
+ * @return array Массив с результатами расчета DCF или ошибкой
+ */
 function calculateUserDCF(array $form): array {
+    // Параметры модели по умолчанию
     $defaults = [
-        'wacc' => 0.24,
-        'tax_rate' => 0.25,
-        'perpetual_growth' => 0.04,
+        'wacc' => 0.24,              // Средневзвешенная стоимость капитала (24%)
+        'tax_rate' => 0.25,          // Ставка налога на прибыль (25%)
+        'perpetual_growth' => 0.04,  // Темп бессрочного роста (4%)
     ];
 
+    // Маппинг ключей периодов из базы данных на метки для временных рядов
     $periodMap = [
-        'fact_2022'    => '2022',
-        'fact_2023'    => '2023',
-        'fact_2024'    => '2024',
-        'fact_2025_9m' => '9M2025',
-        'budget_2025'  => '2025',
-        'budget_2026'  => '2026',
+        'fact_2022'    => '2022',    // Факт 2022 года
+        'fact_2023'    => '2023',    // Факт 2023 года
+        'fact_2024'    => '2024',    // Факт 2024 года
+        'fact_2025_9m' => '9M2025',  // Факт за 9 месяцев 2025 года
+        'budget_2025'  => '2025',    // Бюджет 2025 года (используется для P1)
+        'budget_2026'  => '2026',    // Бюджет 2026 года
     ];
 
+    // Извлечение финансовых и балансовых данных из формы
     list($financial, $balance) = extractFinancialAndBalance($form);
     if (!$financial || !$balance) {
         return ['error' => 'Недостаточно финансовых данных для построения модели.'];
     }
 
+    // Преобразование в ассоциативные массивы для быстрого доступа по метрикам
     $finRows = dcf_rows_by_metric($financial);
     $balRows = dcf_rows_by_metric($balance);
 
+    // Проверка наличия обязательных метрик
     $requiredMetrics = ['Выручка', 'Себестоимость продаж', 'Коммерческие расходы'];
     foreach ($requiredMetrics as $metric) {
         if (!isset($finRows[$metric])) {
@@ -275,19 +375,24 @@ function calculateUserDCF(array $form): array {
         }
     }
 
+    // Построение временных рядов для финансовых показателей
     $revenueSeries   = dcf_build_series($finRows['Выручка'], $periodMap);
     $cogsSeries      = dcf_build_series($finRows['Себестоимость продаж'], $periodMap);
     $commercialSeries= dcf_build_series($finRows['Коммерческие расходы'], $periodMap);
     $adminSeries     = isset($finRows['Управленческие расходы']) ? dcf_build_series($finRows['Управленческие расходы'], $periodMap) : [];
     $deprSeries      = isset($finRows['Амортизация']) ? dcf_build_series($finRows['Амортизация'], $periodMap) : [];
 
+    // Построение временных рядов для балансовых показателей
     $balanceSeries = [];
     foreach ($balRows as $metric => $row) {
         $balanceSeries[$metric] = dcf_build_series($row, $periodMap);
     }
 
-    $factYears = ['2022', '2023', '2024'];
-    $forecastLabels = ['P1', 'P2', 'P3', 'P4', 'P5'];
+    // Определение структуры таблицы: фактические годы и прогнозные периоды
+    $factYears = ['2022', '2023', '2024'];           // Фактические годы для анализа
+    $forecastLabels = ['P1', 'P2', 'P3', 'P4', 'P5']; // Прогнозные периоды (5 лет)
+    
+    // Формирование структуры колонок для отображения
     $columns = [];
     foreach ($factYears as $label) {
         $columns[] = ['key' => $label, 'label' => $label, 'type' => 'fact'];
@@ -295,85 +400,118 @@ function calculateUserDCF(array $form): array {
     foreach ($forecastLabels as $label) {
         $columns[] = ['key' => $label, 'label' => $label, 'type' => 'forecast'];
     }
-    $columns[] = ['key' => 'TV', 'label' => 'TV', 'type' => 'tv'];
+    $columns[] = ['key' => 'TV', 'label' => 'TV', 'type' => 'tv']; // Terminal Value
 
+    // Проверка наличия выручки за последний фактический год
     $lastFactLabel = '2024';
     if (($revenueSeries[$lastFactLabel] ?? 0) <= 0) {
         return ['error' => 'Укажите выручку минимум за три последних года (включая 2024).'];
     }
 
+    // Инициализация массива для хранения фактических данных
     $factData = [
-        'revenue' => [],
-        'cogs' => [],
-        'commercial' => [],
-        'admin' => [],
-        'depr' => [],
-        'ebitda' => [],
-        'ebit' => [],
-        'margin' => [],
+        'revenue' => [],      // Выручка
+        'cogs' => [],         // Себестоимость продаж (Cost of Goods Sold)
+        'commercial' => [],   // Коммерческие расходы
+        'admin' => [],        // Административные расходы
+        'depr' => [],         // Амортизация
+        'ebitda' => [],       // EBITDA (прибыль до вычета процентов, налогов и амортизации)
+        'ebit' => [],         // EBIT (прибыль до вычета процентов и налогов)
+        'margin' => [],       // EBITDA-маржа (%)
     ];
 
+    // Расчет фактических показателей за каждый год
     foreach ($factYears as $year) {
         $factData['revenue'][$year]    = $revenueSeries[$year] ?? 0;
         $factData['cogs'][$year]       = $cogsSeries[$year] ?? 0;
         $factData['commercial'][$year] = $commercialSeries[$year] ?? 0;
         $factData['admin'][$year]      = $adminSeries[$year] ?? 0;
         $factData['depr'][$year]       = $deprSeries[$year] ?? 0;
+        
+        // EBITDA = Выручка - Себестоимость - Коммерческие расходы - Административные расходы
         $factData['ebitda'][$year]     = $factData['revenue'][$year] - $factData['cogs'][$year] - $factData['commercial'][$year] - $factData['admin'][$year];
+        
+        // EBIT = EBITDA - Амортизация
         $factData['ebit'][$year]       = $factData['ebitda'][$year] - $factData['depr'][$year];
+        
+        // EBITDA-маржа = EBITDA / Выручка
         $factData['margin'][$year]     = ($factData['revenue'][$year] > 0) ? $factData['ebitda'][$year] / $factData['revenue'][$year] : null;
     }
 
+    // Расчет фактических темпов роста выручки (год к году)
     $factGrowth = [];
     $prevRevenue = null;
     foreach ($factYears as $year) {
         $current = $factData['revenue'][$year];
         if ($prevRevenue !== null && abs($prevRevenue) > 1e-6) {
+            // Темп роста = (Текущая выручка - Предыдущая выручка) / Предыдущая выручка
             $factGrowth[$year] = ($current - $prevRevenue) / $prevRevenue;
         } else {
-            $factGrowth[$year] = null;
+            $factGrowth[$year] = null; // Для первого года рост не рассчитывается
         }
         $prevRevenue = $current;
     }
+    
+    // Расчет среднего темпа роста и темпа роста за последний год
     $growthValues = array_values(array_filter($factGrowth, fn($value) => $value !== null));
-    $gAvg = !empty($growthValues) ? array_sum($growthValues) / count($growthValues) : 0.05;
-    $gLastFact = $factGrowth[$lastFactLabel] ?? 0.05;
+    $gAvg = !empty($growthValues) ? array_sum($growthValues) / count($growthValues) : 0.05; // Средний темп роста
+    $gLastFact = $factGrowth[$lastFactLabel] ?? 0.05; // Темп роста за последний фактический год (2024)
 
+    // Генерация seed для детерминированных случайных значений
     $seedKey = ($form['asset_name'] ?? '') . '|' . ($form['id'] ?? '0');
+    
+    // Определение "якорных" точек темпа роста для прогнозных периодов
+    // Логика основана на среднем историческом темпе роста:
+    // - При отрицательном росте: постепенное восстановление к 4%
+    // - При низком росте: умеренное ускорение
+    // - При высоком росте: постепенное замедление к долгосрочному уровню 4%
     $growthAnchors = [];
     if ($gAvg <= -0.20) {
+        // Сильно отрицательный рост: восстановление через P3, P4
         $growthAnchors[2] = 0.022;
         $growthAnchors[3] = 0.0315;
         $growthAnchors[4] = 0.04;
     } elseif ($gAvg <= 0) {
+        // Отрицательный или нулевой рост: восстановление через P4
         $growthAnchors[3] = 0.0525;
         $growthAnchors[4] = 0.04;
     } elseif ($gAvg <= 0.1275) {
+        // Умеренный рост: поддержание высокого темпа в P1, затем замедление
         $growthAnchors[0] = 0.1275;
         $growthAnchors[3] = 0.066;
         $growthAnchors[4] = 0.04;
     } else {
+        // Высокий рост: постепенное замедление
         $growthAnchors[3] = 0.066;
         $growthAnchors[4] = 0.04;
     }
+    // Гарантируем, что P5 всегда имеет долгосрочный темп роста 4%
     if (!isset($growthAnchors[4])) {
         $growthAnchors[4] = 0.04;
     }
 
+    // Определение темпа роста для P1
+    // P1 должен быть выше темпа роста за последний год, но не более чем на 10 п.п.
     $p1Candidate = $growthAnchors[0] ?? clampFloat($gAvg, -0.20, 0.35);
-    $p1Candidate = max($p1Candidate, $gLastFact + 0.0001);
-    $p1Candidate = min($p1Candidate, $gLastFact + 0.10);
+    $p1Candidate = max($p1Candidate, $gLastFact + 0.0001); // Минимум: последний факт + 0.01%
+    $p1Candidate = min($p1Candidate, $gLastFact + 0.10);   // Максимум: последний факт + 10%
     if (abs($p1Candidate - $gLastFact) < 0.0001) {
+        // Если кандидат слишком близок к последнему факту, добавляем минимальный шаг
         $p1Candidate = $gLastFact + 0.005;
     }
     $growthAnchors[0] = $p1Candidate;
 
+    // Интерполяция темпов роста для всех прогнозных периодов
+    // Используется линейная интерполяция между якорными точками
     $forecastGrowth = array_fill(0, 5, null);
     for ($i = 0; $i < 5; $i++) {
+        // Если для периода уже есть якорная точка, используем её
         if (isset($growthAnchors[$i])) {
             $forecastGrowth[$i] = $growthAnchors[$i];
             continue;
         }
+        
+        // Ищем ближайшую якорную точку слева (предыдущую)
         $prev = null;
         for ($j = $i - 1; $j >= 0; $j--) {
             if (isset($growthAnchors[$j])) {
@@ -381,6 +519,8 @@ function calculateUserDCF(array $form): array {
                 break;
             }
         }
+        
+        // Ищем ближайшую якорную точку справа (следующую)
         $next = null;
         for ($j = $i + 1; $j < 5; $j++) {
             if (isset($growthAnchors[$j])) {
@@ -388,51 +528,80 @@ function calculateUserDCF(array $form): array {
                 break;
             }
         }
+        
+        // Линейная интерполяция между предыдущей и следующей точками
         if ($prev && $next && $next[0] !== $prev[0]) {
             $ratio = ($i - $prev[0]) / ($next[0] - $prev[0]);
             $forecastGrowth[$i] = $prev[1] + ($next[1] - $prev[1]) * $ratio;
         } elseif ($prev) {
+            // Если есть только предыдущая точка, используем её значение
             $forecastGrowth[$i] = $prev[1];
         } elseif ($next) {
+            // Если есть только следующая точка, используем её значение
             $forecastGrowth[$i] = $next[1];
         } else {
+            // Если нет якорных точек, используем кандидата для P1
             $forecastGrowth[$i] = $p1Candidate;
         }
     }
 
+    // Добавление небольших случайных вариаций для реалистичности модели
     foreach ($forecastGrowth as $idx => $value) {
         $forecastGrowth[$idx] = clampFloat(
-            $value + stableRandFloat($seedKey, $idx, -0.002, 0.002),
-            -0.30,
-            0.40
+            $value + stableRandFloat($seedKey, $idx, -0.002, 0.002), // ±0.2% вариация
+            -0.30,  // Минимальный темп роста: -30%
+            0.40    // Максимальный темп роста: +40%
         );
     }
+    
+    // Гарантируем монотонное убывание темпов роста (реалистичный сценарий)
     for ($i = 1; $i < count($forecastGrowth); $i++) {
         if ($forecastGrowth[$i] > $forecastGrowth[$i - 1]) {
+            // Если текущий период имеет больший рост, чем предыдущий, снижаем его
             $forecastGrowth[$i] = $forecastGrowth[$i - 1] - 0.003;
         }
     }
+    
+    // Финальная проверка ограничений для P1
     $forecastGrowth[0] = max($forecastGrowth[0], $gLastFact + 0.0001);
     $forecastGrowth[0] = min($forecastGrowth[0], $gLastFact + 0.10);
 
+    // Обработка бюджета 2025 года: если он указан, используем его для P1
+    // Это позволяет учитывать планы компании на ближайший год
     $budgetRevenue = $revenueSeries['2025'] ?? null;
     $lastFactRevenue = $factData['revenue'][$lastFactLabel] ?? 0;
     $hasBudgetOverride = $budgetRevenue !== null && $budgetRevenue > 0;
+    
+    // Если есть бюджет 2025, пересчитываем темп роста P1 на основе бюджета
     if ($hasBudgetOverride && $lastFactRevenue > 0) {
         $forecastGrowth[0] = ($budgetRevenue - $lastFactRevenue) / $lastFactRevenue;
     }
 
+    // Расчет прогнозной выручки для каждого периода
     $forecastRevenue = [];
     $prevRevenue = $lastFactRevenue;
     foreach ($forecastLabels as $index => $label) {
         if ($index === 0 && $hasBudgetOverride) {
+            // Для P1: если есть бюджет 2025, используем его напрямую
             $prevRevenue = $budgetRevenue;
         } else {
+            // Для остальных периодов: применяем темп роста к предыдущему периоду
             $prevRevenue = $prevRevenue * (1 + ($forecastGrowth[$index] ?? 0));
         }
-        $forecastRevenue[$label] = max(0, $prevRevenue);
+        $forecastRevenue[$label] = max(0, $prevRevenue); // Выручка не может быть отрицательной
     }
 
+    /**
+     * Вычисляет долю показателя относительно базы (например, себестоимость к выручке)
+     * Использует среднее значение за фактические годы, если значения стабильны
+     * Если есть выбросы (отклонение >10%), использует последнее значение
+     * 
+     * @param array $values Значения показателя по годам
+     * @param array $bases Базовые значения (например, выручка) по годам
+     * @param array $years Список годов для анализа
+     * @param float $fallback Значение по умолчанию, если данных нет
+     * @return float Доля показателя (0.0 - 1.0)
+     */
     $computeShare = function (array $values, array $bases, array $years, float $fallback) {
         $ratios = [];
         $lastRatio = null;
@@ -448,6 +617,7 @@ function calculateUserDCF(array $form): array {
             return $fallback;
         }
         $avg = array_sum($ratios) / count($ratios);
+        // Проверка на выбросы: если есть отклонение >10% от среднего, используем последнее значение
         foreach ($ratios as $ratio) {
             if (abs($ratio - $avg) >= 0.10) {
                 return $lastRatio ?? $avg;
@@ -456,9 +626,12 @@ function calculateUserDCF(array $form): array {
         return $avg;
     };
 
+    // Расчет долей себестоимости и коммерческих расходов от выручки
     $cogsShare = $computeShare($factData['cogs'], $factData['revenue'], $factYears, 0.6);
     $commercialShare = $computeShare($factData['commercial'], $factData['revenue'], $factYears, 0.12);
 
+    // Расчет прогнозной себестоимости и коммерческих расходов
+    // Используем исторические доли от выручки
     $forecastCogs = [];
     $forecastCommercial = [];
     foreach ($forecastLabels as $label) {
@@ -466,33 +639,43 @@ function calculateUserDCF(array $form): array {
         $forecastCommercial[$label] = $forecastRevenue[$label] * $commercialShare;
     }
 
+    // Проверка наличия административных расходов в исторических данных
     $adminExists = ($factData['admin']['2022'] ?? 0) > 0 || ($factData['admin']['2023'] ?? 0) > 0 || ($factData['admin']['2024'] ?? 0) > 0;
     $adminForecast = [];
     $ebitdaForecast = [];
     $ebitdaMarginForecast = [];
-    $inflationPath = [0.091, 0.055, 0.045, 0.04, 0.04];
+    
+    // Прогноз инфляции для административных расходов (если они есть)
+    $inflationPath = [0.091, 0.055, 0.045, 0.04, 0.04]; // Снижающаяся инфляция
 
     if ($adminExists) {
+        // Если административные расходы есть в истории, прогнозируем их с учетом инфляции
         $prevAdmin = $factData['admin'][$lastFactLabel] ?? 0;
         foreach ($forecastLabels as $idx => $label) {
-            $prevAdmin *= (1 + $inflationPath[$idx]);
+            $prevAdmin *= (1 + $inflationPath[$idx]); // Индексация на инфляцию
             $adminForecast[$label] = $prevAdmin;
+            // EBITDA = Выручка - Себестоимость - Коммерческие - Административные
             $ebitdaForecast[$label] = $forecastRevenue[$label] - $forecastCogs[$label] - $forecastCommercial[$label] - $adminForecast[$label];
             $ebitdaMarginForecast[$label] = ($forecastRevenue[$label] > 0)
                 ? $ebitdaForecast[$label] / $forecastRevenue[$label]
                 : null;
         }
     } else {
+        // Если административных расходов нет, используем целевой подход к марже
+        // Целевая маржа постепенно улучшается
         $baseMargin = $factData['margin'][$lastFactLabel] ?? 0.2;
-        $increment = stableRandFloat($seedKey, 99, 0.005, 0.008);
+        $increment = stableRandFloat($seedKey, 99, 0.005, 0.008); // Небольшое улучшение маржи
         foreach ($forecastLabels as $idx => $label) {
             $targetMargin = clampFloat($baseMargin + $increment * ($idx + 1), 0, 0.6);
             $baseCosts = $forecastRevenue[$label] - ($forecastCogs[$label] + $forecastCommercial[$label]);
             $desiredEbitda = $forecastRevenue[$label] * $targetMargin;
             $delta = $desiredEbitda - $baseCosts;
+            
+            // Если базовая EBITDA ниже целевой, корректируем себестоимость и коммерческие расходы
             if ($delta > 0) {
                 $costSum = max($forecastCogs[$label] + $forecastCommercial[$label], 1e-6);
                 $adjustFactor = clampFloat($delta / $costSum, 0, 0.2);
+                // Снижаем себестоимость на 70% от корректировки, коммерческие - на 30%
                 $forecastCogs[$label] *= (1 - $adjustFactor * 0.7);
                 $forecastCommercial[$label] *= (1 - $adjustFactor * 0.3);
             }
@@ -504,41 +687,55 @@ function calculateUserDCF(array $form): array {
         }
     }
 
+    // Получение стоимости основных средств на конец последнего фактического года
     $osLastFact = $balanceSeries['Основные средства'][$lastFactLabel] ?? null;
     if ($osLastFact === null || $osLastFact <= 0) {
         return ['error' => 'Не заполнены данные по основным средствам (баланс).'];
     }
 
+    // Прогноз амортизации и поддерживающего CAPEX
+    // Логика: амортизация = 10% от стоимости ОС, поддерживающий CAPEX = 50% от амортизации
+    // Это обеспечивает поддержание основных средств на текущем уровне
     $deprForecast = [];
     $supportCapex = [];
     $osTrend = [];
     $prevOS = $osLastFact;
     foreach ($forecastLabels as $label) {
-        $dep = 0.10 * $prevOS;
-        $capex = 0.5 * $dep;
-        $currentOS = $prevOS + $capex;
+        $dep = 0.10 * $prevOS;        // Амортизация: 10% от стоимости ОС
+        $capex = 0.5 * $dep;          // Поддерживающий CAPEX: 50% от амортизации
+        $currentOS = $prevOS + $capex; // Новая стоимость ОС = старая + CAPEX
         $deprForecast[$label] = $dep;
         $supportCapex[$label] = $capex;
         $osTrend[$label] = $currentOS;
         $prevOS = $currentOS;
     }
 
+    // Расчет EBIT и налога на прибыль
     $ebitForecast = [];
     $taxForecast = [];
     foreach ($forecastLabels as $label) {
+        // EBIT = EBITDA - Амортизация
         $ebitForecast[$label] = $ebitdaForecast[$label] - $deprForecast[$label];
+        // Налог на прибыль = EBIT * Ставка налога (только если EBIT > 0)
         $taxForecast[$label] = max(0, $ebitForecast[$label]) * $defaults['tax_rate'];
     }
 
+    // Расчет коэффициентов оборотного капитала (NWC - Net Working Capital)
+    // Используем последние 2 года для более точной оценки
     $tailYears = array_slice($factYears, -2);
     $factCostBase = [];
     foreach ($factYears as $year) {
+        // База для расчета кредиторской задолженности: все операционные расходы
         $factCostBase[$year] = ($factData['cogs'][$year] ?? 0) + ($factData['commercial'][$year] ?? 0) + ($factData['admin'][$year] ?? 0);
     }
-    $avgArRatio = $computeShare($balanceSeries['Дебиторская задолженность'] ?? [], $factData['revenue'], $tailYears, 0.15);
-    $avgInvRatio = $computeShare($balanceSeries['Запасы'] ?? [], $factData['cogs'], $tailYears, 0.12);
-    $avgApRatio = $computeShare($balanceSeries['Кредиторская задолженность'] ?? [], $factCostBase, $tailYears, 0.09);
+    
+    // Коэффициенты оборотного капитала (доли от соответствующих баз):
+    $avgArRatio = $computeShare($balanceSeries['Дебиторская задолженность'] ?? [], $factData['revenue'], $tailYears, 0.15); // ДЗ к выручке
+    $avgInvRatio = $computeShare($balanceSeries['Запасы'] ?? [], $factData['cogs'], $tailYears, 0.12); // Запасы к себестоимости
+    $avgApRatio = $computeShare($balanceSeries['Кредиторская задолженность'] ?? [], $factCostBase, $tailYears, 0.09); // КЗ к операционным расходам
 
+    // Расчет фактического оборотного капитала (NWC) за исторические годы
+    // NWC = Дебиторская задолженность + Запасы - Кредиторская задолженность
     $factNwc = [];
     foreach ($factYears as $year) {
         $ar = $balanceSeries['Дебиторская задолженность'][$year] ?? 0;
@@ -548,14 +745,19 @@ function calculateUserDCF(array $form): array {
     }
     $nwcLastFact = $factNwc[$lastFactLabel] ?? 0;
 
+    // Прогноз оборотного капитала и его изменений
     $nwcForecast = [];
     $deltaNwcForecast = [];
     foreach ($forecastLabels as $index => $label) {
-        $ar = $forecastRevenue[$label] * $avgArRatio;
-        $inv = $forecastCogs[$label] * $avgInvRatio;
+        // Прогноз компонентов NWC на основе коэффициентов
+        $ar = $forecastRevenue[$label] * $avgArRatio; // ДЗ = Выручка * Коэффициент ДЗ
+        $inv = $forecastCogs[$label] * $avgInvRatio;  // Запасы = Себестоимость * Коэффициент запасов
         $apBase = $forecastCogs[$label] + $forecastCommercial[$label] + $adminForecast[$label];
-        $ap = $apBase * $avgApRatio;
+        $ap = $apBase * $avgApRatio; // КЗ = Операционные расходы * Коэффициент КЗ
+        
         $nwcForecast[$label] = $ar + $inv - $ap;
+        
+        // Изменение NWC: для P1 - относительно последнего факта, для остальных - относительно предыдущего периода
         if ($index === 0) {
             $deltaNwcForecast[$label] = $nwcForecast[$label] - $nwcLastFact;
         } else {
@@ -564,6 +766,8 @@ function calculateUserDCF(array $form): array {
         }
     }
 
+    // Расчет FCFF (Free Cash Flow to Firm) - свободного денежного потока компании
+    // FCFF = EBITDA - Налог на прибыль - Поддерживающий CAPEX - Изменение NWC
     $fcffForecast = [];
     foreach ($forecastLabels as $label) {
         $fcffForecast[$label] = $ebitdaForecast[$label]
@@ -572,13 +776,16 @@ function calculateUserDCF(array $form): array {
             - $deltaNwcForecast[$label];
     }
 
+    // Расчет временных коэффициентов для дисконтирования
+    // Учитываем, что P1 может начаться не с начала года
     $currentDate = new DateTime();
     $currentMonth = (int)$currentDate->format('n');
     $currentDay = (int)$currentDate->format('j');
-    $elapsedFraction = clampFloat((($currentMonth - 1) + ($currentDay / 30)) / 12, 0, 0.99);
-    $remainingFraction = 1 - $elapsedFraction;
-    $stubFraction = clampFloat((12 - $currentMonth) / 12, 0, 1);
+    $elapsedFraction = clampFloat((($currentMonth - 1) + ($currentDay / 30)) / 12, 0, 0.99); // Доля прошедшего года
+    $remainingFraction = 1 - $elapsedFraction; // Доля оставшегося года
+    $stubFraction = clampFloat((12 - $currentMonth) / 12, 0, 1); // Доля года до конца (для дисконтирования)
 
+    // Корректировка FCFF для P1: учитываем только оставшуюся часть года
     $fcffDisplay = $fcffForecast;
     $fcffDisplay[$forecastLabels[0]] = $fcffForecast[$forecastLabels[0]] * $remainingFraction;
 
@@ -623,9 +830,14 @@ function calculateUserDCF(array $form): array {
     $discountFactors['TV'] = $terminalDf;
     $discountedCf['TV'] = $terminalPv;
 
-    $debt = $balanceSeries['Кредиты и займы'][$lastFactLabel] ?? 0;
-    $cash = $balanceSeries['Денежные средства'][$lastFactLabel] ?? 0;
+    // Расчет итоговых показателей стоимости
+    $debt = $balanceSeries['Кредиты и займы'][$lastFactLabel] ?? 0; // Долг на конец последнего факта
+    $cash = $balanceSeries['Денежные средства'][$lastFactLabel] ?? 0; // Денежные средства на конец последнего факта
+    
+    // Enterprise Value (EV) = Текущая стоимость FCFF + Текущая стоимость Terminal Value
     $enterpriseValue = $pvSum + $terminalPv;
+    
+    // Equity Value = Enterprise Value - Долг + Денежные средства
     $equityValue = $enterpriseValue - $debt + $cash;
 
     $buildValues = function (array $factValues, array $forecastValues, $tvValue = null) use ($factYears, $forecastLabels) {

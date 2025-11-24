@@ -1,4 +1,18 @@
 <?php
+/**
+ * Форма продавца для заполнения анкеты бизнеса
+ * 
+ * Функциональность:
+ * - Создание и редактирование анкет
+ * - Сохранение черновиков с полными данными в JSON
+ * - Валидация обязательных полей при отправке
+ * - Восстановление данных из черновиков
+ * - Обработка динамических таблиц (производство, финансы, баланс)
+ * 
+ * @package SmartBizSell
+ * @version 1.0
+ */
+
 require_once 'config.php';
 if (!isLoggedIn()) {
     redirectToLogin();
@@ -10,7 +24,10 @@ $formId = null;
 $existingForm = null;
 $draftMessage = false;
 
-// Поля, обязательные для отправки анкеты (не применяются к сохранению черновика)
+/**
+ * Поля, обязательные для отправки анкеты (не применяются к сохранению черновика)
+ * При сохранении черновика валидация не выполняется, все поля опциональны
+ */
 $requiredFields = [
     'asset_name',
     'deal_share_range',
@@ -27,17 +44,37 @@ $requiredFields = [
     'agree',
 ];
 
+/**
+ * Проверяет, является ли поле обязательным для отправки формы
+ * 
+ * @param string $field Название поля
+ * @return bool true если поле обязательное, false иначе
+ */
 function isFieldRequired(string $field): bool
 {
     global $requiredFields;
     return in_array($field, $requiredFields, true);
 }
 
+/**
+ * Возвращает HTML-атрибут required для обязательных полей
+ * Используется в HTML-формах для валидации на стороне клиента
+ * 
+ * @param string $field Название поля
+ * @return string Строка ' required' или пустая строка
+ */
 function requiredAttr(string $field): string
 {
     return isFieldRequired($field) ? ' required' : '';
 }
 
+/**
+ * Возвращает CSS-класс для обязательных полей
+ * Используется для визуального выделения обязательных полей
+ * 
+ * @param string $field Название поля
+ * @return string CSS-класс 'required-field' или пустая строка
+ */
 function requiredClass(string $field): string
 {
     return isFieldRequired($field) ? ' required-field' : '';
@@ -45,6 +82,14 @@ function requiredClass(string $field): string
 
 /**
  * Рекурсивная нормализация значений для корректного JSON
+ * 
+ * Обрабатывает:
+ * - Массивы (рекурсивно)
+ * - Строки (trim, нормализация кодировки UTF-8)
+ * - Остальные типы (возвращает как есть)
+ * 
+ * @param mixed $value Значение для нормализации
+ * @return mixed Нормализованное значение
  */
 function normalizeDraftValue($value)
 {
@@ -65,7 +110,17 @@ function normalizeDraftValue($value)
 }
 
 /**
- * Формируем безопасный payload для сохранения черновика
+ * Формирует безопасный payload для сохранения черновика
+ * 
+ * Собирает все данные формы в единую структуру для сохранения в JSON:
+ * - Скалярные поля (текстовые, числовые, выборы)
+ * - Динамические таблицы (production, financial, balance)
+ * - Метаданные (form_id, save_draft)
+ * 
+ * Все значения проходят через normalizeDraftValue для корректной сериализации
+ * 
+ * @param array $source Исходные данные формы (обычно $_POST)
+ * @return array Нормализованный массив для сохранения в data_json
  */
 function buildDraftPayload(array $source): array
 {
@@ -106,6 +161,14 @@ function buildDraftPayload(array $source): array
     return $payload;
 }
 
+/**
+ * Проверяет существование колонки в таблице seller_forms
+ * Используется для безопасного выполнения миграций БД без ошибок
+ * 
+ * @param PDO $pdo Подключение к базе данных
+ * @param string $column Название колонки для проверки
+ * @return bool true если колонка существует, false иначе
+ */
 function sellerFormsColumnExists(PDO $pdo, string $column): bool
 {
     $stmt = $pdo->prepare("
@@ -123,6 +186,13 @@ function sellerFormsColumnExists(PDO $pdo, string $column): bool
     return (bool)$stmt->fetchColumn();
 }
 
+/**
+ * Проверяет существование нескольких колонок в таблице seller_forms
+ * 
+ * @param PDO $pdo Подключение к базе данных
+ * @param array $columns Массив названий колонок для проверки
+ * @return bool true если все колонки существуют, false если хотя бы одна отсутствует
+ */
 function sellerFormsColumnsExist(PDO $pdo, array $columns): bool
 {
     foreach ($columns as $column) {
@@ -133,11 +203,26 @@ function sellerFormsColumnsExist(PDO $pdo, array $columns): bool
     return true;
 }
 
+/**
+ * Восстанавливает данные формы из базы данных в $_POST
+ * 
+ * Приоритет источников данных:
+ * 1. data_json (новый формат, используется для черновиков) - полная замена $_POST
+ * 2. Отдельные поля таблицы (старый формат, для отправленных форм)
+ * 3. JSON-поля (production_volumes, financial_results, balance_indicators)
+ * 4. Инициализация пустых структур, если данных нет
+ * 
+ * Функция модифицирует глобальный $_POST для последующего отображения формы
+ * 
+ * @param array $form Данные формы из базы данных
+ * @return void
+ */
 function hydrateFormFromDb(array $form): void
 {
     error_log("HYDRATING FORM - form_id: " . ($form['id'] ?? 'unknown'));
 
     // Если есть data_json (для черновиков), используем его для восстановления всех данных
+    // Это приоритетный источник, так как содержит полную структуру формы
     if (!empty($form['data_json'])) {
         $decodedData = json_decode($form['data_json'], true);
         error_log("HYDRATING FORM - data_json length: " . strlen($form['data_json']));
@@ -289,10 +374,18 @@ function hydrateFormFromDb(array $form): void
 
 // ==================== ОБРАБОТКА ФОРМЫ ====================
 
+/**
+ * Обработка POST-запроса формы
+ * 
+ * Поддерживает два режима:
+ * 1. Сохранение черновика (save_draft) - все данные в data_json, статус 'draft'
+ * 2. Отправка формы (submit) - данные в отдельных полях + data_json, статус 'submitted'
+ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Проверяем и обновляем схему БД при необходимости
     ensureSellerFormSchema($pdo);
 
+    // Загружаем существующую форму, если указан form_id
     $formId = isset($_POST['form_id']) ? (int)$_POST['form_id'] : null;
     if ($formId) {
         $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
@@ -301,13 +394,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Получаем данные формы
-                $asset_name = sanitizeInput($_POST['asset_name'] ?? '');
+    $asset_name = sanitizeInput($_POST['asset_name'] ?? '');
+    
+    // Определяем режим сохранения: черновик или отправка
+    // Используем два флага для надежности (save_draft кнопка и скрытое поле save_draft_flag)
     $saveDraftFlag = $_POST['save_draft_flag'] ?? '';
     $isDraftSave = isset($_POST['save_draft']) || $saveDraftFlag === '1';
 
     error_log("Form processing: method=POST, form_id=" . ($formId ?: 'new') . ", is_draft=" . ($isDraftSave ? 'yes' : 'no') . ", asset_name='" . $asset_name . "'");
 
-    // Валидация (только для финальной отправки)
+    // Валидация обязательных полей (только для финальной отправки)
+    // Для черновиков валидация не выполняется - можно сохранить частично заполненную форму
     if (!$isDraftSave) {
         if ($asset_name === '') {
             $errors['asset_name'] = 'Укажите название актива';
@@ -317,14 +414,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-                if (empty($errors)) {
+    // Если ошибок валидации нет, сохраняем данные
+    if (empty($errors)) {
         try {
-            // Подготавливаем данные для сохранения
+            // Подготавливаем данные для сохранения в JSON
+            // buildDraftPayload нормализует все данные формы в единую структуру
             $draftPayload = buildDraftPayload($_POST);
             $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+            
+            // Обработка ошибок кодирования JSON (на случай проблемных данных)
             if ($dataJson === false) {
                 $jsonError = json_last_error_msg();
                 error_log("JSON ENCODE FAILED: " . $jsonError);
+                // Попытка повторной нормализации и кодирования
                 $dataJson = json_encode(normalizeDraftValue($draftPayload), JSON_UNESCAPED_UNICODE);
                 if ($dataJson === false) {
                     error_log("JSON ENCODE FAILED SECOND TIME, сохраняем пустой объект");
@@ -339,23 +441,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($isDraftSave) {
-                // Сохраняем черновик со всеми данными
+                // ========== РЕЖИМ СОХРАНЕНИЯ ЧЕРНОВИКА ==========
+                // Для черновика сохраняем только asset_name и data_json
+                // Статус всегда 'draft', остальные поля не заполняются
                 if ($formId && $existingForm) {
+                    // Обновление существующего черновика
                     $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
                     $stmt->execute([$asset_name, $dataJson, $formId, $_SESSION['user_id']]);
                     error_log("DRAFT UPDATED - form_id: $formId");
                 } else {
+                    // Создание нового черновика
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, data_json, status) VALUES (?, ?, ?, 'draft')");
                     $stmt->execute([$_SESSION['user_id'], $asset_name, $dataJson]);
                     $formId = $pdo->lastInsertId();
                     error_log("DRAFT INSERTED - new form_id: $formId");
                 }
 
-                // Для черновика - редирект с сообщением
+                // Редирект с сообщением об успешном сохранении
                 header('Location: seller_form.php?saved=1&form_id=' . $formId);
                 exit;
             } else {
-                // Для финальной отправки - сохраняем все данные в соответствующие поля
+                // ========== РЕЖИМ ФИНАЛЬНОЙ ОТПРАВКИ ==========
+                // Для отправленной формы сохраняем данные в отдельных полях БД
+                // Это обеспечивает совместимость со старым кодом и упрощает запросы
                 $dealPurpose = sanitizeInput($_POST['deal_goal'] ?? '');
                 $dealSubject = sanitizeInput($_POST['deal_share_range'] ?? '');
                 $assetDisclosure = sanitizeInput($_POST['asset_disclosure'] ?? '');
@@ -503,14 +611,32 @@ if ($existingForm) {
     error_log("NO EXISTING FORM TO LOAD");
 }
 
+/**
+ * Обеспечивает актуальность схемы таблицы seller_forms
+ * 
+ * Выполняет миграции БД для добавления новых колонок и переименования старых.
+ * Использует статическую переменную для предотвращения повторных проверок в рамках одного запроса.
+ * 
+ * Миграции:
+ * 1. Добавление новых колонок (asset_disclosure, offline_sales_*, financial_results_vat, data_json и т.д.)
+ * 2. Переименование legacy колонок (own_retail_* -> offline_sales_*)
+ * 3. Переименование financial_indicators -> financial_results
+ * 
+ * Все операции проверяют существование колонок перед выполнением, чтобы избежать ошибок.
+ * 
+ * @param PDO $pdo Подключение к базе данных
+ * @return void
+ */
 function ensureSellerFormSchema(PDO $pdo): void
 {
+    // Статическая переменная гарантирует, что миграции выполняются только один раз за запрос
     static $schemaChecked = false;
     if ($schemaChecked) {
         return;
     }
     $schemaChecked = true;
 
+    // Список колонок для добавления: название колонки => SQL для ALTER TABLE
     $columnsToAdd = [
         'asset_disclosure' => "ALTER TABLE seller_forms ADD COLUMN asset_disclosure ENUM('yes','no') DEFAULT NULL AFTER deal_purpose",
         'offline_sales_third_party' => "ALTER TABLE seller_forms ADD COLUMN offline_sales_third_party ENUM('yes','no') DEFAULT NULL AFTER offline_sales_area",
@@ -520,19 +646,22 @@ function ensureSellerFormSchema(PDO $pdo): void
         'data_json' => "ALTER TABLE seller_forms ADD COLUMN data_json JSON DEFAULT NULL AFTER submitted_at",
     ];
 
+    // Добавление новых колонок (если они еще не существуют)
     foreach ($columnsToAdd as $column => $sql) {
         if (sellerFormsColumnExists($pdo, $column)) {
-            continue;
+            continue; // Колонка уже существует, пропускаем
         }
         try {
             $pdo->exec($sql);
             error_log("Column {$column} added to seller_forms");
         } catch (PDOException $e) {
+            // Логируем ошибку, но не прерываем выполнение (колонка может уже существовать)
             error_log("Failed to add column {$column}: " . $e->getMessage());
         }
     }
 
-    // Rename legacy columns for offline sales
+    // Переименование legacy колонок для офлайн-продаж
+    // Старые названия: own_retail_* -> Новые: offline_sales_*
     $legacyRetailColumns = ['own_retail_presence', 'own_retail_points', 'own_retail_regions', 'own_retail_area'];
     if (sellerFormsColumnsExist($pdo, $legacyRetailColumns)) {
         try {
@@ -549,7 +678,7 @@ function ensureSellerFormSchema(PDO $pdo): void
         }
     }
 
-    // Rename financial_indicators -> financial_results if needed
+    // Переименование financial_indicators -> financial_results (унификация названий)
     if (sellerFormsColumnExists($pdo, 'financial_indicators')) {
         try {
             $pdo->exec("ALTER TABLE seller_forms CHANGE COLUMN financial_indicators financial_results JSON DEFAULT NULL");

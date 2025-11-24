@@ -1,4 +1,18 @@
 <?php
+/**
+ * Экспорт данных анкеты в формате JSON
+ * 
+ * Функциональность:
+ * - Загрузка данных анкеты пользователя
+ * - Приоритетное использование data_json (новый формат)
+ * - Fallback на отдельные поля БД (старый формат)
+ * - Формирование имени файла на основе названия актива и даты
+ * - Отдача файла для скачивания с правильными HTTP-заголовками
+ * 
+ * @package SmartBizSell
+ * @version 1.0
+ */
+
 require_once 'config.php';
 
 if (!isLoggedIn()) {
@@ -11,12 +25,14 @@ if (!$user) {
     redirectToLogin();
 }
 
+// Получение ID анкеты из GET-параметра
 $formId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($formId <= 0) {
     http_response_code(400);
     die(json_encode(['error' => 'Не указан ID анкеты']));
 }
 
+// Загрузка анкеты из базы данных
 $pdo = getDBConnection();
 $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
 $stmt->execute([$formId, $user['id']]);
@@ -30,7 +46,8 @@ if (!$form) {
 // Собираем полные данные анкеты
 $formData = [];
 
-// Если есть data_json, используем его как основу
+// Приоритет: если есть data_json (новый формат), используем его как основу
+// data_json содержит полную структуру формы в едином формате
 if (!empty($form['data_json'])) {
     $decoded = json_decode($form['data_json'], true);
     if (is_array($decoded)) {
@@ -38,7 +55,7 @@ if (!empty($form['data_json'])) {
     }
 }
 
-// Добавляем метаданные из базы
+// Добавляем метаданные из базы (ID, статус, даты создания/обновления)
 $formData['_metadata'] = [
     'id' => $form['id'],
     'user_id' => $form['user_id'],
@@ -48,7 +65,9 @@ $formData['_metadata'] = [
     'submitted_at' => $form['submitted_at'],
 ];
 
-// Если data_json пустой, собираем данные из отдельных полей
+// Fallback: если data_json пустой или содержит только метаданные,
+// собираем данные из отдельных полей БД (старый формат)
+// Это обеспечивает совместимость со старыми анкетами
 if (empty($formData) || (count($formData) === 1 && isset($formData['_metadata']))) {
     $formData = [
         'asset_name' => $form['asset_name'] ?? '',
@@ -96,7 +115,7 @@ if (empty($formData) || (count($formData) === 1 && isset($formData['_metadata'])
         ],
     ];
 
-    // Добавляем таблицы из JSON полей
+    // Добавляем динамические таблицы из JSON-полей БД
     if (!empty($form['production_volumes'])) {
         $formData['production'] = json_decode($form['production_volumes'], true) ?: [];
     }
@@ -108,19 +127,20 @@ if (empty($formData) || (count($formData) === 1 && isset($formData['_metadata'])
     }
 }
 
-// Формируем имя файла
+// Формируем безопасное имя файла для скачивания
+// Формат: anketa_{название_актива}_{дата}.json
 $assetName = $form['asset_name'] ?: 'form';
-$assetName = preg_replace('/[^a-zA-Z0-9а-яА-ЯёЁ_-]/u', '_', $assetName);
-$assetName = mb_substr($assetName, 0, 50);
+$assetName = preg_replace('/[^a-zA-Z0-9а-яА-ЯёЁ_-]/u', '_', $assetName); // Удаляем недопустимые символы
+$assetName = mb_substr($assetName, 0, 50); // Ограничиваем длину
 $dateLabel = date('Y-m-d', strtotime($form['updated_at'] ?: $form['created_at']));
 $fileName = "anketa_{$assetName}_{$dateLabel}.json";
 
-// Устанавливаем заголовки для скачивания
+// Устанавливаем HTTP-заголовки для скачивания файла
 header('Content-Type: application/json; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $fileName . '"');
 header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
 header('Pragma: public');
 
-// Выводим JSON с красивым форматированием
+// Выводим JSON с красивым форматированием (отступы, Unicode, слэши)
 echo json_encode($formData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 exit;

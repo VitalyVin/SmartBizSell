@@ -35,10 +35,19 @@ if (!$form) {
 }
 
 /**
- * Приводим данные к единому виду
+ * Приводит данные формы к единому виду для отображения
+ * 
+ * Приоритет источников:
+ * 1. data_json (новый формат) - если есть, используется полностью
+ * 2. Отдельные поля БД (старый формат) - маппинг старых названий колонок на новые
+ * 3. JSON-поля для таблиц (production_volumes, financial_results, balance_indicators)
+ * 
+ * @param array $form Данные формы из базы данных
+ * @return array Унифицированные данные формы для отображения
  */
 function buildViewData(array $form): array
 {
+    // Приоритет: data_json содержит полную структуру в новом формате
     if (!empty($form['data_json'])) {
         $decoded = json_decode($form['data_json'], true);
         if (is_array($decoded)) {
@@ -46,6 +55,8 @@ function buildViewData(array $form): array
         }
     }
 
+    // Fallback: маппинг старых названий колонок БД на новые названия полей
+    // Обеспечивает совместимость со старыми формами
     $mapping = [
         'asset_name' => 'asset_name',
         'deal_share_range' => 'deal_subject',
