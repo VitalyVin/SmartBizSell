@@ -2,9 +2,7 @@
 name: PHP Composer (DISABLED)
 
 on: {}
-name: PHP Composer
 
-on:
   push:
     branches: [ "main" ]
   pull_request:
