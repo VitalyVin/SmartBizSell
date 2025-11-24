@@ -1,3 +1,7 @@
+# DISABLED - Workflow temporarily turned off
+name: PHP Composer (DISABLED)
+
+on: {}
 name: PHP Composer
 
 on:
