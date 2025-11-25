@@ -565,6 +565,10 @@ function calculateUserDCF(array $form): array {
     // Финальная проверка ограничений для P1
     $forecastGrowth[0] = max($forecastGrowth[0], $gLastFact + 0.0001);
     $forecastGrowth[0] = min($forecastGrowth[0], $gLastFact + 0.10);
+    
+    // Принудительно устанавливаем темп роста P5 = 4% (последний год перед TV)
+    // Это гарантирует плавный переход к бессрочному росту в Terminal Value
+    $forecastGrowth[4] = 0.04;
 
     // Обработка бюджета 2025 года: если он указан, используем его для P1
     // Это позволяет учитывать планы компании на ближайший год
@@ -930,7 +934,7 @@ function calculateUserDCF(array $form): array {
             'format' => 'money',
             'is_expense' => false,
             'star_columns' => [$forecastLabels[0]],
-            'values' => $buildValues($nullFact, $fcffDisplay, null), // TV не относится к FCFF, это отдельный показатель
+            'values' => $buildValues($nullFact, $fcffDisplay, $terminalValue), // TV включен в строку FCFF
         ],
         [
             'label' => 'Фактор дисконтирования',
@@ -1897,7 +1901,7 @@ if ($latestForm) {
                                     <td>(<?php echo $formatMoney($evData['debt'] ?? 0); ?> млн ₽)</td>
                                 </tr>
                                 <tr>
-                                    <td>Cash</td>
+                                    <td>+ Cash</td>
                                     <td><?php echo $formatEvRow($evData['cash'] ?? null); ?></td>
                                 </tr>
                                 <tr>
