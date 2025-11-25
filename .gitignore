@@ -39,3 +39,11 @@ Temporary Items
 # Config files with sensitive data
 config.php
 
+# Python virtual environment
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

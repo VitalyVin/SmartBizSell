@@ -1606,6 +1606,102 @@ if ($latestForm) {
             border: 1px solid #ffe2a8;
             color: #ad6800;
         }
+        .teaser-section {
+            margin-top: 32px;
+            padding: 32px;
+            border-radius: 24px;
+            background: white;
+            box-shadow: var(--shadow-xl);
+            border: 1px solid rgba(15, 23, 42, 0.06);
+        }
+        .teaser-header {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .teaser-header h2 {
+            margin: 0;
+            font-size: 22px;
+        }
+        .teaser-header p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+        .teaser-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .teaser-status {
+            min-height: 24px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        .teaser-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+        .teaser-card {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            padding: 20px;
+            background: #fdfdfd;
+            box-shadow: var(--shadow-sm);
+        }
+        .teaser-card h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+        .teaser-card__subtitle {
+            margin: 0 0 10px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .teaser-card ul {
+            padding-left: 18px;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .teaser-card ul li + li {
+            margin-top: 6px;
+        }
+        .teaser-card__footer {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .teaser-spinner {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--primary-color);
+        }
+        .teaser-spinner:before {
+            content: "";
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+            border-top-color: rgba(102, 126, 234, 0.9);
+            animation: teaser-spin 0.8s linear infinite;
+            display: inline-block;
+        }
+        @keyframes teaser-spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            .teaser-section {
+                padding: 20px;
+            }
+            .teaser-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1925,42 +2021,96 @@ if ($latestForm) {
                 <?php endif; ?>
             </div>
         <?php endif; ?>
+
+        <?php if ($latestForm): ?>
+            <div class="teaser-section" id="teaser-section">
+                <div class="teaser-header">
+                    <h2>AI-тизер компании</h2>
+                    <p>Краткая презентация актива на основе данных анкеты и открытых источников.</p>
+                    <div class="teaser-actions">
+                        <button type="button" class="btn btn-primary" id="generate-teaser-btn">Создать тизер</button>
+                    </div>
+                </div>
+                <div class="teaser-status" id="teaser-status"></div>
+                <div class="teaser-result" id="teaser-result">
+                    <p style="color: var(--text-secondary); margin: 0;">Нажмите «Создать тизер», чтобы получить структурированный документ для инвесторов.</p>
+                </div>
+            </div>
+        <?php else: ?>
+            <div class="teaser-section">
+                <div class="teaser-header">
+                    <h2>AI-тизер компании</h2>
+                    <p>Отправьте анкету, чтобы автоматически сформировать тизер.</p>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const card = document.getElementById('dcf-card');
             const exportBtn = document.getElementById('export-dcf-pdf');
-            if (!card || !exportBtn) {
-                return;
+            if (card && exportBtn) {
+                const originalText = exportBtn.textContent;
+
+                const restoreState = () => {
+                    document.body.classList.remove('print-dcf');
+                    exportBtn.disabled = false;
+                    exportBtn.textContent = originalText;
+                };
+
+                const handleAfterPrint = () => {
+                    restoreState();
+                    window.removeEventListener('afterprint', handleAfterPrint);
+                };
+
+                exportBtn.addEventListener('click', () => {
+                    document.body.classList.add('print-dcf');
+                    exportBtn.disabled = true;
+                    exportBtn.textContent = 'Открывается диалог...';
+
+                    window.addEventListener('afterprint', handleAfterPrint);
+
+                    setTimeout(() => {
+                        window.print();
+                        // На некоторых iOS/Safari события afterprint нет — возвращаем состояние сами
+                        setTimeout(restoreState, 1000);
+                    }, 50);
+                });
             }
 
-            const originalText = exportBtn.textContent;
+            const teaserBtn = document.getElementById('generate-teaser-btn');
+            const teaserStatus = document.getElementById('teaser-status');
+            const teaserResult = document.getElementById('teaser-result');
 
-            const restoreState = () => {
-                document.body.classList.remove('print-dcf');
-                exportBtn.disabled = false;
-                exportBtn.textContent = originalText;
-            };
+            if (teaserBtn && teaserStatus && teaserResult) {
+                teaserBtn.addEventListener('click', async () => {
+                    teaserBtn.disabled = true;
+                    teaserStatus.innerHTML = '<span class="teaser-spinner">Генерируем тизер...</span>';
+                    teaserResult.style.opacity = '0.6';
 
-            const handleAfterPrint = () => {
-                restoreState();
-                window.removeEventListener('afterprint', handleAfterPrint);
-            };
+                    try {
+                        const response = await fetch('generate_teaser.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({}),
+                        });
 
-            exportBtn.addEventListener('click', () => {
-                document.body.classList.add('print-dcf');
-                exportBtn.disabled = true;
-                exportBtn.textContent = 'Открывается диалог...';
+                        const payload = await response.json();
+                        if (!response.ok || !payload.success) {
+                            throw new Error(payload.message || 'Не удалось создать тизер.');
+                        }
 
-                window.addEventListener('afterprint', handleAfterPrint);
-
-                setTimeout(() => {
-                    window.print();
-                    // На некоторых iOS/Safari события afterprint нет — возвращаем состояние сами
-                    setTimeout(restoreState, 1000);
-                }, 50);
-            });
+                        teaserResult.innerHTML = payload.html;
+                        teaserStatus.textContent = 'Готово! Тизер сформирован.';
+                    } catch (error) {
+                        teaserStatus.textContent = error.message || 'Ошибка генерации тизера.';
+                    } finally {
+                        teaserBtn.disabled = false;
+                        teaserResult.style.opacity = '1';
+                    }
+                });
+            }
         });
     </script>
     <script src="script.js?v=<?php echo time(); ?>"></script>

@@ -28,6 +28,11 @@ define('DASHBOARD_URL', BASE_URL . '/dashboard.php');
 // Настройки почты (для уведомлений)
 define('ADMIN_EMAIL', 'admin@smartbizsell.ru'); // Замените на ваш email
 
+// Настройки AI (together.ai + Qwen)
+// Можно переопределить через переменные окружения TOGETHER_API_KEY и TOGETHER_MODEL
+define('TOGETHER_API_KEY', getenv('TOGETHER_API_KEY') ?: 'your_together_ai_key');
+define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'Qwen/Qwen2.5-72B-Instruct-Turbo');
+
 /**
  * Подключение к базе данных
  */
