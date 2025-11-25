@@ -979,6 +979,8 @@ function calculateUserDCF(array $form): array {
 $latestForm = null;
 $dcfData = null;
 $dcfSourceStatus = null;
+$savedTeaserHtml = null;
+$savedTeaserTimestamp = null;
 
 $latestSubmittedStmt = $pdo->prepare("
     SELECT *
@@ -994,6 +996,14 @@ $latestForm = $latestSubmittedStmt->fetch();
 if ($latestForm) {
     $dcfSourceStatus = $latestForm['status'];
     $dcfData = calculateUserDCF($latestForm);
+
+    if (!empty($latestForm['data_json'])) {
+        $teaserDecoded = json_decode($latestForm['data_json'], true);
+        if (is_array($teaserDecoded) && !empty($teaserDecoded['teaser_snapshot']['html'])) {
+            $savedTeaserHtml = $teaserDecoded['teaser_snapshot']['html'];
+            $savedTeaserTimestamp = $teaserDecoded['teaser_snapshot']['generated_at'] ?? null;
+        }
+    }
 } else {
     $latestAnyStmt = $pdo->prepare("
         SELECT *
@@ -1607,26 +1617,48 @@ if ($latestForm) {
             color: #ad6800;
         }
         .teaser-section {
-            margin-top: 32px;
-            padding: 32px;
-            border-radius: 24px;
-            background: white;
-            box-shadow: var(--shadow-xl);
-            border: 1px solid rgba(15, 23, 42, 0.06);
+            margin-top: 40px;
+            padding: 44px;
+            border-radius: 32px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: radial-gradient(circle at top left, rgba(99,102,241,0.12), rgba(15,23,42,0.02) 45%) #fff;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.08);
+        }
+        .teaser-section::before,
+        .teaser-section::after {
+            content: "";
+            position: absolute;
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(99,102,241,0.25), transparent 65%);
+            filter: blur(20px);
+            opacity: 0.5;
+        }
+        .teaser-section::before {
+            inset: auto auto -120px -80px;
+        }
+        .teaser-section::after {
+            inset: -140px -60px auto auto;
         }
         .teaser-header {
             display: flex;
             flex-direction: column;
             gap: 8px;
             margin-bottom: 24px;
+            position: relative;
+            z-index: 1;
         }
         .teaser-header h2 {
             margin: 0;
-            font-size: 22px;
+            font-size: 26px;
         }
         .teaser-header p {
             margin: 0;
             color: var(--text-secondary);
+            font-size: 15px;
         }
         .teaser-actions {
             display: flex;
@@ -1640,17 +1672,62 @@ if ($latestForm) {
             color: var(--text-secondary);
             margin-bottom: 16px;
         }
+        .teaser-result {
+            background: rgba(255,255,255,0.85);
+            border: 1px dashed rgba(99,102,241,0.35);
+            border-radius: 18px;
+            padding: 18px;
+            min-height: 80px;
+            box-shadow: inset 0 0 25px rgba(15,23,42,0.03);
+        }
         .teaser-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 22px;
+            position: relative;
+            z-index: 1;
+        }
+        .teaser-grid .teaser-card:nth-child(-n+3) {
+            grid-column: 1 / -1;
         }
         .teaser-card {
             border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 18px;
-            padding: 20px;
-            background: #fdfdfd;
-            box-shadow: var(--shadow-sm);
+            border-radius: 22px;
+            padding: 22px;
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 15px 40px rgba(15,23,42,0.08);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(6px);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .teaser-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: 0.18;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            transition: opacity 0.3s ease;
+        }
+        .teaser-card[data-variant="overview"]::before { background: linear-gradient(135deg, #a855f7, #6366f1); }
+        .teaser-card[data-variant="profile"]::before { background: linear-gradient(135deg, #14b8a6, #22d3ee); }
+        .teaser-card[data-variant="products"]::before { background: linear-gradient(135deg, #f97316, #facc15); }
+        .teaser-card[data-variant="market"]::before { background: linear-gradient(135deg, #0ea5e9, #38bdf8); }
+        .teaser-card[data-variant="financial"]::before { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+        .teaser-card[data-variant="highlights"]::before { background: linear-gradient(135deg, #f43f5e, #fb7185); }
+        .teaser-card[data-variant="deal"]::before { background: linear-gradient(135deg, #10b981, #22c55e); }
+        .teaser-card[data-variant="next"]::before { background: linear-gradient(135deg, #0ea5e9, #14b8a6); }
+        .teaser-card[data-variant="chart"]::before { background: linear-gradient(135deg, #818cf8, #6366f1); }
+        .teaser-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 45px rgba(15,23,42,0.12);
+        }
+        .teaser-card:hover::before {
+            opacity: 0.32;
+        }
+        .teaser-card > * {
+            position: relative;
+            z-index: 1;
         }
         .teaser-card h3 {
             margin: 0 0 10px;
@@ -1658,22 +1735,52 @@ if ($latestForm) {
             color: var(--text-primary);
         }
         .teaser-card__subtitle {
-            margin: 0 0 10px;
+            margin: 0 0 12px;
             font-size: 14px;
             color: var(--text-secondary);
         }
         .teaser-card ul {
-            padding-left: 18px;
             margin: 0;
-            color: var(--text-primary);
+            padding: 0;
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        .teaser-card ul li + li {
-            margin-top: 6px;
+        .teaser-card ul li {
+            position: relative;
+            padding-left: 18px;
+            line-height: 1.45;
+        }
+        .teaser-card ul li::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 7px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #6366f1;
+            opacity: 0.7;
         }
         .teaser-card__footer {
-            margin-top: 12px;
+            margin-top: 16px;
             font-size: 13px;
             color: var(--text-secondary);
+        }
+        .teaser-card__icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.5);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 14px;
+            color: #4338ca;
+            box-shadow: inset 0 0 10px rgba(99,102,241,0.15);
         }
         .teaser-spinner {
             display: inline-flex;
@@ -1701,6 +1808,44 @@ if ($latestForm) {
             .teaser-grid {
                 grid-template-columns: 1fr;
             }
+        }
+        .teaser-chart-card {
+            grid-column: 1 / -1;
+        }
+        .teaser-chart {
+            position: relative;
+            padding: 16px 12px 12px 12px;
+            border: 1px dashed rgba(102, 126, 234, 0.4);
+            border-radius: 20px;
+            background: rgba(102, 126, 234, 0.04);
+        }
+        .teaser-chart svg {
+            width: 100%;
+            height: auto;
+        }
+        .teaser-chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 12px;
+            margin-top: 12px;
+            color: var(--text-secondary);
+        }
+        .teaser-chart-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .teaser-chart-legend i {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+        .teaser-chart__note {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
         }
     </style>
 </head>
@@ -2028,12 +2173,22 @@ if ($latestForm) {
                     <h2>AI-тизер компании</h2>
                     <p>Краткая презентация актива на основе данных анкеты и открытых источников.</p>
                     <div class="teaser-actions">
-                        <button type="button" class="btn btn-primary" id="generate-teaser-btn">Создать тизер</button>
+                        <button type="button" class="btn btn-primary" id="generate-teaser-btn">
+                            <?php echo $savedTeaserHtml ? 'Обновить тизер' : 'Создать тизер'; ?>
+                        </button>
                     </div>
                 </div>
-                <div class="teaser-status" id="teaser-status"></div>
+                <div class="teaser-status" id="teaser-status">
+                    <?php if ($savedTeaserTimestamp): ?>
+                        Последнее обновление: <?php echo date('d.m.Y H:i', strtotime($savedTeaserTimestamp)); ?>
+                    <?php endif; ?>
+                </div>
                 <div class="teaser-result" id="teaser-result">
-                    <p style="color: var(--text-secondary); margin: 0;">Нажмите «Создать тизер», чтобы получить структурированный документ для инвесторов.</p>
+                    <?php if ($savedTeaserHtml): ?>
+                        <?php echo $savedTeaserHtml; ?>
+                    <?php else: ?>
+                        <p style="color: var(--text-secondary); margin: 0;">Нажмите «Создать тизер», чтобы получить структурированный документ для инвесторов.</p>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php else: ?>
@@ -2082,6 +2237,22 @@ if ($latestForm) {
             const teaserBtn = document.getElementById('generate-teaser-btn');
             const teaserStatus = document.getElementById('teaser-status');
             const teaserResult = document.getElementById('teaser-result');
+            const formatRuDateTime = (isoString) => {
+                if (!isoString) {
+                    return null;
+                }
+                const date = new Date(isoString);
+                if (Number.isNaN(date.getTime())) {
+                    return null;
+                }
+                return date.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+            };
 
             if (teaserBtn && teaserStatus && teaserResult) {
                 teaserBtn.addEventListener('click', async () => {
@@ -2102,7 +2273,11 @@ if ($latestForm) {
                         }
 
                         teaserResult.innerHTML = payload.html;
-                        teaserStatus.textContent = 'Готово! Тизер сформирован.';
+                        const formatted = formatRuDateTime(payload.generated_at);
+                        teaserStatus.textContent = formatted
+                            ? `Тизер обновлён: ${formatted}`
+                            : 'Готово! Тизер сформирован.';
+                        teaserBtn.textContent = 'Обновить тизер';
                     } catch (error) {
                         teaserStatus.textContent = error.message || 'Ошибка генерации тизера.';
                     } finally {
@@ -2116,4 +2291,5 @@ if ($latestForm) {
     <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>
+
 

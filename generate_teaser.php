@@ -47,11 +47,19 @@ try {
     $rawResponse = callTogetherCompletions($prompt, $apiKey);
 
     $teaserData = parseTeaserResponse($rawResponse);
-    $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив');
+    $teaserData = normalizeTeaserData($teaserData, $formPayload);
+    $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив', $formPayload);
+
+    $snapshot = persistTeaserSnapshot($form, $formPayload, [
+        'html' => $html,
+        'generated_at' => date('c'),
+        'model' => TOGETHER_MODEL,
+    ]);
 
     echo json_encode([
         'success' => true,
         'html' => $html,
+        'generated_at' => $snapshot['generated_at'] ?? null,
     ]);
 } catch (Exception $e) {
     error_log('Teaser generation error: ' . $e->getMessage());
@@ -293,7 +301,7 @@ function parseTeaserResponse(string $text): array
 /**
  * Рендерит HTML для тизера.
  */
-function renderTeaserHtml(array $data, string $assetName): string
+function renderTeaserHtml(array $data, string $assetName, array $payload = []): string
 {
     $blocks = [];
 
@@ -303,7 +311,7 @@ function renderTeaserHtml(array $data, string $assetName): string
             'subtitle' => htmlspecialchars($overview['title'] ?? $assetName, ENT_QUOTES, 'UTF-8'),
             'text' => nl2br(htmlspecialchars($overview['summary'] ?? '', ENT_QUOTES, 'UTF-8')),
             'list' => $overview['key_metrics'] ?? [],
-        ]);
+        ], 'overview');
     }
 
     if (!empty($data['company_profile'])) {
@@ -319,7 +327,7 @@ function renderTeaserHtml(array $data, string $assetName): string
         if ($bullets) {
             $blocks[] = renderCard('Профиль компании', [
                 'list' => $bullets,
-            ]);
+            ], 'profile');
         }
     }
 
@@ -334,7 +342,7 @@ function renderTeaserHtml(array $data, string $assetName): string
         if ($bullets) {
             $blocks[] = renderCard('Продукты и клиенты', [
                 'list' => $bullets,
-            ]);
+            ], 'products');
         }
     }
 
@@ -349,7 +357,7 @@ function renderTeaserHtml(array $data, string $assetName): string
         $blocks[] = renderCard('Рынок и тенденции', [
             'text' => implode('<br>', array_map('escapeHtml', $bullets)),
             'footer' => !empty($sources) ? 'Источники: ' . implode(', ', array_map('escapeHtml', $sources)) : '',
-        ]);
+        ], 'market');
     }
 
     if (!empty($data['financials'])) {
@@ -363,13 +371,18 @@ function renderTeaserHtml(array $data, string $assetName): string
         ]);
         $blocks[] = renderCard('Финансовый профиль', [
             'list' => $bullets,
-        ]);
+        ], 'financial');
+
+        $timeline = buildTeaserTimeline($payload);
+        if ($timeline) {
+            $blocks[] = renderTeaserChart($timeline);
+        }
     }
 
     if (!empty($data['highlights']['bullets'])) {
         $blocks[] = renderCard('Инвестиционные преимущества', [
             'list' => $data['highlights']['bullets'],
-        ]);
+        ], 'highlights');
     }
 
     if (!empty($data['deal_terms'])) {
@@ -383,7 +396,7 @@ function renderTeaserHtml(array $data, string $assetName): string
         if ($bullets) {
             $blocks[] = renderCard('Параметры сделки', [
                 'list' => $bullets,
-            ]);
+            ], 'deal');
         }
     }
 
@@ -396,21 +409,24 @@ function renderTeaserHtml(array $data, string $assetName): string
         $blocks[] = renderCard('Следующие шаги', [
             'list' => $bullets,
             'footer' => $next['disclaimer'] ?? '',
-        ]);
+        ], 'next');
     }
 
     if (empty($blocks)) {
         $blocks[] = renderCard('Тизер', [
             'text' => 'AI вернул нестандартный ответ. Содержание: ' . escapeHtml(json_encode($data, JSON_UNESCAPED_UNICODE)),
-        ]);
+        ], 'fallback');
     }
 
     return '<div class="teaser-grid">' . implode('', $blocks) . '</div>';
 }
 
-function renderCard(string $title, array $payload): string
+function renderCard(string $title, array $payload, string $variant = ''): string
 {
-    $html = '<div class="teaser-card">';
+    $variantAttr = $variant !== '' ? ' data-variant="' . htmlspecialchars($variant, ENT_QUOTES, 'UTF-8') . '"' : '';
+    $html = '<div class="teaser-card"' . $variantAttr . '>';
+    $icon = getTeaserIcon($title);
+    $html .= '<div class="teaser-card__icon">' . htmlspecialchars($icon, ENT_QUOTES, 'UTF-8') . '</div>';
     $html .= '<h3>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h3>';
 
     if (!empty($payload['subtitle'])) {
@@ -453,6 +469,21 @@ function formatMetric(string $label, string $value): string
     return "{$label}: {$value}";
 }
 
+function getTeaserIcon(string $title): string
+{
+    $map = [
+        'Обзор возможности' => '📊',
+        'Профиль компании' => '🏢',
+        'Продукты и клиенты' => '🧩',
+        'Рынок и тенденции' => '🌍',
+        'Финансовый профиль' => '💰',
+        'Инвестиционные преимущества' => '✨',
+        'Параметры сделки' => '🤝',
+        'Следующие шаги' => '➡️',
+    ];
+    return $map[$title] ?? '📌';
+}
+
 /**
  * Пытается получить краткое содержание с сайта компании.
  */
@@ -491,5 +522,436 @@ function fetchCompanyWebsiteSnapshot(string $url): ?string
     }
 
     return mb_substr($text, 0, 1500) . (mb_strlen($text) > 1500 ? '…' : '');
+}
+
+function extractNumericValue(string $raw): ?float
+{
+    $normalized = str_replace([' ', ' '], '', $raw);
+    $normalized = str_replace(',', '.', $normalized);
+    if (!preg_match('/-?\d+(\.\d+)?/', $normalized, $matches)) {
+        return null;
+    }
+    $number = (float)$matches[0];
+    $lower = mb_strtolower($raw);
+    if (str_contains($lower, 'млрд')) {
+        $number *= 1000;
+    } elseif (str_contains($lower, 'тыс')) {
+        $number /= 1000;
+    }
+    return $number;
+}
+
+function buildTeaserTimeline(array $payload): ?array
+{
+    if (empty($payload['financial']) || !is_array($payload['financial'])) {
+        return null;
+    }
+    $periods = [
+        '2022_fact' => '2022',
+        '2023_fact' => '2023',
+        '2024_fact' => '2024',
+        '2025_budget' => '2025E',
+        '2026_budget' => '2026E',
+    ];
+    $metrics = [
+        'revenue' => ['title' => 'Выручка', 'unit' => 'млн ₽'],
+        'sales_profit' => ['title' => 'EBITDA', 'unit' => 'млн ₽'],
+    ];
+    $series = [];
+
+    foreach ($metrics as $key => $meta) {
+        if (empty($payload['financial'][$key]) || !is_array($payload['financial'][$key])) {
+            continue;
+        }
+        $row = $payload['financial'][$key];
+        $points = [];
+        foreach ($periods as $column => $label) {
+            if (empty($row[$column])) {
+                continue;
+            }
+            $value = extractNumericValue((string)$row[$column]);
+            if ($value === null) {
+                continue;
+            }
+            $points[] = [
+                'label' => $label,
+                'value' => $value,
+            ];
+        }
+        if (count($points) >= 2) {
+            $series[] = [
+                'title' => $meta['title'],
+                'unit' => $meta['unit'],
+                'points' => $points,
+            ];
+        }
+    }
+
+    return $series ?: null;
+}
+
+function seriesHasLabel(array $series, string $label): bool
+{
+    foreach ($series as $metric) {
+        foreach ($metric['points'] as $point) {
+            if ($point['label'] === $label) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function valueForLabel(array $points, string $label): ?float
+{
+    foreach ($points as $point) {
+        if ($point['label'] === $label) {
+            return $point['value'];
+        }
+    }
+    return null;
+}
+
+function renderTeaserChart(array $series): string
+{
+    $periodOrder = ['2022', '2023', '2024', '2025E', '2026E', '2027E'];
+    $labels = [];
+    foreach ($periodOrder as $label) {
+        if (seriesHasLabel($series, $label)) {
+            $labels[] = $label;
+        }
+    }
+    foreach ($series as $metric) {
+        foreach ($metric['points'] as $point) {
+            if (!in_array($point['label'], $labels, true)) {
+                $labels[] = $point['label'];
+            }
+        }
+    }
+    if (count($labels) < 2) {
+        return '';
+    }
+
+    $maxValue = 0;
+    foreach ($series as $metric) {
+        foreach ($metric['points'] as $point) {
+            $maxValue = max($maxValue, $point['value']);
+        }
+    }
+    if ($maxValue <= 0) {
+        return '';
+    }
+
+    $width = 420;
+    $height = 260;
+    $chartLeft = 60;
+    $chartRight = 390;
+    $chartTop = 30;
+    $chartBottom = 210;
+    $chartWidth = $chartRight - $chartLeft;
+    $chartHeight = $chartBottom - $chartTop;
+
+    $labelCount = count($labels);
+    $xPositions = [];
+    foreach ($labels as $index => $label) {
+        if ($labelCount === 1) {
+            $xPositions[$label] = $chartLeft;
+        } else {
+            $xPositions[$label] = $chartLeft + ($chartWidth * ($index / ($labelCount - 1)));
+        }
+    }
+
+    $palette = ['#6366F1', '#0EA5E9', '#F97316', '#10B981'];
+    $paths = [];
+    $dots = [];
+    foreach ($series as $idx => $metric) {
+        $color = $palette[$idx % count($palette)];
+        $currentPath = '';
+        foreach ($labels as $label) {
+            $value = valueForLabel($metric['points'], $label);
+            if ($value === null) {
+                if ($currentPath !== '') {
+                    $paths[] = ['d' => $currentPath, 'color' => $color];
+                    $currentPath = '';
+                }
+                continue;
+            }
+            $x = $xPositions[$label];
+            $y = $chartBottom - ($value / $maxValue) * $chartHeight;
+            if ($currentPath === '') {
+                $currentPath = "M{$x},{$y}";
+            } else {
+                $currentPath .= " L{$x},{$y}";
+            }
+            $dots[] = [
+                'x' => $x,
+                'y' => $y,
+                'color' => $color,
+                'value' => $value,
+            ];
+        }
+        if ($currentPath !== '') {
+            $paths[] = ['d' => $currentPath, 'color' => $color];
+        }
+    }
+
+    $ticks = [];
+    $tickCount = 4;
+    for ($i = 0; $i <= $tickCount; $i++) {
+        $value = ($maxValue / $tickCount) * $i;
+        $y = $chartBottom - ($value / $maxValue) * $chartHeight;
+        $ticks[] = ['value' => $value, 'y' => $y];
+    }
+
+    $html = '<div class="teaser-card teaser-chart-card" data-variant="chart">';
+    $html .= '<div class="teaser-card__icon">📈</div>';
+    $html .= '<h3>Динамика финансов</h3>';
+    $html .= '<div class="teaser-chart">';
+    $html .= '<svg viewBox="0 0 ' . $width . ' ' . $height . '" role="img" aria-label="График финансов">';
+    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartBottom . '" x2="' . $chartRight . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.5)" stroke-width="1.2"/>';
+    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartTop . '" x2="' . $chartLeft . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.5)" stroke-width="1.2"/>';
+
+    foreach ($ticks as $tick) {
+        $html .= '<line x1="' . ($chartLeft - 6) . '" y1="' . $tick['y'] . '" x2="' . $chartLeft . '" y2="' . $tick['y'] . '" stroke="rgba(15,23,42,0.4)" stroke-width="1"/>';
+        $html .= '<text x="' . ($chartLeft - 10) . '" y="' . ($tick['y'] + 4) . '" font-size="11" text-anchor="end" fill="rgba(15,23,42,0.8)">' . number_format($tick['value'], 0, '.', ' ') . '</text>';
+    }
+
+    foreach ($labels as $label) {
+        $x = $xPositions[$label];
+        $html .= '<line x1="' . $x . '" y1="' . $chartBottom . '" x2="' . $x . '" y2="' . ($chartBottom + 5) . '" stroke="rgba(15,23,42,0.4)" stroke-width="1"/>';
+        $html .= '<text x="' . $x . '" y="' . ($chartBottom + 18) . '" font-size="11" text-anchor="middle" fill="rgba(15,23,42,0.8)">' . escapeHtml($label) . '</text>';
+    }
+
+    foreach ($paths as $path) {
+        $html .= '<path d="' . $path['d'] . '" fill="none" stroke="' . $path['color'] . '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>';
+    }
+
+    foreach ($dots as $dot) {
+        $html .= '<circle cx="' . $dot['x'] . '" cy="' . $dot['y'] . '" r="4" fill="' . $dot['color'] . '" opacity="0.95"/>';
+    }
+
+    $html .= '</svg>';
+
+    $html .= '<div class="teaser-chart-legend">';
+    foreach ($series as $idx => $metric) {
+        $color = $palette[$idx % count($palette)];
+        $html .= '<span><i style="background:' . $color . '"></i>' . escapeHtml($metric['title']) . '</span>';
+    }
+    $html .= '</div>';
+    $html .= '</div>';
+    $html .= '<p class="teaser-chart__note">Показатели указаны в млн ₽. Источник: анкета продавца (факт + бюджет).</p>';
+    $html .= '</div>';
+    return $html;
+}
+
+function normalizeTeaserData(array $data, array $payload): array
+{
+    $placeholder = 'Информация уточняется.';
+    $assetName = $payload['asset_name'] ?? 'Актив';
+    $companyDesc = trim((string)($payload['company_description'] ?? ''));
+
+    $data['overview'] = [
+        'title' => $data['overview']['title'] ?? $assetName,
+        'summary' => buildHeroSummary(
+            $data['overview']['summary'] ?? null,
+            $payload,
+            $placeholder
+        ),
+        'key_metrics' => normalizeArray($data['overview']['key_metrics'] ?? [
+            formatMetric('Персонал', $payload['personnel_count'] ?? 'уточняется'),
+            formatMetric('Доля продаж онлайн', $payload['online_sales_share'] ?? 'уточняется'),
+        ]),
+    ];
+
+    $data['company_profile'] = [
+        'industry' => $data['company_profile']['industry'] ?? ($payload['products_services'] ?? $placeholder),
+        'established' => $data['company_profile']['established'] ?? ($payload['production_area'] ? 'Бизнес с развитой инфраструктурой' : $placeholder),
+        'headcount' => $data['company_profile']['headcount'] ?? ($payload['personnel_count'] ?? $placeholder),
+        'locations' => $data['company_profile']['locations'] ?? ($payload['presence_regions'] ?? $placeholder),
+        'operations' => $data['company_profile']['operations'] ?? ($payload['own_production'] ?? $placeholder),
+        'unique_assets' => $data['company_profile']['unique_assets'] ?? ($payload['company_brands'] ?? $placeholder),
+    ];
+
+    $data['products'] = [
+        'portfolio' => $data['products']['portfolio'] ?? ($payload['products_services'] ?? $placeholder),
+        'differentiators' => $data['products']['differentiators'] ?? ($payload['additional_info'] ?? $placeholder),
+        'key_clients' => $data['products']['key_clients'] ?? ($payload['main_clients'] ?? $placeholder),
+        'sales_channels' => $data['products']['sales_channels'] ?? buildSalesChannelsText($payload),
+    ];
+
+    $data['market'] = [
+        'trend' => $data['market']['trend'] ?? 'Рынок демонстрирует устойчивый интерес инвесторов.',
+        'size' => $data['market']['size'] ?? 'Объём рынка оценивается как значительный по отраслевым данным.',
+        'growth' => $data['market']['growth'] ?? 'Ожидается стабильный рост 5–10% в год.',
+        'sources' => normalizeArray($data['market']['sources'] ?? ['Отраслевые обзоры SmartBizSell']),
+    ];
+
+    $data['financials'] = [
+        'revenue' => $data['financials']['revenue'] ?? ($payload['financial']['revenue']['2024_fact'] ?? $placeholder),
+        'ebitda' => $data['financials']['ebitda'] ?? ($payload['financial']['sales_profit']['2024_fact'] ?? $placeholder),
+        'margins' => $data['financials']['margins'] ?? 'Маржинальность уточняется.',
+        'capex' => $data['financials']['capex'] ?? ($payload['financial']['fixed_assets_acquisition']['2024_fact'] ?? 'Низкая CAPEX-нагрузка.'),
+        'notes' => $data['financials']['notes'] ?? 'Финансовые показатели подтверждены данными анкеты.',
+    ];
+
+    $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
+
+    $data['deal_terms'] = [
+        'structure' => $data['deal_terms']['structure'] ?? (($payload['deal_goal'] ?? '') ?: 'Гибкая структура сделки.'),
+        'share_for_sale' => $data['deal_terms']['share_for_sale'] ?? ($payload['deal_share_range'] ?? 'Доля обсуждается.'),
+        'valuation_expectation' => $data['deal_terms']['valuation_expectation'] ?? 'Ожидаемая оценка обсуждается с инвестором.',
+        'use_of_proceeds' => $data['deal_terms']['use_of_proceeds'] ?? 'Средства будут направлены на масштабирование бизнеса.',
+    ];
+
+    $data['next_steps'] = [
+        'cta' => $data['next_steps']['cta'] ?? 'Готовы перейти к сделке после NDA и доступа к VDR.',
+        'contact' => $data['next_steps']['contact'] ?? 'Команда SmartBizSell.',
+        'disclaimer' => $data['next_steps']['disclaimer'] ?? 'Данные предоставлены продавцом и требуют подтверждения на due diligence.',
+    ];
+
+    return $data;
+}
+
+function normalizeArray($value): array
+{
+    if (is_array($value)) {
+        $filtered = array_values(array_filter(array_map('trim', $value), fn($item) => $item !== ''));
+        if (!empty($filtered)) {
+            return $filtered;
+        }
+    } elseif (is_string($value) && trim($value) !== '') {
+        return [trim($value)];
+    }
+    return ['Информация уточняется.'];
+}
+
+function buildSalesChannelsText(array $payload): string
+{
+    $channels = [];
+    if (!empty($payload['offline_sales_presence'])) {
+        $channels[] = 'Оффлайн: ' . $payload['offline_sales_presence'];
+    }
+    if (!empty($payload['online_sales_channels'])) {
+        $channels[] = 'Онлайн: ' . $payload['online_sales_channels'];
+    }
+    if (!empty($payload['contract_production_usage'])) {
+        $channels[] = 'Contract manufacturing: ' . $payload['contract_production_usage'];
+    }
+    if (empty($channels)) {
+        return 'Каналы продаж уточняются.';
+    }
+    return implode('; ', $channels);
+}
+
+function buildHighlightBullets(array $payload, string $placeholder): array
+{
+    $bullets = array_filter([
+        !empty($payload['company_brands']) ? 'Сильные бренды: ' . $payload['company_brands'] : null,
+        !empty($payload['own_production']) ? 'Собственная производственная база.' : null,
+        !empty($payload['presence_regions']) ? 'Широкая география: ' . $payload['presence_regions'] : null,
+        !empty($payload['main_clients']) ? 'Ключевые клиенты: ' . $payload['main_clients'] : null,
+    ]);
+    if (empty($bullets)) {
+        $bullets[] = $placeholder;
+    }
+    return $bullets;
+}
+
+function buildHeroSummary(?string $aiSummary, array $payload, string $fallback): string
+{
+    $summary = trim((string)$aiSummary);
+    if ($summary !== '' && !looksLikeStructuredDump($summary)) {
+        return prettifySummary($summary);
+    }
+
+    $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
+    $industry = trim((string)($payload['products_services'] ?? ''));
+    $regions = trim((string)($payload['presence_regions'] ?? ''));
+    $brands = trim((string)($payload['company_brands'] ?? ''));
+    $clients = trim((string)($payload['main_clients'] ?? ''));
+    $personnel = trim((string)($payload['personnel_count'] ?? ''));
+
+    $sentences = [];
+    $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+    $sentences[] = "{$assetName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+
+    if ($regions !== '') {
+        $sentences[] = "Присутствие в регионах {$regions} обеспечивает диверсификацию выручки и доступ к новым каналам.";
+    }
+
+    if ($brands !== '') {
+        $sentences[] = "Портфель включает бренды {$brands}, что усиливает узнаваемость и лояльность покупателей.";
+    }
+
+    if ($clients !== '') {
+        $sentences[] = "Ключевые сегменты клиентов: {$clients}.";
+    }
+
+    if ($personnel !== '') {
+        $sentences[] = "Команда из {$personnel} специалистов готова поддержать масштабирование при входе инвестора.";
+    }
+
+    if (count($sentences) < 2) {
+        $sentences[] = $fallback;
+    }
+
+    return implode(' ', array_map('prettifySummary', $sentences));
+}
+
+function prettifySummary(string $summary): string
+{
+    $plain = trim($summary);
+    $plain = preg_replace('/\s+/', ' ', $plain);
+    $plain = preg_replace('/[;••]/u', '.', $plain);
+    $plain = preg_replace('/[{}[\]()]/u', '', $plain);
+    $plain = preg_replace('/["“”]/u', '"', $plain);
+    $plain = preg_replace('/\.+/u', '.', $plain);
+
+    $plain = preg_replace('/\b(\d{1,2})\s?(?:%|проц\.|процентов)\b/iu', '$1%', $plain);
+    $plain = preg_replace('/\b(?:руб\.|рублей)\b/iu', '₽', $plain);
+
+    if (!preg_match('/[.!?]$/u', $plain)) {
+        $plain .= '.';
+    }
+
+    return $plain;
+}
+
+function looksLikeStructuredDump(string $text): bool
+{
+    $trimmed = trim($text);
+    if ($trimmed === '') {
+        return false;
+    }
+    if (preg_match('/^\{.*\}$/s', $trimmed) || preg_match('/^\[.*\]$/s', $trimmed)) {
+        return true;
+    }
+    if (preg_match('/"[a-zA-Z0-9_]+"\s*:/', $trimmed)) {
+        return true;
+    }
+    if (stripos($trimmed, '"overview"') !== false || stripos($trimmed, '"company_profile"') !== false) {
+        return true;
+    }
+    return false;
+}
+
+function persistTeaserSnapshot(array $form, array $payload, array $snapshot): array
+{
+    $payload['teaser_snapshot'] = $snapshot;
+
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return $snapshot;
+    }
+
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("UPDATE seller_forms SET data_json = ? WHERE id = ?");
+        $stmt->execute([$json, $form['id']]);
+    } catch (PDOException $e) {
+        error_log('Failed to persist teaser snapshot: ' . $e->getMessage());
+    }
+
+    return $snapshot;
 }
 
