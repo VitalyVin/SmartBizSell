@@ -642,12 +642,12 @@ function renderTeaserChart(array $series): string
         return '';
     }
 
-    $width = 420;
-    $height = 260;
-    $chartLeft = 60;
-    $chartRight = 390;
-    $chartTop = 30;
-    $chartBottom = 210;
+    $width = 360;
+    $height = 220;
+    $chartLeft = 52;
+    $chartRight = 330;
+    $chartTop = 26;
+    $chartBottom = 180;
     $chartWidth = $chartRight - $chartLeft;
     $chartHeight = $chartBottom - $chartTop;
 
@@ -708,26 +708,26 @@ function renderTeaserChart(array $series): string
     $html .= '<h3>Динамика финансов</h3>';
     $html .= '<div class="teaser-chart">';
     $html .= '<svg viewBox="0 0 ' . $width . ' ' . $height . '" role="img" aria-label="График финансов">';
-    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartBottom . '" x2="' . $chartRight . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.5)" stroke-width="1.2"/>';
-    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartTop . '" x2="' . $chartLeft . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.5)" stroke-width="1.2"/>';
+    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartBottom . '" x2="' . $chartRight . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.45)" stroke-width="1"/>';
+    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartTop . '" x2="' . $chartLeft . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.45)" stroke-width="1"/>';
 
     foreach ($ticks as $tick) {
-        $html .= '<line x1="' . ($chartLeft - 6) . '" y1="' . $tick['y'] . '" x2="' . $chartLeft . '" y2="' . $tick['y'] . '" stroke="rgba(15,23,42,0.4)" stroke-width="1"/>';
-        $html .= '<text x="' . ($chartLeft - 10) . '" y="' . ($tick['y'] + 4) . '" font-size="11" text-anchor="end" fill="rgba(15,23,42,0.8)">' . number_format($tick['value'], 0, '.', ' ') . '</text>';
+        $html .= '<line x1="' . ($chartLeft - 5) . '" y1="' . $tick['y'] . '" x2="' . $chartLeft . '" y2="' . $tick['y'] . '" stroke="rgba(15,23,42,0.35)" stroke-width="0.8"/>';
+        $html .= '<text x="' . ($chartLeft - 8) . '" y="' . ($tick['y'] + 4) . '" font-size="10" text-anchor="end" fill="rgba(15,23,42,0.75)">' . number_format($tick['value'], 0, '.', ' ') . '</text>';
     }
 
     foreach ($labels as $label) {
         $x = $xPositions[$label];
-        $html .= '<line x1="' . $x . '" y1="' . $chartBottom . '" x2="' . $x . '" y2="' . ($chartBottom + 5) . '" stroke="rgba(15,23,42,0.4)" stroke-width="1"/>';
-        $html .= '<text x="' . $x . '" y="' . ($chartBottom + 18) . '" font-size="11" text-anchor="middle" fill="rgba(15,23,42,0.8)">' . escapeHtml($label) . '</text>';
+        $html .= '<line x1="' . $x . '" y1="' . $chartBottom . '" x2="' . $x . '" y2="' . ($chartBottom + 4) . '" stroke="rgba(15,23,42,0.35)" stroke-width="0.8"/>';
+        $html .= '<text x="' . $x . '" y="' . ($chartBottom + 14) . '" font-size="10" text-anchor="middle" fill="rgba(15,23,42,0.75)">' . escapeHtml($label) . '</text>';
     }
 
     foreach ($paths as $path) {
-        $html .= '<path d="' . $path['d'] . '" fill="none" stroke="' . $path['color'] . '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>';
+        $html .= '<path d="' . $path['d'] . '" fill="none" stroke="' . $path['color'] . '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>';
     }
 
     foreach ($dots as $dot) {
-        $html .= '<circle cx="' . $dot['x'] . '" cy="' . $dot['y'] . '" r="4" fill="' . $dot['color'] . '" opacity="0.95"/>';
+        $html .= '<circle cx="' . $dot['x'] . '" cy="' . $dot['y'] . '" r="3.4" fill="' . $dot['color'] . '" opacity="0.95"/>';
     }
 
     $html .= '</svg>';
