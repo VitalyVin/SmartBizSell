@@ -1,4 +1,28 @@
 <?php
+/**
+ * generate_teaser.php
+ *
+ * Назначение файла:
+ * - точка входа для AJAX-запроса «Создать тизер» в личном кабинете продавца;
+ * - формирует из данных анкеты структурированный payload, дополняет его снимком сайта компании;
+ * - вызывает Together.ai (модель Qwen) для генерации текстов по строго заданной схеме;
+ * - пост-обрабатывает ответы AI (нормализация чисел, доп. предложения, локализация блоков);
+ * - рендерит HTML карточки, сохраняет снепшот в БД и возвращает JSON в интерфейс.
+ *
+ * Основные этапы исполнения:
+ * 1. Проверка авторизации пользователя и наличия актуальной анкеты.
+ * 2. buildTeaserPayload() — консолидирует данные анкеты, JSON-поля и снимок сайта в единый массив.
+ * 3. buildTeaserPrompt() — формирует промпт для Together.ai, чтобы получить валидный JSON с блоками тизера.
+ * 4. callTogetherCompletions() — отправляет запрос в Together.ai и возвращает текст ответа модели.
+ * 5. parseTeaserResponse() / normalizeTeaserData() — разбирают JSON, дозаполняют пустые блоки фактами.
+ * 6. ensureOverviewWithAi() и ensureProductsLocalized() — запускают дополнительные обращения к модели,
+ *    чтобы лид-блок и «Продукты и клиенты» выглядели как готовый текст на русском языке.
+ * 7. renderTeaserHtml() — собирает карточки, графики и списки, готовые к показу и печати.
+ * 8. persistTeaserSnapshot() — кэширует HTML и метаданные в БД для повторного показа без генерации.
+ *
+ * Любые новые шаги (например, дополнительная нормализация полей) лучше добавлять между normalizeTeaserData()
+ * и renderTeaserHtml(), чтобы сохранялась последовательность «данные → AI → пост-обработка → рендер».
+ */
 require_once 'config.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -48,6 +72,8 @@ try {
 
     $teaserData = parseTeaserResponse($rawResponse);
     $teaserData = normalizeTeaserData($teaserData, $formPayload);
+    $teaserData = ensureOverviewWithAi($teaserData, $formPayload, $apiKey);
+    $teaserData = ensureProductsLocalized($teaserData, $formPayload, $apiKey);
     $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив', $formPayload);
 
     $snapshot = persistTeaserSnapshot($form, $formPayload, [
@@ -292,7 +318,7 @@ function parseTeaserResponse(string $text): array
     return [
         'overview' => [
             'title' => 'Резюме',
-            'summary' => $clean,
+            'summary' => constrainToRussianNarrative(sanitizeAiArtifacts($clean)),
             'key_metrics' => [],
         ],
     ];
@@ -746,7 +772,7 @@ function renderTeaserChart(array $series): string
 
 function normalizeTeaserData(array $data, array $payload): array
 {
-    $placeholder = 'Информация уточняется.';
+    $placeholder = 'Дополнительные сведения доступны по запросу.';
     $assetName = $payload['asset_name'] ?? 'Актив';
     $companyDesc = trim((string)($payload['company_description'] ?? ''));
 
@@ -812,6 +838,188 @@ function normalizeTeaserData(array $data, array $payload): array
     return $data;
 }
 
+/**
+ * Пост-обрабатывает блок overview: если AI вернул сухой/ломанный текст,
+ * ещё раз обращаемся к модели, но уже с жёстким промптом и опорой на факты.
+ */
+function ensureOverviewWithAi(array $data, array $payload, string $apiKey): array
+{
+    if (empty($data['overview'])) {
+        $data['overview'] = [];
+    }
+    if (!shouldEnhanceOverview($data['overview'])) {
+        return $data;
+    }
+
+    try {
+        $prompt = buildOverviewRefinementPrompt($data['overview'], $payload);
+        $aiText = trim(callTogetherCompletions($prompt, $apiKey));
+        $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
+        if ($aiText !== '') {
+            $sentences = splitIntoSentences($aiText);
+            $data['overview']['summary'] = buildParagraphsFromSentences(
+                $sentences,
+                buildOverviewFallbackSentences($payload),
+                4,
+                2
+            );
+        }
+    } catch (Throwable $e) {
+        error_log('Overview AI refinement failed: ' . $e->getMessage());
+    }
+
+    if (empty($data['overview']['title'])) {
+        $data['overview']['title'] = $payload['asset_name'] ?? 'Инвестиционная возможность';
+    }
+
+    return $data;
+}
+
+/**
+ * Пытается привести блок "Продукты и клиенты" к аккуратному русскому описанию:
+ * - разворачивает JSON/массивы из AI в строки;
+ * - выявляет строки без кириллицы или с «сырой» структурой и
+ *   отправляет их на дополнительную локализацию в Together.ai.
+ */
+function ensureProductsLocalized(array $data, array $payload, string $apiKey): array
+{
+    if (empty($data['products']) || !is_array($data['products'])) {
+        return $data;
+    }
+
+    $fields = ['portfolio', 'differentiators', 'key_clients', 'sales_channels'];
+    $toTranslate = [];
+
+    foreach ($fields as $field) {
+        $current = $data['products'][$field] ?? '';
+        $normalized = normalizeProductText($current);
+        if ($normalized !== $current) {
+            $data['products'][$field] = $normalized;
+        }
+        if ($normalized === '') {
+            continue;
+        }
+        if (textNeedsLocalization($normalized)) {
+            $toTranslate[$field] = $normalized;
+        }
+    }
+
+    if (empty($toTranslate)) {
+        return $data;
+    }
+
+    try {
+        $prompt = buildProductsLocalizationPrompt($toTranslate, $payload);
+        $raw = callTogetherCompletions($prompt, $apiKey);
+        $translations = parseProductsLocalizationResponse($raw);
+        foreach ($translations as $field => $value) {
+            $clean = trim(constrainToRussianNarrative(sanitizeAiArtifacts((string)$value)));
+            if ($clean === '') {
+                continue;
+            }
+            $data['products'][$field] = rtrim($clean, '.; ');
+        }
+    } catch (Throwable $e) {
+        error_log('Products localization failed: ' . $e->getMessage());
+    }
+
+    return $data;
+}
+
+/**
+ * Готовит минималистичный промпт для переформулировки описаний
+ * продуктов и клиентов: модель должна вернуть JSON той же структуры.
+ */
+function buildProductsLocalizationPrompt(array $entries, array $payload): string
+{
+    $asset = $payload['asset_name'] ?? 'актив';
+    $json = json_encode($entries, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    return <<<PROMPT
+Ты маркетолог инвестиционного банка. Переведи и переформулируй на красивом русском языке описания блока "Продукты и клиенты" для компании "{$asset}".
+Важно:
+- Ответ верни строго в JSON с теми же ключами (portfolio, differentiators, key_clients, sales_channels).
+- Используй деловой стиль, максимум два предложения в каждом значении.
+- Не добавляй новых фактов и не оставляй английские слова, кроме обязательных названий брендов.
+
+Данные, которые нужно локализовать:
+{$json}
+PROMPT;
+}
+
+/**
+ * Безопасно парсит ответ модели и извлекает только ожидаемые ключи.
+ */
+function parseProductsLocalizationResponse(string $response): array
+{
+    $clean = trim($response);
+    if (str_starts_with($clean, '```')) {
+        $clean = preg_replace('/^```[a-z]*\s*/i', '', $clean);
+        $clean = preg_replace('/```$/', '', $clean);
+    }
+    $decoded = json_decode(trim($clean), true);
+    if (is_array($decoded)) {
+        return array_intersect_key($decoded, array_flip(['portfolio', 'differentiators', 'key_clients', 'sales_channels']));
+    }
+    return [];
+}
+
+function shouldEnhanceOverview(array $overview): bool
+{
+    $summary = trim((string)($overview['summary'] ?? ''));
+    if ($summary === '') {
+        return true;
+    }
+    if (stripos($summary, 'Информация уточняется') !== false) {
+        return true;
+    }
+    if (stripos($summary, 'Ключевые преимущества') !== false) {
+        return true;
+    }
+    if (substr_count($summary, '.') < 3) {
+        return true;
+    }
+    if (mb_strlen($summary) < 220) {
+        return true;
+    }
+    return false;
+}
+
+function buildOverviewRefinementPrompt(array $overview, array $payload): string
+{
+    $facts = [
+        'Название' => $payload['asset_name'] ?? '',
+        'Отрасль' => $payload['products_services'] ?? '',
+        'Регионы присутствия' => $payload['presence_regions'] ?? '',
+        'Бренды' => $payload['company_brands'] ?? '',
+        'Клиенты' => $payload['main_clients'] ?? '',
+        'Персонал' => $payload['personnel_count'] ?? '',
+        'Цель сделки' => $payload['deal_goal'] ?? '',
+        'Доля к продаже' => $payload['deal_share_range'] ?? '',
+        'Сильные стороны' => implode(', ', buildAdvantageSentences($payload)),
+        'Финансовые цели' => buildRevenueGrowthMessage($payload) ?? '',
+        'Загрузка мощностей' => $payload['production_load'] ?? '',
+        'Источник сайта' => buildWebsiteInsightSentence($payload) ?? '',
+    ];
+
+    $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
+    $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+    $existingSummary = trim((string)($overview['summary'] ?? ''));
+
+    return <<<PROMPT
+Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.
+- Стиль: не более четырёх предложений, деловой и живой тон без канцелярита.
+- Сформируй ровно четыре абзаца, в каждом по одному предложению. Делай переходы логичными: 1) кто компания и что делает, 2) география и клиенты, 3) конкурентные преимущества, 4) планы использования инвестиций и ожидаемый рост.
+- Используй только приведённые факты, не придумывай цифры или названия.
+- Внутри предложений соединяй части запятыми, избегай сухих списков.
+
+Исходная версия: "{$existingSummary}"
+
+Факты:
+{$factsJson}
+PROMPT;
+}
+
 function normalizeArray($value): array
 {
     if (is_array($value)) {
@@ -822,25 +1030,141 @@ function normalizeArray($value): array
     } elseif (is_string($value) && trim($value) !== '') {
         return [trim($value)];
     }
-    return ['Информация уточняется.'];
+    return ['Дополнительные сведения доступны по запросу.'];
 }
 
 function buildSalesChannelsText(array $payload): string
 {
     $channels = [];
-    if (!empty($payload['offline_sales_presence'])) {
-        $channels[] = 'Оффлайн: ' . $payload['offline_sales_presence'];
+
+    // Offline presence may come as «нет», поэтому нормализуем значение заранее.
+    $offline = normalizeChannelValue($payload['offline_sales_presence'] ?? '');
+    if ($offline !== '') {
+        $channels[] = 'Оффлайн: ' . $offline;
     }
-    if (!empty($payload['online_sales_channels'])) {
-        $channels[] = 'Онлайн: ' . $payload['online_sales_channels'];
+
+    // Online channels бывают перечислены списком — не скрываем детали.
+    $online = normalizeChannelValue($payload['online_sales_channels'] ?? '');
+    if ($online !== '') {
+        $channels[] = 'Онлайн: ' . $online;
     }
-    if (!empty($payload['contract_production_usage'])) {
-        $channels[] = 'Contract manufacturing: ' . $payload['contract_production_usage'];
+
+    // Contract manufacturing часто содержит английские ответы (yes/no).
+    $contract = normalizeChannelValue($payload['contract_production_usage'] ?? '');
+    if ($contract !== '') {
+        $channels[] = 'Контрактное производство: ' . $contract;
     }
+
     if (empty($channels)) {
         return 'Каналы продаж уточняются.';
     }
+
     return implode('; ', $channels);
+}
+
+/**
+ * Приводит значения каналов к читабельной форме и отбрасывает ответы
+ * вроде «no», «нет», «n/a».
+ */
+function normalizeChannelValue($value): string
+{
+    if (!is_scalar($value)) {
+        return '';
+    }
+
+    $text = trim((string)$value);
+    if ($text === '') {
+        return '';
+    }
+
+    $plain = mb_strtolower($text, 'UTF-8');
+    $negativeMarkers = ['нет', 'no', 'none', 'n/a', 'не указано', 'не используется', '0', '-', '—'];
+    if (in_array($plain, $negativeMarkers, true)) {
+        return '';
+    }
+
+    if (preg_match('/^(no|нет)(\b|[^a-zA-ZА-Яа-я0-9])/iu', $text)) {
+        return '';
+    }
+
+    return $text;
+}
+
+/**
+ * Разворачивает вложенные массивы/JSON со списками продуктов
+ * в единую строку-маркёр.
+ */
+function normalizeProductText($value): string
+{
+    if (is_array($value)) {
+        return flattenProductArray($value);
+    }
+
+    $string = trim((string)$value);
+    if ($string === '') {
+        return '';
+    }
+
+    $first = substr($string, 0, 1);
+    $last = substr($string, -1);
+    if (($first === '[' && $last === ']') || ($first === '{' && $last === '}')) {
+        $decoded = json_decode($string, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return flattenProductArray($decoded);
+        }
+    }
+
+    return preg_replace('/[\[\]{}]/', '', $string);
+}
+
+/**
+ * Ходим по массиву произвольной глубины и собираем уникальные строки.
+ */
+function flattenProductArray($data): string
+{
+    if (!is_array($data)) {
+        return trim((string)$data);
+    }
+    $result = [];
+    $iterator = function ($item) use (&$result, &$iterator) {
+        if (is_array($item)) {
+            array_walk($item, $iterator);
+            return;
+        }
+        $text = trim((string)$item);
+        if ($text !== '') {
+            $result[] = $text;
+        }
+    };
+    array_walk($data, $iterator);
+    $result = array_unique($result);
+    return implode(', ', $result);
+}
+
+/**
+ * Если в строке нет кириллицы или остались служебные скобки,
+ * считаем, что её нужно «одомашнить».
+ */
+function textNeedsLocalization(string $text): bool
+{
+    if ($text === '') {
+        return false;
+    }
+    if (preg_match('/[{}[\]]/', $text)) {
+        return true;
+    }
+    if (!containsCyrillic($text)) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Проверяем наличие кириллических символов в строке.
+ */
+function containsCyrillic(string $text): bool
+{
+    return (bool)preg_match('/\p{Cyrillic}/u', $text);
 }
 
 function buildHighlightBullets(array $payload, string $placeholder): array
@@ -859,9 +1183,9 @@ function buildHighlightBullets(array $payload, string $placeholder): array
 
 function buildHeroSummary(?string $aiSummary, array $payload, string $fallback): string
 {
-    $summary = trim((string)$aiSummary);
+    $summary = trim(constrainToRussianNarrative(sanitizeAiArtifacts((string)$aiSummary)));
     if ($summary !== '' && !looksLikeStructuredDump($summary)) {
-        return prettifySummary($summary);
+        return enrichSummaryWithAdvantages($summary, $payload);
     }
 
     $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
@@ -891,18 +1215,516 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
         $sentences[] = "Команда из {$personnel} специалистов готова поддержать масштабирование при входе инвестора.";
     }
 
+    $advantages = buildAdvantageSentences($payload);
+    if (!empty($advantages)) {
+        $sentences[] = 'Ключевые преимущества: ' . implode(', ', array_slice($advantages, 0, 3)) . '.';
+    }
+    $sentences = array_merge($sentences, buildAdvantageSummarySentences($payload));
+    $prospect = buildInvestorProspectSentence($payload);
+    if ($prospect) {
+        $sentences[] = $prospect;
+    }
+    $websiteSentence = buildWebsiteInsightSentence($payload);
+    if ($websiteSentence) {
+        $sentences[] = $websiteSentence;
+    }
+
     if (count($sentences) < 2) {
         $sentences[] = $fallback;
     }
 
-    return implode(' ', array_map('prettifySummary', $sentences));
+    return buildParagraphsFromSentences(
+        $sentences,
+        buildOverviewFallbackSentences($payload),
+        4,
+        2
+    );
+}
+
+function enrichSummaryWithAdvantages(string $summary, array $payload): string
+{
+    $sentences = [$summary];
+    $advantages = buildAdvantageSentences($payload);
+    if (!empty($advantages)) {
+        $sentences[] = 'Ключевые преимущества: ' . implode(', ', array_slice($advantages, 0, 3));
+    }
+    $sentences = array_merge($sentences, buildAdvantageSummarySentences($payload));
+    $prospect = buildInvestorProspectSentence($payload);
+    if ($prospect) {
+        $sentences[] = $prospect;
+    }
+    $websiteSentence = buildWebsiteInsightSentence($payload);
+    if ($websiteSentence) {
+        $sentences[] = $websiteSentence;
+    }
+    return buildParagraphsFromSentences(
+        $sentences,
+        buildOverviewFallbackSentences($payload),
+        4,
+        2
+    );
+}
+
+function buildAdvantageSentences(array $payload): array
+{
+    $advantages = [];
+    if (isMeaningfulAdvantageValue($payload['company_brands'] ?? '')) {
+        $advantages[] = 'узнаваемые бренды ' . trim($payload['company_brands']);
+    }
+    if (isMeaningfulAdvantageValue($payload['own_production'] ?? '')) {
+        $advantages[] = 'собственная производственная база';
+    }
+    if (isMeaningfulAdvantageValue($payload['presence_regions'] ?? '')) {
+        $advantages[] = 'география присутствия ' . trim($payload['presence_regions']);
+    }
+    if (isMeaningfulAdvantageValue($payload['main_clients'] ?? '')) {
+        $advantages[] = 'портфель ключевых клиентов: ' . trim($payload['main_clients']);
+    }
+    if (isMeaningfulAdvantageValue($payload['online_sales_share'] ?? '')) {
+        $advantages[] = 'цифровые каналы продаж с долей ' . trim($payload['online_sales_share']);
+    }
+    if (hasMeaningfulCapacity($payload['production_capacity'] ?? '')) {
+        $advantages[] = 'производственные мощности ' . trim($payload['production_capacity']);
+    }
+
+    $trimmed = array_map(fn($text) => rtrim($text, '.; '), $advantages);
+    return array_slice($trimmed, 0, 5);
+}
+
+/**
+ * Развёрнутая версия преимуществ: формируем отдельные предложения с деталями,
+ * чтобы можно было равномерно распределить их по абзацам overview.
+ */
+function buildAdvantageSummarySentences(array $payload): array
+{
+    $sentences = [];
+
+    $brands = trim((string)($payload['company_brands'] ?? ''));
+    if (isMeaningfulAdvantageValue($brands)) {
+        $sentences[] = "Портфель брендов {$brands} поддерживает узнаваемость и премиальный образ компании.";
+    }
+
+    $production = trim((string)($payload['own_production'] ?? ''));
+    if (isMeaningfulAdvantageValue($production)) {
+        $sentences[] = 'Собственная производственная база обеспечивает контроль качества и гибкость выпуска.';
+    }
+
+    $capacity = trim((string)($payload['production_capacity'] ?? ''));
+    if (hasMeaningfulCapacity($capacity)) {
+        $sentences[] = "Производственные мощности составляют {$capacity}, что создаёт запас для наращивания объёмов.";
+    }
+
+    $sites = trim((string)($payload['production_sites_count'] ?? ''));
+    $siteCount = parseIntFromString($sites);
+    if ($siteCount !== null && $siteCount > 0) {
+        $word = pluralizeRu($siteCount, 'площадку', 'площадки', 'площадок');
+        $sentences[] = "Инфраструктура включает {$siteCount} {$word}, распределённых по ключевым регионам.";
+    }
+
+    $clients = trim((string)($payload['main_clients'] ?? ''));
+    if (isMeaningfulAdvantageValue($clients)) {
+        $sentences[] = "Клиентская база включает {$clients}, что снижает зависимость от единичных контрактов.";
+    }
+
+    $channels = trim((string)($payload['online_sales_channels'] ?? ''));
+    if (isMeaningfulAdvantageValue($channels)) {
+        $sentences[] = "Онлайн-каналы продаж развиты через {$channels}, что ускоряет привлечение новых покупателей.";
+    }
+
+    $regions = trim((string)($payload['presence_regions'] ?? ''));
+    if (isMeaningfulAdvantageValue($regions)) {
+        $sentences[] = "Диверсифицированное присутствие в регионах {$regions} позволяет балансировать спрос.";
+    }
+
+    return array_values(array_filter(array_map('trim', $sentences), fn($sentence) => $sentence !== ''));
+}
+
+function buildInvestorProspectSentence(array $payload): ?string
+{
+    $segments = [];
+    if (!empty($payload['deal_goal'])) {
+        $segments[] = 'Инвестиции планируется направить на ' . trim($payload['deal_goal']) . '.';
+    }
+
+    $growthMessage = buildRevenueGrowthMessage($payload);
+    if ($growthMessage) {
+        $segments[] = $growthMessage;
+    }
+
+    if (!empty($payload['production_load'])) {
+        $segments[] = 'Текущая загрузка мощностей ' . trim($payload['production_load']) . ' оставляет потенциал для масштабирования.';
+    }
+
+    if (empty($segments)) {
+        return null;
+    }
+
+    return implode(' ', array_map('prettifySummary', $segments));
+}
+
+function buildRevenueGrowthMessage(array $payload): ?string
+{
+    $financial = $payload['financial']['revenue'] ?? [];
+    $fact = parseNumericValue($financial['2024_fact'] ?? null);
+    $budget = parseNumericValue($financial['2025_budget'] ?? null);
+    if ($fact === null || $budget === null || $budget <= 0 || $fact <= 0 || $budget <= $fact) {
+        return null;
+    }
+    $growthPercent = (($budget - $fact) / $fact) * 100;
+    $factText = number_format($fact, 0, ',', ' ');
+    $budgetText = number_format($budget, 0, ',', ' ');
+    $growthText = number_format($growthPercent, 1, ',', ' ');
+    return "Бюджет 2025 предусматривает рост выручки с {$factText} до {$budgetText} млн ₽ (+{$growthText}%).";
+}
+
+function parseNumericValue($value): ?float
+{
+    if (!is_scalar($value)) {
+        return null;
+    }
+    $string = str_replace(['руб', '₽', 'млн', 'тыс', '%'], '', (string)$value);
+    $string = str_replace([' ', ' '], '', $string);
+    $string = str_replace(',', '.', $string);
+    if ($string === '' || !is_numeric($string)) {
+        return null;
+    }
+    return (float)$string;
+}
+
+function buildWebsiteInsightSentence(array $payload): ?string
+{
+    $snapshot = trim((string)($payload['company_website_snapshot'] ?? ''));
+    if ($snapshot === '') {
+        return null;
+    }
+    $clean = preg_replace('/\s+/', ' ', $snapshot);
+    $sentences = preg_split('/(?<=[\.\!\?])\s+/u', $clean);
+    $excerpt = '';
+    foreach ($sentences as $sentence) {
+        $sentence = trim($sentence);
+        if ($sentence === '') {
+            continue;
+        }
+        $excerpt .= ($excerpt === '' ? '' : ' ') . $sentence;
+        if (mb_strlen($excerpt) >= 220 || mb_substr($excerpt, -1) === '.' || mb_substr($excerpt, -1) === '!' || mb_substr($excerpt, -1) === '?') {
+            break;
+        }
+    }
+    $excerpt = trim($excerpt);
+    if ($excerpt === '') {
+        return null;
+    }
+    if (mb_strlen($excerpt) > 260) {
+        $excerpt = rtrim(mb_substr($excerpt, 0, 257), ',; ') . '…';
+    }
+    $website = trim((string)($payload['company_website'] ?? ''));
+    $prefix = $website !== '' ? "Сайт {$website}" : 'Официальный сайт компании';
+    return $prefix . ' отмечает: «' . $excerpt . '»';
+}
+
+/**
+ * Генерирует fallback-предложения для overview на случай,
+ * если основной ответ модели будет слишком коротким.
+ */
+function buildOverviewFallbackSentences(array $payload): array
+{
+    $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
+    $regions = trim((string)($payload['presence_regions'] ?? ''));
+    $clients = trim((string)($payload['main_clients'] ?? ''));
+    $dealGoal = trim((string)($payload['deal_goal'] ?? ''));
+    $growth = buildRevenueGrowthMessage($payload);
+    $advantages = buildAdvantageSentences($payload);
+    $website = buildWebsiteInsightSentence($payload);
+
+    $sentences = [];
+    $sentences[] = $assetName !== '' ? "{$assetName} готова к диалогу с инвестором на платформе SmartBizSell." : 'Команда актива готова к диалогу с инвестором на платформе SmartBizSell.';
+    if ($regions !== '') {
+        $sentences[] = "География деятельности охватывает {$regions}, что поддерживает диверсификацию спроса.";
+    }
+    if (!empty($advantages)) {
+        $sentences[] = 'Ключевые преимущества: ' . implode(', ', array_slice($advantages, 0, 3)) . '.';
+    } elseif ($clients !== '') {
+        $sentences[] = "Компания работает с клиентами сегмента {$clients} и удерживает их за счёт сервиса.";
+    }
+    $sentences = array_merge($sentences, buildAdvantageSummarySentences($payload));
+    if ($dealGoal !== '') {
+        $sentences[] = "Инвестиционный запрос связан с задачей {$dealGoal}.";
+    } elseif ($growth) {
+        $sentences[] = $growth;
+    }
+    if ($website) {
+        $sentences[] = $website;
+    }
+    $sentences[] = 'Команда SmartBizSell сопровождает подготовку VDR и процесс due diligence.';
+
+    return array_values(array_filter(array_map('trim', $sentences), fn($sentence) => $sentence !== ''));
+}
+
+function isMeaningfulAdvantageValue($value): bool
+{
+    if (!is_scalar($value)) {
+        return false;
+    }
+    $normalized = mb_strtolower(trim((string)$value));
+    if ($normalized === '') {
+        return false;
+    }
+    $banList = ['нет', 'no', 'none', 'n/a', 'офис', 'office', '0', '-', '—'];
+    foreach ($banList as $ban) {
+        if ($normalized === $ban) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function hasMeaningfulCapacity($value): bool
+{
+    if (!isMeaningfulAdvantageValue($value)) {
+        return false;
+    }
+    $string = trim((string)$value);
+    if ($string === '') {
+        return false;
+    }
+    if (str_contains(mb_strtolower($string), 'офис')) {
+        return false;
+    }
+    return (bool)preg_match('/\d/', $string);
+}
+
+function parseIntFromString($value): ?int
+{
+    if (!is_scalar($value)) {
+        return null;
+    }
+    $digits = preg_replace('/[^\d]/', '', (string)$value);
+    if ($digits === '') {
+        return null;
+    }
+    return (int)$digits;
+}
+
+function pluralizeRu(int $number, string $one, string $two, string $many): string
+{
+    $mod10 = $number % 10;
+    $mod100 = $number % 100;
+    if ($mod10 === 1 && $mod100 !== 11) {
+        return $one;
+    }
+    if ($mod10 >= 2 && $mod10 <= 4 && ($mod100 < 10 || $mod100 >= 20)) {
+        return $two;
+    }
+    return $many;
+}
+
+function ensureSentence(string $text): string
+{
+    $clean = prettifySummary($text);
+    if ($clean === '') {
+        return $clean;
+    }
+    $clean = mb_strtoupper(mb_substr($clean, 0, 1)) . mb_substr($clean, 1);
+    $lastChar = mb_substr($clean, -1);
+    if (!in_array($lastChar, ['.', '!', '?'], true)) {
+        $clean .= '.';
+    }
+    $clean = preg_replace_callback('/([.!?]\s*)(\p{Ll})/u', static fn($m) => $m[1] . mb_strtoupper($m[2]), $clean);
+    return $clean;
+}
+
+/**
+ * Собирает итоговый текст overview, гарантируя нужное число абзацев
+ * и аккуратный вид предложений. Каждый абзац может включать несколько
+ * предложений (например, по 3, как требует текущий дизайн).
+ */
+function buildParagraphsFromSentences(
+    array $sentences,
+    array $fallbackSentences = [],
+    int $requiredParagraphs = 4,
+    int $sentencesPerParagraph = 2
+): string {
+    $totalNeeded = $requiredParagraphs * $sentencesPerParagraph;
+    $normalized = normalizeSentenceList($sentences, $totalNeeded);
+    $fallbackNormalized = normalizeSentenceList($fallbackSentences, $totalNeeded);
+
+    foreach ($fallbackNormalized as $sentence) {
+        if (count($normalized) >= $totalNeeded) {
+            break;
+        }
+        if (!in_array($sentence, $normalized, true)) {
+            $normalized[] = $sentence;
+        }
+    }
+
+    if (empty($normalized)) {
+        return '';
+    }
+
+    if (count($normalized) < $totalNeeded) {
+        foreach ($fallbackNormalized as $sentence) {
+            if (count($normalized) >= $totalNeeded) {
+                break;
+            }
+            if (!in_array($sentence, $normalized, true)) {
+                $normalized[] = $sentence;
+            }
+        }
+    }
+
+    while (count($normalized) < $totalNeeded) {
+        $normalized[] = end($normalized);
+    }
+
+    $paragraphs = [];
+    for ($i = 0; $i < $requiredParagraphs; $i++) {
+        $start = $i * $sentencesPerParagraph;
+        $chunk = array_slice($normalized, $start, $sentencesPerParagraph);
+        while (count($chunk) < $sentencesPerParagraph) {
+            $chunk[] = end($normalized);
+        }
+        $paragraphs[] = implode(' ', $chunk);
+    }
+
+    return implode("\n\n", $paragraphs);
+}
+
+/**
+ * Нормализует массив предложений: убирает пустые строки и дубли,
+ * приводит предложения к каноничному виду.
+ */
+function normalizeSentenceList(array $items, int $limit): array
+{
+    $normalized = [];
+    foreach ($items as $item) {
+        $sentence = trim((string)$item);
+        if ($sentence === '') {
+            continue;
+        }
+        $sentence = ensureSentence($sentence);
+        if ($sentence === '') {
+            continue;
+        }
+        if (!in_array($sentence, $normalized, true)) {
+            $normalized[] = $sentence;
+        }
+        if (count($normalized) >= $limit) {
+            break;
+        }
+    }
+    return $normalized;
+}
+
+/**
+ * Делит произвольный текст на предложения по .!? — подходит для
+ * дальнейшего форматирования AI-ответов.
+ */
+function splitIntoSentences(string $text): array
+{
+    $clean = trim($text);
+    if ($clean === '') {
+        return [];
+    }
+    $parts = preg_split('/(?<=[.!?])\s+/u', $clean);
+    if ($parts === false) {
+        return [$clean];
+    }
+    return array_values(array_filter(array_map('trim', $parts), fn($part) => $part !== ''));
+}
+
+/**
+ * Удаляет сервисные фразы (“Human: …”, “Assistant: …”, “PMID …”) и прочие
+ * артефакты, которые Together.ai иногда добавляет в ответ.
+ */
+function sanitizeAiArtifacts(string $text): string
+{
+    if ($text === '') {
+        return '';
+    }
+
+    $clean = str_replace(['**', '```'], '', $text);
+    $clean = preg_replace('/PMID:[^\n]+/iu', '', $clean);
+    $clean = preg_replace('/Note:[^\n]+/iu', '', $clean);
+
+    $conversationMarkers = ['Human:', 'Assistant:', 'AI:', 'User:'];
+    foreach ($conversationMarkers as $marker) {
+        $pos = stripos($clean, $marker);
+        if ($pos !== false) {
+            $clean = substr($clean, 0, $pos);
+            break;
+        }
+    }
+
+    $lines = preg_split('/\r\n|\r|\n/', $clean);
+    $buffer = [];
+    foreach ($lines as $line) {
+        $trim = trim($line);
+        if ($trim === '') {
+            continue;
+        }
+
+        if (preg_match('/^(Human|Assistant)\b/i', $trim)) {
+            $parts = explode(':', $trim, 2);
+            $trim = isset($parts[1]) ? trim($parts[1]) : '';
+        }
+
+        if ($trim === '' || preg_match('/^final[^:]*:?$/i', $trim)) {
+            continue;
+        }
+
+        $buffer[] = $trim;
+    }
+
+    $result = trim(preg_replace('/\s+/', ' ', implode(' ', $buffer)));
+    return $result;
+}
+
+/**
+ * Удаляет предложения, где нет кириллицы или присутствуют инструкции на английском/китайском.
+ */
+function constrainToRussianNarrative(string $text): string
+{
+    if ($text === '') {
+        return '';
+    }
+    $parts = preg_split('/(?<=[.!?])\s+/u', $text);
+    if ($parts === false) {
+        $parts = [$text];
+    }
+    $kept = [];
+    foreach ($parts as $sentence) {
+        $trim = trim($sentence);
+        if ($trim === '') {
+            continue;
+        }
+        if (preg_match('/\p{Han}/u', $trim)) {
+            continue;
+        }
+        if (preg_match('/\b(If you|Here is|Please|Let me|Final version|Final,|Corrected version)\b/i', $trim)) {
+            continue;
+        }
+        $cyrCount = preg_match_all('/\p{Cyrillic}/u', $trim);
+        $latCount = preg_match_all('/[A-Za-z]/u', $trim);
+        if ($cyrCount === 0 && stripos($trim, 'SmartBizSell') === false) {
+            continue;
+        }
+        if ($latCount > 0 && $cyrCount > 0 && ($latCount / max($cyrCount, 1)) > 1.5) {
+            continue;
+        }
+        $kept[] = $trim;
+    }
+    return trim(implode(' ', $kept));
 }
 
 function prettifySummary(string $summary): string
 {
     $plain = trim($summary);
     $plain = preg_replace('/\s+/', ' ', $plain);
-    $plain = preg_replace('/[;••]/u', '.', $plain);
+    $plain = preg_replace('/[•]/u', ', ', $plain);
+    $plain = preg_replace('/;+/', ', ', $plain);
+    $plain = preg_replace('/\s+,/', ', ', $plain);
+    $plain = preg_replace('/,\s+/', ', ', $plain);
+    $plain = preg_replace('/\s+,/u', ', ', $plain);
     $plain = preg_replace('/[{}[\]()]/u', '', $plain);
     $plain = preg_replace('/["“”]/u', '"', $plain);
     $plain = preg_replace('/\.+/u', '.', $plain);
