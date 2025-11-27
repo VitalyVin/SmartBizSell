@@ -1068,6 +1068,8 @@ $dcfData = null;
 $dcfSourceStatus = null;
 $savedTeaserHtml = null;
 $savedTeaserTimestamp = null;
+$savedInvestorHtml = null;
+$savedInvestorTimestamp = null;
 
 $latestSubmittedStmt = $pdo->prepare("
     SELECT *
@@ -1086,9 +1088,15 @@ if ($latestForm) {
 
     if (!empty($latestForm['data_json'])) {
         $teaserDecoded = json_decode($latestForm['data_json'], true);
-        if (is_array($teaserDecoded) && !empty($teaserDecoded['teaser_snapshot']['html'])) {
-            $savedTeaserHtml = $teaserDecoded['teaser_snapshot']['html'];
-            $savedTeaserTimestamp = $teaserDecoded['teaser_snapshot']['generated_at'] ?? null;
+        if (is_array($teaserDecoded)) {
+            if (!empty($teaserDecoded['teaser_snapshot']['html'])) {
+                $savedTeaserHtml = $teaserDecoded['teaser_snapshot']['html'];
+                $savedTeaserTimestamp = $teaserDecoded['teaser_snapshot']['generated_at'] ?? null;
+            }
+            if (!empty($teaserDecoded['investor_snapshot']['html'])) {
+                $savedInvestorHtml = $teaserDecoded['investor_snapshot']['html'];
+                $savedInvestorTimestamp = $teaserDecoded['investor_snapshot']['generated_at'] ?? null;
+            }
         }
     }
 } else {
@@ -1203,6 +1211,13 @@ if ($latestForm) {
         .btn-secondary:hover {
             border-color: var(--primary-color);
             color: var(--primary-color);
+        }
+        .btn-investor {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 220px;
         }
         .forms-table {
             background: white;
@@ -1958,6 +1973,148 @@ if ($latestForm) {
             color: var(--text-secondary);
             text-align: center;
         }
+        .investor-section {
+            margin-top: 32px;
+            padding: 32px;
+            background: #fff;
+            border-radius: 28px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 25px 55px rgba(15,23,42,0.12);
+        }
+        .investor-section__intro {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .investor-section__intro h3 {
+            margin: 0 0 6px;
+            font-size: 24px;
+            letter-spacing: -0.01em;
+            font-family: 'Space Grotesk', 'Manrope', 'Inter', sans-serif;
+        }
+        .investor-section__intro p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+        .investor-section__count {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary-color);
+            padding: 6px 14px;
+            background: rgba(99,102,241,0.12);
+            border-radius: 999px;
+        }
+        .investor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .investor-card {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 20px;
+            padding: 20px;
+            background: rgba(248,250,252,0.95);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .investor-card[data-source="ai"] {
+            background: rgba(241,245,255,0.95);
+            border-color: rgba(99,102,241,0.3);
+        }
+        .investor-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(15,23,42,0.15);
+        }
+        .investor-card__head h4 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .investor-card__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            border-radius: 999px;
+            background: rgba(14, 165, 233, 0.15);
+            color: #0369a1;
+            margin-top: 6px;
+        }
+        .investor-card__focus {
+            margin: 0;
+            color: var(--text-secondary);
+            line-height: 1.45;
+        }
+        .investor-card__check {
+            margin: 0;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .investor-card__reason {
+            margin: 0;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .investor-card__actions {
+            margin-top: auto;
+        }
+        .btn-investor-send {
+            width: 100%;
+            border: 1px solid rgba(15, 23, 42, 0.2);
+            background: #fff;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .btn-investor-send:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+        .btn-investor-send.is-sent {
+            background: rgba(34,197,94,0.2);
+            border-color: rgba(34,197,94,0.6);
+            color: #15803d;
+        }
+        .investor-controls {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px dashed rgba(99,102,241,0.35);
+            border-radius: 18px;
+            background: rgba(255,255,255,0.85);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .investor-status {
+            min-height: 18px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .investor-progress {
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(99,102,241,0.15);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .investor-progress.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .investor-progress__bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #0ea5e9, #6366f1);
+            transition: width 0.3s ease;
+        }
+        .investor-result {
+            margin-top: 18px;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
 </head>
@@ -2308,6 +2465,35 @@ if ($latestForm) {
                         <p style="color: var(--text-secondary); margin: 0;">Нажмите «Создать тизер», чтобы получить структурированный документ для инвесторов.</p>
                     <?php endif; ?>
                 </div>
+                <div
+                    class="investor-controls"
+                    id="investor-controls"
+                    data-has-teaser="<?php echo $savedTeaserHtml ? '1' : '0'; ?>"
+                    data-has-investors="<?php echo $savedInvestorHtml ? '1' : '0'; ?>"
+                    style="<?php echo ($savedTeaserHtml || $savedInvestorHtml) ? '' : 'display:none;'; ?>"
+                >
+                    <button
+                        type="button"
+                        class="btn btn-primary btn-investor"
+                        id="generate-investors-btn"
+                        <?php echo $savedTeaserHtml ? '' : 'disabled'; ?>
+                    >
+                        Найти инвестора
+                    </button>
+                    <div class="investor-status" id="investor-status">
+                        <?php if ($savedInvestorTimestamp): ?>
+                            Последний подбор: <?php echo date('d.m.Y H:i', strtotime($savedInvestorTimestamp)); ?>
+                        <?php endif; ?>
+                    </div>
+                    <div class="investor-progress" id="investor-progress" aria-hidden="true">
+                        <div class="investor-progress__bar" id="investor-progress-bar"></div>
+                    </div>
+                </div>
+                <div class="investor-result" id="investor-result">
+                    <?php if ($savedInvestorHtml): ?>
+                        <?php echo $savedInvestorHtml; ?>
+                    <?php endif; ?>
+                </div>
             </div>
         <?php else: ?>
             <div class="teaser-section">
@@ -2322,6 +2508,8 @@ if ($latestForm) {
     <script>
         (() => {
             let teaserProgressTimer = null;
+            let investorProgressTimer = null;
+            let investorCtaBound = false;
 
             const getTeaserElements = () => ({
                 teaserBtn: document.getElementById('generate-teaser-btn'),
@@ -2331,6 +2519,12 @@ if ($latestForm) {
                 teaserSection: document.getElementById('teaser-section'),
                 teaserProgress: document.getElementById('teaser-progress'),
                 teaserProgressBar: document.getElementById('teaser-progress-bar'),
+                investorBtn: document.getElementById('generate-investors-btn'),
+                investorStatus: document.getElementById('investor-status'),
+                investorResult: document.getElementById('investor-result'),
+                investorControls: document.getElementById('investor-controls'),
+                investorProgress: document.getElementById('investor-progress'),
+                investorProgressBar: document.getElementById('investor-progress-bar'),
             });
 
             const formatRuDateTime = (isoString) => {
@@ -2384,6 +2578,40 @@ if ($latestForm) {
                 }, success ? 700 : 0);
             };
 
+            const showInvestorProgress = (elements) => {
+                const { investorProgress, investorProgressBar } = elements;
+                if (!investorProgress || !investorProgressBar) {
+                    return;
+                }
+                investorProgress.setAttribute('aria-hidden', 'false');
+                investorProgress.classList.add('is-visible');
+                investorProgressBar.style.width = '0%';
+                let current = 0;
+                clearInterval(investorProgressTimer);
+                investorProgressTimer = setInterval(() => {
+                    const increment = Math.random() * 8 + 4;
+                    current = Math.min(current + increment, 85);
+                    investorProgressBar.style.width = current.toFixed(1) + '%';
+                    if (current >= 85) {
+                        clearInterval(investorProgressTimer);
+                    }
+                }, 350);
+            };
+
+            const completeInvestorProgress = (elements, success = true) => {
+                const { investorProgress, investorProgressBar } = elements;
+                if (!investorProgress || !investorProgressBar) {
+                    return;
+                }
+                clearInterval(investorProgressTimer);
+                investorProgressBar.style.width = success ? '100%' : '0%';
+                setTimeout(() => {
+                    investorProgress.classList.remove('is-visible');
+                    investorProgress.setAttribute('aria-hidden', 'true');
+                    investorProgressBar.style.width = '0%';
+                }, success ? 600 : 0);
+            };
+
             const handleTeaserPrint = () => {
                 const { teaserPrintBtn, teaserSection } = getTeaserElements();
                 if (!teaserPrintBtn || !teaserSection || teaserPrintBtn.disabled) {
@@ -2411,13 +2639,39 @@ if ($latestForm) {
 
             const handleTeaserGenerate = async () => {
                 const elements = getTeaserElements();
-                const { teaserBtn, teaserStatus, teaserResult, teaserPrintBtn } = elements;
+                const {
+                    teaserBtn,
+                    teaserStatus,
+                    teaserResult,
+                    teaserPrintBtn,
+                    investorBtn,
+                    investorStatus,
+                    investorResult,
+                    investorControls,
+                } = elements;
                 if (!teaserBtn || !teaserStatus || !teaserResult) {
                     return;
                 }
+                let teaserGenerated = false;
                 teaserBtn.disabled = true;
                 teaserStatus.innerHTML = '<span class="teaser-spinner">Генерируем тизер...</span>';
                 teaserResult.style.opacity = '0.6';
+                if (investorBtn) {
+                    investorBtn.style.display = 'none';
+                    investorBtn.disabled = true;
+                }
+                const previousInvestorHtml = investorResult ? investorResult.innerHTML : '';
+                const hadInvestors = !!(investorControls && investorControls.dataset.hasInvestors === '1');
+                if (investorControls) {
+                    investorControls.style.display = 'none';
+                    investorControls.dataset.hasInvestors = '0';
+                }
+                if (investorResult) {
+                    investorResult.innerHTML = '';
+                }
+                if (investorStatus) {
+                    investorStatus.textContent = '';
+                }
                 showTeaserProgress(elements);
 
                 try {
@@ -2425,7 +2679,7 @@ if ($latestForm) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
-                        body: JSON.stringify({}),
+                        body: JSON.stringify({ action: 'teaser' }),
                     });
 
                     const payload = await response.json();
@@ -2443,6 +2697,16 @@ if ($latestForm) {
                     if (teaserPrintBtn) {
                         teaserPrintBtn.disabled = false;
                     }
+                    if (investorBtn) {
+                        investorBtn.style.display = 'inline-flex';
+                        investorBtn.disabled = false;
+                    }
+                    if (investorControls) {
+                        investorControls.style.display = 'flex';
+                        investorControls.dataset.hasTeaser = '1';
+                        investorControls.dataset.hasInvestors = '0';
+                    }
+                    teaserGenerated = true;
                     completeTeaserProgress(elements, true);
                 } catch (error) {
                     console.error('Teaser generation failed', error);
@@ -2454,7 +2718,93 @@ if ($latestForm) {
                     if (!teaserStatus.textContent) {
                         teaserStatus.textContent = 'Не удалось получить статус обновления.';
                     }
+                    if (!teaserGenerated && hadInvestors && investorControls) {
+                        investorControls.style.display = 'flex';
+                        investorControls.dataset.hasInvestors = '1';
+                    }
+                    if (!teaserGenerated && hadInvestors && investorBtn) {
+                        investorBtn.style.display = 'inline-flex';
+                        investorBtn.disabled = false;
+                    }
+                    if (!teaserGenerated && hadInvestors && investorResult && previousInvestorHtml) {
+                        investorResult.innerHTML = previousInvestorHtml;
+                    }
+                    completeInvestorProgress(elements, false);
                 }
+            };
+
+            const handleInvestorGenerate = async () => {
+                const { investorBtn, investorStatus, investorResult, investorControls } = getTeaserElements();
+                if (!investorBtn || !investorStatus || !investorResult) {
+                    return;
+                }
+                const previousInvestorHtml = investorResult.innerHTML;
+                investorBtn.disabled = true;
+                investorStatus.textContent = 'Подбираем релевантных инвесторов...';
+                investorResult.innerHTML = '';
+                if (investorControls) {
+                    investorControls.dataset.hasInvestors = '0';
+                }
+                showInvestorProgress(getTeaserElements());
+                try {
+                    const response = await fetch('generate_teaser.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ action: 'investors' }),
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || 'Не удалось подобрать инвесторов.');
+                    }
+                    investorResult.innerHTML = payload.html;
+                    const formatted = formatRuDateTime(payload.generated_at);
+                    investorStatus.textContent = formatted
+                        ? `Последний подбор: ${formatted}`
+                        : 'Подбор инвесторов обновлён.';
+                    if (investorControls) {
+                        investorControls.dataset.hasInvestors = '1';
+                    }
+                    completeInvestorProgress(getTeaserElements(), true);
+                } catch (error) {
+                    console.error('Investor search failed', error);
+                    investorStatus.textContent = error.message || 'Ошибка подбора инвесторов.';
+                    if (investorControls) {
+                        investorControls.dataset.hasInvestors = '0';
+                    }
+                    completeInvestorProgress(getTeaserElements(), false);
+                    investorResult.innerHTML = previousInvestorHtml;
+                    if (previousInvestorHtml && investorControls) {
+                        investorControls.dataset.hasInvestors = '1';
+                    }
+                } finally {
+                    investorBtn.disabled = false;
+                }
+            };
+
+            const handleInvestorSend = (event) => {
+                const button = event.target.closest('.btn-investor-send');
+                if (!button) {
+                    return;
+                }
+                event.preventDefault();
+                if (button.disabled) {
+                    return;
+                }
+                const investorName = button.dataset.investor || 'инвестор';
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = 'Отправлено';
+                button.classList.add('is-sent');
+                const { teaserStatus } = getTeaserElements();
+                if (teaserStatus) {
+                    teaserStatus.textContent = `Мы подготовим отправку тизера для инвестора ${investorName}.`;
+                }
+                setTimeout(() => {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                    button.classList.remove('is-sent');
+                }, 3200);
             };
 
             const initDcfPrint = () => {
@@ -2528,6 +2878,7 @@ if ($latestForm) {
                         chart: {
                             type: 'line',
                             height: 300,
+                            parentHeightOffset: 10,
                             toolbar: { show: false },
                             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                         },
@@ -2575,9 +2926,15 @@ if ($latestForm) {
                         },
                         legend: {
                             position: 'top',
-                            horizontalAlign: 'center',
+                            horizontalAlign: 'left',
                             fontSize: '12px',
-                            markers: { radius: 12 },
+                            offsetY: 0,
+                            offsetX: 0,
+                            markers: { width: 10, height: 10, radius: 4 },
+                            itemMargin: {
+                                horizontal: 12,
+                                vertical: 0,
+                            },
                         },
                         tooltip: {
                             theme: 'light',
@@ -2607,6 +2964,22 @@ if ($latestForm) {
                 });
             };
 
+            const initInvestorGenerator = () => {
+                const { investorBtn } = getTeaserElements();
+                if (!investorBtn) {
+                    return;
+                }
+                investorBtn.addEventListener('click', handleInvestorGenerate);
+            };
+
+            const initInvestorCtas = () => {
+                if (investorCtaBound) {
+                    return;
+                }
+                document.addEventListener('click', handleInvestorSend);
+                investorCtaBound = true;
+            };
+
             document.addEventListener('DOMContentLoaded', () => {
                 try {
                     initDcfPrint();
@@ -2634,6 +3007,18 @@ if ($latestForm) {
                     initTeaserCharts();
                 } catch (error) {
                     console.error('Teaser charts init failed', error);
+                }
+
+                try {
+                    initInvestorGenerator();
+                } catch (error) {
+                    console.error('Investor generator init failed', error);
+                }
+
+                try {
+                    initInvestorCtas();
+                } catch (error) {
+                    console.error('Investor CTA init failed', error);
                 }
             });
 

@@ -24,6 +24,7 @@
  * и renderTeaserHtml(), чтобы сохранялась последовательность «данные → AI → пост-обработка → рендер».
  */
 require_once 'config.php';
+require_once __DIR__ . '/investor_utils.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -39,6 +40,12 @@ if (!$user) {
     echo json_encode(['success' => false, 'message' => 'Сессия недействительна.']);
     exit;
 }
+
+$requestPayload = json_decode(file_get_contents('php://input') ?: '[]', true);
+if (!is_array($requestPayload)) {
+    $requestPayload = [];
+}
+$action = $requestPayload['action'] ?? 'teaser';
 
 $apiKey = TOGETHER_API_KEY;
 if (empty($apiKey)) {
@@ -67,6 +74,29 @@ try {
     }
 
     $formPayload = buildTeaserPayload($form);
+
+    if ($action === 'investors') {
+        $investorPool = buildInvestorPool($formPayload, $apiKey);
+        if (empty($investorPool)) {
+            echo json_encode(['success' => false, 'message' => 'Не найдены подходящие инвесторы.']);
+            exit;
+        }
+
+        $html = renderInvestorSection($investorPool);
+        $snapshot = [
+            'html' => $html,
+            'generated_at' => date('c'),
+        ];
+        persistInvestorSnapshot($form, $formPayload, $snapshot);
+
+        echo json_encode([
+            'success' => true,
+            'html' => $html,
+            'generated_at' => $snapshot['generated_at'],
+        ]);
+        exit;
+    }
+
     $prompt = buildTeaserPrompt($formPayload);
     $rawResponse = callTogetherCompletions($prompt, $apiKey);
 
@@ -397,7 +427,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = []): 
         $financials = $data['financials'];
         $bullets = array_filter([
             formatMetric('Выручка', $financials['revenue'] ?? ''),
-            formatMetric('EBITDA', $financials['ebitda'] ?? ''),
+                formatMetric('Прибыль от продаж', $financials['ebitda'] ?? ''),
             formatMetric('Маржинальность', $financials['margins'] ?? ''),
             formatMetric('CAPEX', $financials['capex'] ?? ''),
             $financials['notes'] ?? '',
@@ -588,7 +618,7 @@ function buildTeaserTimeline(array $payload): ?array
     ];
     $metrics = [
         'revenue' => ['title' => 'Выручка', 'unit' => 'млн ₽'],
-        'sales_profit' => ['title' => 'EBITDA', 'unit' => 'млн ₽'],
+        'sales_profit' => ['title' => 'Прибыль от продаж', 'unit' => 'млн ₽'],
     ];
     $series = [];
 
@@ -2045,3 +2075,22 @@ function persistTeaserSnapshot(array $form, array $payload, array $snapshot): ar
     return $snapshot;
 }
 
+function persistInvestorSnapshot(array $form, array $payload, array $snapshot): array
+{
+    $payload['investor_snapshot'] = $snapshot;
+
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return $snapshot;
+    }
+
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("UPDATE seller_forms SET data_json = ? WHERE id = ?");
+        $stmt->execute([$json, $form['id']]);
+    } catch (PDOException $e) {
+        error_log('Failed to persist investor snapshot: ' . $e->getMessage());
+    }
+
+    return $snapshot;
+}
