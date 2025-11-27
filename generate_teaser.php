@@ -95,6 +95,9 @@ try {
 
 /**
  * Собирает данные анкеты для передачи в AI.
+ * В приоритете data_json — он содержит самую свежую версию опросника.
+ * Если JSON отсутствует, достраиваем payload из отдельных колонок таблицы.
+ * Также добавляем служебные поля (_meta) и моментальный снимок сайта.
  */
 function buildTeaserPayload(array $form): array
 {
@@ -171,6 +174,9 @@ function buildTeaserPayload(array $form): array
 
 /**
  * Формирует промпт для AI.
+ * Структура ответа описана явно и строго — модель должна вернуть JSON
+ * с заранее известными ключами, чтобы дальнейший парсинг был детерминированным.
+ * Дополнительно подмешиваются выдержки с корпоративного сайта, если они есть.
  */
 function buildTeaserPrompt(array $payload): string
 {
@@ -249,6 +255,8 @@ PROMPT;
 
 /**
  * Вызывает together.ai Completion API.
+ * Оборачивает cURL-запрос, проверяет код ответа и пробует разные форматы
+ * JSON, которые может вернуть Together (старый output.choices и новый choices).
  */
 function callTogetherCompletions(string $prompt, string $apiKey): string
 {
@@ -298,6 +306,8 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
 
 /**
  * Парсит ответ AI в массив.
+ * Если парсер не смог прочитать JSON, возвращаем минимальный каркас overview
+ * с текстом, чтобы интерфейс всегда показал хотя бы что-то.
  */
 function parseTeaserResponse(string $text): array
 {
@@ -326,6 +336,8 @@ function parseTeaserResponse(string $text): array
 
 /**
  * Рендерит HTML для тизера.
+ * На этом этапе уже всё нормализовано — остаётся собрать карточки, графики
+ * и вспомогательные блоки (кнопки, подсказки, подписи и т.п.).
  */
 function renderTeaserHtml(array $data, string $assetName, array $payload = []): string
 {
@@ -374,15 +386,10 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = []): 
 
     if (!empty($data['market'])) {
         $market = $data['market'];
-        $bullets = array_filter([
-            $market['trend'] ?? '',
-            $market['size'] ?? '',
-            $market['growth'] ?? '',
-        ]);
-        $sources = $market['sources'] ?? [];
+        $marketText = formatMarketBlockText($market);
         $blocks[] = renderCard('Рынок и тенденции', [
-            'text' => implode('<br>', array_map('escapeHtml', $bullets)),
-            'footer' => !empty($sources) ? 'Источники: ' . implode(', ', array_map('escapeHtml', $sources)) : '',
+            'text' => nl2br(escapeHtml($marketText['text'])),
+            'footer' => escapeHtml($marketText['footer']),
         ], 'market');
     }
 
@@ -658,113 +665,35 @@ function renderTeaserChart(array $series): string
         return '';
     }
 
-    $maxValue = 0;
-    foreach ($series as $metric) {
-        foreach ($metric['points'] as $point) {
-            $maxValue = max($maxValue, $point['value']);
+    $apexPayload = [
+        'categories' => $labels,
+        'unit' => 'млн ₽',
+        'series' => [],
+        'colors' => ['#6366F1', '#0EA5E9', '#F97316', '#10B981'],
+    ];
+
+    foreach ($series as $index => $metric) {
+        $dataPoints = [];
+        foreach ($labels as $label) {
+            $value = valueForLabel($metric['points'], $label);
+            $dataPoints[] = $value !== null ? round($value, 2) : null;
         }
+        $apexPayload['series'][] = [
+            'name' => $metric['title'] . (isset($metric['unit']) ? ' (' . $metric['unit'] . ')' : ''),
+            'data' => $dataPoints,
+        ];
     }
-    if ($maxValue <= 0) {
+
+    if (empty($apexPayload['series'])) {
         return '';
     }
 
-    $width = 360;
-    $height = 220;
-    $chartLeft = 52;
-    $chartRight = 330;
-    $chartTop = 26;
-    $chartBottom = 180;
-    $chartWidth = $chartRight - $chartLeft;
-    $chartHeight = $chartBottom - $chartTop;
-
-    $labelCount = count($labels);
-    $xPositions = [];
-    foreach ($labels as $index => $label) {
-        if ($labelCount === 1) {
-            $xPositions[$label] = $chartLeft;
-        } else {
-            $xPositions[$label] = $chartLeft + ($chartWidth * ($index / ($labelCount - 1)));
-        }
-    }
-
-    $palette = ['#6366F1', '#0EA5E9', '#F97316', '#10B981'];
-    $paths = [];
-    $dots = [];
-    foreach ($series as $idx => $metric) {
-        $color = $palette[$idx % count($palette)];
-        $currentPath = '';
-        foreach ($labels as $label) {
-            $value = valueForLabel($metric['points'], $label);
-            if ($value === null) {
-                if ($currentPath !== '') {
-                    $paths[] = ['d' => $currentPath, 'color' => $color];
-                    $currentPath = '';
-                }
-                continue;
-            }
-            $x = $xPositions[$label];
-            $y = $chartBottom - ($value / $maxValue) * $chartHeight;
-            if ($currentPath === '') {
-                $currentPath = "M{$x},{$y}";
-            } else {
-                $currentPath .= " L{$x},{$y}";
-            }
-            $dots[] = [
-                'x' => $x,
-                'y' => $y,
-                'color' => $color,
-                'value' => $value,
-            ];
-        }
-        if ($currentPath !== '') {
-            $paths[] = ['d' => $currentPath, 'color' => $color];
-        }
-    }
-
-    $ticks = [];
-    $tickCount = 4;
-    for ($i = 0; $i <= $tickCount; $i++) {
-        $value = ($maxValue / $tickCount) * $i;
-        $y = $chartBottom - ($value / $maxValue) * $chartHeight;
-        $ticks[] = ['value' => $value, 'y' => $y];
-    }
+    $chartJson = htmlspecialchars(json_encode($apexPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8');
 
     $html = '<div class="teaser-card teaser-chart-card" data-variant="chart">';
     $html .= '<div class="teaser-card__icon">📈</div>';
     $html .= '<h3>Динамика финансов</h3>';
-    $html .= '<div class="teaser-chart">';
-    $html .= '<svg viewBox="0 0 ' . $width . ' ' . $height . '" role="img" aria-label="График финансов">';
-    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartBottom . '" x2="' . $chartRight . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.45)" stroke-width="1"/>';
-    $html .= '<line x1="' . $chartLeft . '" y1="' . $chartTop . '" x2="' . $chartLeft . '" y2="' . $chartBottom . '" stroke="rgba(15,23,42,0.45)" stroke-width="1"/>';
-
-    foreach ($ticks as $tick) {
-        $html .= '<line x1="' . ($chartLeft - 5) . '" y1="' . $tick['y'] . '" x2="' . $chartLeft . '" y2="' . $tick['y'] . '" stroke="rgba(15,23,42,0.35)" stroke-width="0.8"/>';
-        $html .= '<text x="' . ($chartLeft - 8) . '" y="' . ($tick['y'] + 4) . '" font-size="10" text-anchor="end" fill="rgba(15,23,42,0.75)">' . number_format($tick['value'], 0, '.', ' ') . '</text>';
-    }
-
-    foreach ($labels as $label) {
-        $x = $xPositions[$label];
-        $html .= '<line x1="' . $x . '" y1="' . $chartBottom . '" x2="' . $x . '" y2="' . ($chartBottom + 4) . '" stroke="rgba(15,23,42,0.35)" stroke-width="0.8"/>';
-        $html .= '<text x="' . $x . '" y="' . ($chartBottom + 14) . '" font-size="10" text-anchor="middle" fill="rgba(15,23,42,0.75)">' . escapeHtml($label) . '</text>';
-    }
-
-    foreach ($paths as $path) {
-        $html .= '<path d="' . $path['d'] . '" fill="none" stroke="' . $path['color'] . '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>';
-    }
-
-    foreach ($dots as $dot) {
-        $html .= '<circle cx="' . $dot['x'] . '" cy="' . $dot['y'] . '" r="3.4" fill="' . $dot['color'] . '" opacity="0.95"/>';
-    }
-
-    $html .= '</svg>';
-
-    $html .= '<div class="teaser-chart-legend">';
-    foreach ($series as $idx => $metric) {
-        $color = $palette[$idx % count($palette)];
-        $html .= '<span><i style="background:' . $color . '"></i>' . escapeHtml($metric['title']) . '</span>';
-    }
-    $html .= '</div>';
-    $html .= '</div>';
+    $html .= '<div class="teaser-chart" data-chart="' . $chartJson . '"></div>';
     $html .= '<p class="teaser-chart__note">Показатели указаны в млн ₽. Источник: анкета продавца (факт + бюджет).</p>';
     $html .= '</div>';
     return $html;
@@ -805,11 +734,12 @@ function normalizeTeaserData(array $data, array $payload): array
         'sales_channels' => $data['products']['sales_channels'] ?? buildSalesChannelsText($payload),
     ];
 
+    $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
     $data['market'] = [
-        'trend' => $data['market']['trend'] ?? 'Рынок демонстрирует устойчивый интерес инвесторов.',
-        'size' => $data['market']['size'] ?? 'Объём рынка оценивается как значительный по отраслевым данным.',
-        'growth' => $data['market']['growth'] ?? 'Ожидается стабильный рост 5–10% в год.',
-        'sources' => normalizeArray($data['market']['sources'] ?? ['Отраслевые обзоры SmartBizSell']),
+        'trend' => $marketInsight['trend'],
+        'size' => $marketInsight['size'],
+        'growth' => $marketInsight['growth'],
+        'sources' => normalizeArray($marketInsight['sources']),
     ];
 
     $data['financials'] = [
@@ -1179,6 +1109,344 @@ function buildHighlightBullets(array $payload, string $placeholder): array
         $bullets[] = $placeholder;
     }
     return $bullets;
+}
+
+/**
+ * Расширяет блок «Рынок и тенденции» данными из открытых источников.
+ * Приоритет: сначала AI-ответ, затем фактические данные (если удалось собрать).
+ */
+function enrichMarketInsight(array $payload, array $current): array
+{
+    $defaults = [
+        'trend' => $current['trend'] ?? 'Рынок демонстрирует устойчивый интерес инвесторов.',
+        'size' => $current['size'] ?? 'Объём рынка оценивается как значительный по отраслевым данным.',
+        'growth' => $current['growth'] ?? 'Ожидается стабильный рост 5–10% в год.',
+        'sources' => $current['sources'] ?? ['Отраслевые обзоры SmartBizSell'],
+    ];
+
+    $query = deriveMarketQuery($payload);
+    if (!$query) {
+        return $defaults;
+    }
+
+    $facts = fetchExternalMarketFacts($query);
+    if (!$facts) {
+        return $defaults;
+    }
+
+    return [
+        'trend' => $facts['trend'] ?? $defaults['trend'],
+        'size' => $facts['size'] ?? $defaults['size'],
+        'growth' => $facts['growth'] ?? $defaults['growth'],
+        'sources' => $facts['sources'] ?? $defaults['sources'],
+    ];
+}
+
+function deriveMarketQuery(array $payload): ?string
+{
+    $candidates = [
+        $payload['products_services'] ?? '',
+        $payload['company_description'] ?? '',
+        $payload['industry'] ?? '',
+    ];
+    foreach ($candidates as $candidate) {
+        $candidate = trim((string)$candidate);
+        if ($candidate !== '') {
+            return mb_substr($candidate, 0, 80);
+        }
+    }
+    return null;
+}
+
+function fetchExternalMarketFacts(string $query): ?array
+{
+    $sourceUrls = [
+        'https://r.jina.ai/https://ru.wikipedia.org/wiki/' . rawurlencode($query),
+        'https://r.jina.ai/https://en.wikipedia.org/wiki/' . rawurlencode($query),
+        'https://r.jina.ai/https://www.investopedia.com/' . rawurlencode($query),
+    ];
+
+    $aggregated = [
+        'trend' => null,
+        'size' => null,
+        'growth' => null,
+        'sources' => [],
+    ];
+
+    foreach ($sourceUrls as $url) {
+        $text = fetchExternalText($url);
+        if (!$text) {
+            continue;
+        }
+        $label = describeSourceLabel($url);
+        $facts = extractMarketFacts($text, $label);
+        if (!$facts) {
+            continue;
+        }
+        foreach (['trend', 'size', 'growth'] as $key) {
+            if (!$aggregated[$key] && !empty($facts[$key])) {
+                $aggregated[$key] = $facts[$key];
+            }
+        }
+        foreach ($facts['sources'] as $sourceLabel) {
+            if (!in_array($sourceLabel, $aggregated['sources'], true)) {
+                $aggregated['sources'][] = $sourceLabel;
+            }
+        }
+        if ($aggregated['trend'] && $aggregated['size'] && $aggregated['growth']) {
+            break;
+        }
+    }
+
+    if (!$aggregated['trend'] && !$aggregated['size'] && !$aggregated['growth']) {
+        return null;
+    }
+
+    $topic = normalizeTopicLabel($query);
+    $aggregated['trend'] = ensureRussianMarketSentence($aggregated['trend'], $topic, 'trend');
+    $aggregated['size'] = ensureRussianMarketSentence($aggregated['size'], $topic, 'size');
+    $aggregated['growth'] = ensureRussianMarketSentence($aggregated['growth'], $topic, 'growth');
+
+    if (empty($aggregated['sources'])) {
+        $aggregated['sources'][] = 'Публичные данные (аналитика)';
+    }
+
+    $aggregated['topic'] = $topic;
+
+    return $aggregated;
+}
+
+function fetchExternalText(string $url): ?string
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 6,
+        CURLOPT_USERAGENT => 'SmartBizSellBot/1.0 (+https://smartbizsell.ru)',
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ]);
+    $response = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $status >= 400) {
+        return null;
+    }
+
+    $text = trim(strip_tags($response));
+    if ($text === '') {
+        return null;
+    }
+    $text = preg_replace('/\[([^\]]+)\]\((?:https?:\/\/|\/)[^)]+\)/u', '$1', $text);
+    $text = preg_replace('/^\s*[\*\-•]\s+/m', '', $text);
+    $text = preg_replace('/Page Not Found.*$/mi', '', $text);
+    $text = preg_replace('/Follow Us.+$/mi', '', $text);
+    $text = preg_replace('/\s+/', ' ', $text);
+    return trim($text);
+}
+
+function extractMarketFacts(string $text, string $sourceLabel): ?array
+{
+    $sentences = preg_split('/(?<=[.!?])\s+/u', $text);
+    if (!$sentences) {
+        return null;
+    }
+
+    $trend = null;
+    $size = null;
+    $growth = null;
+
+    foreach ($sentences as $sentence) {
+        $sentence = trim($sentence);
+        if ($sentence === '') {
+            continue;
+        }
+        if (!$trend && preg_match('/рынок|market|sector/i', $sentence)) {
+            $trend = normalizeMarketSentence($sentence);
+        }
+        if (!$size && preg_match('/\d+[\s ]?(?:млрд|миллиард|billion|млн|million)/iu', $sentence)) {
+            $size = normalizeMarketNumericSentence($sentence, 'size');
+        }
+        if (!$growth && preg_match('/(\d+[\s ]?(?:%|проц))/iu', $sentence)) {
+            $growth = normalizeMarketNumericSentence($sentence, 'growth');
+        } elseif (
+            !$growth &&
+            preg_match('/рост|growth|CAGR/i', $sentence)
+        ) {
+            $growth = normalizeMarketSentence($sentence);
+        }
+        if ($trend && $size && $growth) {
+            break;
+        }
+    }
+
+    if (!$trend && !$size && !$growth) {
+        return null;
+    }
+
+    return [
+        'trend' => $trend,
+        'size' => $size,
+        'growth' => $growth,
+        'sources' => [$sourceLabel],
+    ];
+}
+
+function describeSourceLabel(string $url): string
+{
+    $host = parse_url($url, PHP_URL_HOST);
+    if (!$host) {
+        return 'Публичные данные';
+    }
+    if (str_contains($host, 'ru.wikipedia')) {
+        return 'Публичные данные: Википедия (ru)';
+    }
+    if (str_contains($host, 'en.wikipedia')) {
+        return 'Публичные данные: Википедия (en)';
+    }
+    if (str_contains($host, 'investopedia')) {
+        return 'Публичные данные: Investopedia';
+    }
+    return 'Публичные данные (' . $host . ')';
+}
+
+function normalizeMarketSentence(string $sentence): string
+{
+    $sentence = trim(preg_replace('/\s+/', ' ', $sentence));
+    $sentence = rtrim($sentence, ';');
+    if (preg_match('/0\s*%/u', $sentence)) {
+        return '';
+    }
+    return truncateSentence($sentence);
+}
+
+function normalizeMarketNumericSentence(string $sentence, string $type): string
+{
+    $sentence = normalizeMarketSentence($sentence);
+    $number = extractNumericSnippet($sentence);
+    if (!$number) {
+        return $sentence;
+    }
+    $clean = convertToRussianNumeric($number);
+    if ($type === 'size') {
+        return "Объём рынка оценивается примерно в {$clean}.";
+    }
+    return "Темпы роста составляют около {$clean}.";
+}
+
+function extractNumericSnippet(string $sentence): ?string
+{
+    if (preg_match('/\d[\d\s .,]*(?:%|процентов|проц\.|percent|млрд|миллиард|billion|млн|million)/iu', $sentence, $match)) {
+        return $match[0];
+    }
+    return null;
+}
+
+function convertToRussianNumeric(string $snippet): string
+{
+    $snippet = trim($snippet);
+    $snippet = str_ireplace(['billion', 'миллиардов', 'миллиарда', 'миллиард'], 'млрд', $snippet);
+    $snippet = str_ireplace(['million', 'миллионов', 'миллиона', 'million'], 'млн', $snippet);
+    $snippet = str_ireplace(['процентов', 'проц.', 'percent'], '%', $snippet);
+    $snippet = preg_replace('/\s+/', ' ', $snippet);
+    return $snippet;
+}
+
+function ensureRussianMarketSentence(?string $sentence, string $topic, string $type): ?string
+{
+    if ($sentence === null || trim($sentence) === '') {
+        return null;
+    }
+    if (containsCyrillic($sentence)) {
+        return $sentence;
+    }
+    $topic = $topic !== '' ? mb_strtolower($topic) : 'рынка';
+    $number = extractNumericSnippet($sentence);
+    $cleanNumber = $number ? convertToRussianNumeric($number) : null;
+    if ($type === 'growth' && $cleanNumber !== null) {
+        $numericRaw = preg_replace('/[^\d,.\-]/', '', $cleanNumber);
+        $numeric = $numericRaw !== '' ? (float)str_replace(',', '.', $numericRaw) : 0.0;
+        if (abs($numeric) < 0.01) {
+            $cleanNumber = null;
+        }
+    }
+
+    switch ($type) {
+        case 'size':
+            if ($cleanNumber) {
+                return "Объём рынка {$topic} оценивается примерно в {$cleanNumber}.";
+            }
+            return "Объём рынка {$topic} оценивается отраслевыми аналитиками как значительный.";
+        case 'growth':
+            if ($cleanNumber) {
+                return "Темпы роста рынка {$topic} составляют около {$cleanNumber}.";
+            }
+            return "Темпы роста рынка {$topic} остаются стабильными на горизонте 3–5 лет.";
+        default:
+            return "Рынок {$topic} демонстрирует устойчивый интерес инвесторов и регулярные сделки.";
+    }
+}
+
+function normalizeTopicLabel(?string $topic): string
+{
+    $topic = trim((string)$topic);
+    if ($topic === '') {
+        return 'рынка';
+    }
+    $topic = preg_replace('/[^а-яА-Яa-zA-Z0-9\s\-]/u', '', $topic);
+    $topic = preg_replace('/\s+/', ' ', $topic);
+    if (!containsCyrillic($topic)) {
+        $topic = mb_strtolower($topic);
+    }
+    return mb_substr($topic, 0, 40);
+}
+
+function truncateSentence(string $sentence, int $maxLength = 220): string
+{
+    if (mb_strlen($sentence) <= $maxLength) {
+        return $sentence;
+    }
+    $truncated = mb_substr($sentence, 0, $maxLength);
+    $lastDot = mb_strrpos($truncated, '.');
+    if ($lastDot !== false && $lastDot > $maxLength * 0.4) {
+        return mb_substr($truncated, 0, $lastDot + 1);
+    }
+    return rtrim($truncated, ',;: ') . '…';
+}
+
+function formatMarketBlockText(array $market): array
+{
+    $sentences = [];
+    if (!empty($market['trend'])) {
+        $sentences[] = $market['trend'];
+    }
+    if (!empty($market['size'])) {
+        $sentences[] = $market['size'];
+    }
+    if (!empty($market['growth'])) {
+        $sentences[] = $market['growth'];
+    }
+    $sources = normalizeArray($market['sources'] ?? []);
+    if (!empty($sources)) {
+        $sentences[] = "Источник(и): " . implode(', ', $sources) . '.';
+    }
+    $sentences = array_map('ensureSentence', $sentences);
+    if (count($sentences) > 4) {
+        $sentences = array_slice($sentences, 0, 4);
+    }
+    $topic = $market['topic'] ?? '';
+    while (count($sentences) < 4) {
+        $sentences[] = $topic
+            ? "Рыночные показатели сегмента {$topic} уточняются у команды SmartBizSell."
+            : 'Рыночные показатели уточняются у команды SmartBizSell.';
+    }
+    $formatted = [
+        'text' => implode(' ', array_slice($sentences, 0, 3)),
+        'footer' => $sentences[3] ?? '',
+    ];
+    return $formatted;
 }
 
 function buildHeroSummary(?string $aiSummary, array $payload, string $fallback): string

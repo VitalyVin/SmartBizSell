@@ -345,7 +345,38 @@ function calculateUserDCF(array $form): array {
         'wacc' => 0.24,              // Средневзвешенная стоимость капитала (24%)
         'tax_rate' => 0.25,          // Ставка налога на прибыль (25%)
         'perpetual_growth' => 0.04,  // Темп бессрочного роста (4%)
+        'vat_rate' => 0.20,          // Ставка НДС (20%)
     ];
+
+    /**
+     * Очищает значение от НДС.
+     * Формула: значение_без_НДС = значение_с_НДС / (1 + ставка_НДС)
+     * 
+     * @param float|null $value Значение с НДС
+     * @param float $vatRate Ставка НДС (по умолчанию 20%)
+     * @return float|null Значение без НДС
+     */
+    $removeVAT = function ($value, float $vatRate = 0.20) {
+        if ($value === null || $value <= 0) {
+            return $value;
+        }
+        return $value / (1 + $vatRate);
+    };
+
+    /**
+     * Очищает массив значений от НДС.
+     * 
+     * @param array $values Массив значений с НДС
+     * @param float $vatRate Ставка НДС
+     * @return array Массив значений без НДС
+     */
+    $removeVATFromArray = function (array $values, float $vatRate = 0.20) use ($removeVAT): array {
+        $result = [];
+        foreach ($values as $key => $value) {
+            $result[$key] = $removeVAT($value, $vatRate);
+        }
+        return $result;
+    };
 
     // Маппинг ключей периодов из базы данных на метки для временных рядов
     $periodMap = [
@@ -414,10 +445,9 @@ function calculateUserDCF(array $form): array {
         'cogs' => [],         // Себестоимость продаж (Cost of Goods Sold)
         'commercial' => [],   // Коммерческие расходы
         'admin' => [],        // Административные расходы
+        'commercial_admin' => [], // Коммерческие и административные расходы (объединенные)
         'depr' => [],         // Амортизация
-        'ebitda' => [],       // EBITDA (прибыль до вычета процентов, налогов и амортизации)
-        'ebit' => [],         // EBIT (прибыль до вычета процентов и налогов)
-        'margin' => [],       // EBITDA-маржа (%)
+        'operating_profit' => [], // Прибыль от продаж (= EBIT = Выручка - Себестоимость - Коммерческие - Административные - Амортизация)
     ];
 
     // Расчет фактических показателей за каждый год
@@ -428,14 +458,41 @@ function calculateUserDCF(array $form): array {
         $factData['admin'][$year]      = $adminSeries[$year] ?? 0;
         $factData['depr'][$year]       = $deprSeries[$year] ?? 0;
         
-        // EBITDA = Выручка - Себестоимость - Коммерческие расходы - Административные расходы
-        $factData['ebitda'][$year]     = $factData['revenue'][$year] - $factData['cogs'][$year] - $factData['commercial'][$year] - $factData['admin'][$year];
+        // Коммерческие и административные расходы (объединенные)
+        $factData['commercial_admin'][$year] = $factData['commercial'][$year] + $factData['admin'][$year];
         
-        // EBIT = EBITDA - Амортизация
-        $factData['ebit'][$year]       = $factData['ebitda'][$year] - $factData['depr'][$year];
-        
-        // EBITDA-маржа = EBITDA / Выручка
-        $factData['margin'][$year]     = ($factData['revenue'][$year] > 0) ? $factData['ebitda'][$year] / $factData['revenue'][$year] : null;
+        // Прибыль от продаж = Выручка - Себестоимость - Коммерческие расходы - Административные расходы - Амортизация
+        $factData['operating_profit'][$year] = $factData['revenue'][$year] 
+            - $factData['cogs'][$year] 
+            - $factData['commercial'][$year] 
+            - $factData['admin'][$year]
+            - $factData['depr'][$year];
+    }
+
+    // ОЧИСТКА НДС: Применяется к факту перед расчётами рентабельности и долей расходов
+    // Очищаем выручку и все расходы от НДС
+    $vatRate = $defaults['vat_rate'];
+    $factData['revenue'] = $removeVATFromArray($factData['revenue'], $vatRate);
+    $factData['cogs'] = $removeVATFromArray($factData['cogs'], $vatRate);
+    $factData['commercial'] = $removeVATFromArray($factData['commercial'], $vatRate);
+    $factData['admin'] = $removeVATFromArray($factData['admin'], $vatRate);
+    // Пересчитываем объединенные расходы после очистки
+    foreach ($factYears as $year) {
+        $factData['commercial_admin'][$year] = $factData['commercial'][$year] + $factData['admin'][$year];
+        // Пересчитываем прибыль от продаж после очистки НДС
+        $factData['operating_profit'][$year] = $factData['revenue'][$year] 
+            - $factData['cogs'][$year] 
+            - $factData['commercial'][$year] 
+            - $factData['admin'][$year]
+            - $factData['depr'][$year];
+    }
+    
+    // Очищаем балансовые показатели от НДС (AR/AP для расчета NWC)
+    if (isset($balanceSeries['Дебиторская задолженность'])) {
+        $balanceSeries['Дебиторская задолженность'] = $removeVATFromArray($balanceSeries['Дебиторская задолженность'], $vatRate);
+    }
+    if (isset($balanceSeries['Кредиторская задолженность'])) {
+        $balanceSeries['Кредиторская задолженность'] = $removeVATFromArray($balanceSeries['Кредиторская задолженность'], $vatRate);
     }
 
     // Расчет фактических темпов роста выручки (год к году)
@@ -576,7 +633,12 @@ function calculateUserDCF(array $form): array {
     $lastFactRevenue = $factData['revenue'][$lastFactLabel] ?? 0;
     $hasBudgetOverride = $budgetRevenue !== null && $budgetRevenue > 0;
     
-    // Если есть бюджет 2025, пересчитываем темп роста P1 на основе бюджета
+    // ОЧИСТКА НДС: Очищаем бюджет от НДС перед использованием
+    if ($hasBudgetOverride) {
+        $budgetRevenue = $removeVAT($budgetRevenue, $vatRate);
+    }
+    
+    // Если есть бюджет 2025, пересчитываем темп роста P1 на основе бюджета (уже без НДС)
     if ($hasBudgetOverride && $lastFactRevenue > 0) {
         $forecastGrowth[0] = ($budgetRevenue - $lastFactRevenue) / $lastFactRevenue;
     }
@@ -586,7 +648,7 @@ function calculateUserDCF(array $form): array {
     $prevRevenue = $lastFactRevenue;
     foreach ($forecastLabels as $index => $label) {
         if ($index === 0 && $hasBudgetOverride) {
-            // Для P1: если есть бюджет 2025, используем его напрямую
+            // Для P1: если есть бюджет 2025, используем его напрямую (уже без НДС)
             $prevRevenue = $budgetRevenue;
         } else {
             // Для остальных периодов: применяем темп роста к предыдущему периоду
@@ -594,6 +656,10 @@ function calculateUserDCF(array $form): array {
         }
         $forecastRevenue[$label] = max(0, $prevRevenue); // Выручка не может быть отрицательной
     }
+    
+    // ОЧИСТКА НДС: Применяется к прогнозу перед построением модели
+    // Прогнозная выручка уже без НДС (рассчитана от очищенной факт-выручки)
+    // Но на всякий случай убеждаемся, что все значения без НДС
 
     /**
      * Вычисляет долю показателя относительно базы (например, себестоимость к выручке)
@@ -646,8 +712,7 @@ function calculateUserDCF(array $form): array {
     // Проверка наличия административных расходов в исторических данных
     $adminExists = ($factData['admin']['2022'] ?? 0) > 0 || ($factData['admin']['2023'] ?? 0) > 0 || ($factData['admin']['2024'] ?? 0) > 0;
     $adminForecast = [];
-    $ebitdaForecast = [];
-    $ebitdaMarginForecast = [];
+    $commercialAdminForecast = []; // Объединенные коммерческие и административные расходы
     
     // Прогноз инфляции для административных расходов (если они есть)
     $inflationPath = [0.091, 0.055, 0.045, 0.04, 0.04]; // Снижающаяся инфляция
@@ -658,36 +723,14 @@ function calculateUserDCF(array $form): array {
         foreach ($forecastLabels as $idx => $label) {
             $prevAdmin *= (1 + $inflationPath[$idx]); // Индексация на инфляцию
             $adminForecast[$label] = $prevAdmin;
-            // EBITDA = Выручка - Себестоимость - Коммерческие - Административные
-            $ebitdaForecast[$label] = $forecastRevenue[$label] - $forecastCogs[$label] - $forecastCommercial[$label] - $adminForecast[$label];
-            $ebitdaMarginForecast[$label] = ($forecastRevenue[$label] > 0)
-                ? $ebitdaForecast[$label] / $forecastRevenue[$label]
-                : null;
+            // Объединенные коммерческие и административные расходы
+            $commercialAdminForecast[$label] = $forecastCommercial[$label] + $adminForecast[$label];
         }
     } else {
-        // Если административных расходов нет, используем целевой подход к марже
-        // Целевая маржа постепенно улучшается
-        $baseMargin = $factData['margin'][$lastFactLabel] ?? 0.2;
-        $increment = stableRandFloat($seedKey, 99, 0.005, 0.008); // Небольшое улучшение маржи
-        foreach ($forecastLabels as $idx => $label) {
-            $targetMargin = clampFloat($baseMargin + $increment * ($idx + 1), 0, 0.6);
-            $baseCosts = $forecastRevenue[$label] - ($forecastCogs[$label] + $forecastCommercial[$label]);
-            $desiredEbitda = $forecastRevenue[$label] * $targetMargin;
-            $delta = $desiredEbitda - $baseCosts;
-            
-            // Если базовая EBITDA ниже целевой, корректируем себестоимость и коммерческие расходы
-            if ($delta > 0) {
-                $costSum = max($forecastCogs[$label] + $forecastCommercial[$label], 1e-6);
-                $adjustFactor = clampFloat($delta / $costSum, 0, 0.2);
-                // Снижаем себестоимость на 70% от корректировки, коммерческие - на 30%
-                $forecastCogs[$label] *= (1 - $adjustFactor * 0.7);
-                $forecastCommercial[$label] *= (1 - $adjustFactor * 0.3);
-            }
+        // Если административных расходов нет, используем только коммерческие расходы
+        foreach ($forecastLabels as $label) {
             $adminForecast[$label] = 0;
-            $ebitdaForecast[$label] = $forecastRevenue[$label] - $forecastCogs[$label] - $forecastCommercial[$label];
-            $ebitdaMarginForecast[$label] = ($forecastRevenue[$label] > 0)
-                ? $ebitdaForecast[$label] / $forecastRevenue[$label]
-                : null;
+            $commercialAdminForecast[$label] = $forecastCommercial[$label];
         }
     }
 
@@ -714,14 +757,17 @@ function calculateUserDCF(array $form): array {
         $prevOS = $currentOS;
     }
 
-    // Расчет EBIT и налога на прибыль
-    $ebitForecast = [];
+    // Расчет "Прибыли от продаж" (которая математически соответствует EBIT) и налога на прибыль
+    $operatingProfitForecast = [];
     $taxForecast = [];
     foreach ($forecastLabels as $label) {
-        // EBIT = EBITDA - Амортизация
-        $ebitForecast[$label] = $ebitdaForecast[$label] - $deprForecast[$label];
-        // Налог на прибыль = EBIT * Ставка налога (только если EBIT > 0)
-        $taxForecast[$label] = max(0, $ebitForecast[$label]) * $defaults['tax_rate'];
+        // Прибыль от продаж = Выручка - Себестоимость - Коммерческие и административные расходы - Амортизация
+        $operatingProfitForecast[$label] = $forecastRevenue[$label] 
+            - $forecastCogs[$label] 
+            - $commercialAdminForecast[$label]
+            - $deprForecast[$label];
+        // Налог на прибыль = Прибыль от продаж * Ставка налога (только если Прибыль от продаж > 0)
+        $taxForecast[$label] = max(0, $operatingProfitForecast[$label]) * $defaults['tax_rate'];
     }
 
     // Расчет коэффициентов оборотного капитала (NWC - Net Working Capital)
@@ -771,11 +817,12 @@ function calculateUserDCF(array $form): array {
     }
 
     // Расчет FCFF (Free Cash Flow to Firm) - свободного денежного потока компании
-    // FCFF = EBITDA - Налог на прибыль - Поддерживающий CAPEX - Изменение NWC
+    // FCFF = Прибыль от продаж - Налог на прибыль + Амортизация - Поддерживающий CAPEX - Изменение NWC
     $fcffForecast = [];
     foreach ($forecastLabels as $label) {
-        $fcffForecast[$label] = $ebitdaForecast[$label]
+        $fcffForecast[$label] = $operatingProfitForecast[$label]
             - $taxForecast[$label]
+            + $deprForecast[$label]  // Амортизация добавляется обратно
             - $supportCapex[$label]
             - $deltaNwcForecast[$label];
     }
@@ -862,91 +909,128 @@ function calculateUserDCF(array $form): array {
     $forecastGrowthAssoc = array_combine($forecastLabels, $forecastGrowth);
     $factTax = [];
     foreach ($factYears as $year) {
-        $factTax[$year] = max(0, $factData['ebit'][$year] ?? 0) * $defaults['tax_rate'];
+        $factTax[$year] = max(0, $factData['operating_profit'][$year] ?? 0) * $defaults['tax_rate'];
     }
 
-    $rows = [
-        [
-            'label' => 'Выручка',
-            'format' => 'money',
-            'is_expense' => false,
-            'values' => $buildValues($factData['revenue'], $forecastRevenue),
-        ],
-        [
-            'label' => 'Темп роста, %',
-            'format' => 'percent',
-            'italic' => true,
-            'values' => $buildValues(
-                $factGrowth + [$factYears[0] => null],
-                $forecastGrowthAssoc
-            ),
-        ],
-        [
-            'label' => 'Себестоимость',
+    // Функция для проверки наличия данных в фактических периодах
+    $hasFactData = function (array $factValues) use ($factYears): bool {
+        foreach ($factYears as $year) {
+            $value = $factValues[$year] ?? null;
+            if ($value !== null && abs($value) > 1e-6) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // Построение строк таблицы
+    $rows = [];
+    
+    // Выручка - всегда показываем
+    $rows[] = [
+        'label' => 'Выручка',
+        'format' => 'money',
+        'is_expense' => false,
+        'values' => $buildValues($factData['revenue'], $forecastRevenue),
+    ];
+    
+    // Темп роста - всегда показываем
+    $rows[] = [
+        'label' => 'Темп роста, %',
+        'format' => 'percent',
+        'italic' => true,
+        'values' => $buildValues(
+            $factGrowth + [$factYears[0] => null],
+            $forecastGrowthAssoc
+        ),
+    ];
+    
+    // Себестоимость - показываем только если есть данные
+    if ($hasFactData($factData['cogs'])) {
+        $rows[] = [
+            'label' => 'Себестоимость*',
             'format' => 'money',
             'is_expense' => true,
             'values' => $buildValues($factData['cogs'], $forecastCogs),
-        ],
-        [
-            'label' => 'Коммерческие',
+        ];
+    }
+    
+    // Коммерческие и административные расходы (объединенные) - показываем только если есть данные
+    if ($hasFactData($factData['commercial_admin'])) {
+        $rows[] = [
+            'label' => 'Коммерческие и административные расходы*',
             'format' => 'money',
             'is_expense' => true,
-            'values' => $buildValues($factData['commercial'], $forecastCommercial),
-        ],
-        [
-            'label' => 'Административные',
-            'format' => 'money',
-            'is_expense' => true,
-            'values' => $buildValues($factData['admin'], $adminForecast),
-        ],
-        [
-            'label' => 'EBITDA',
-            'format' => 'money',
-            'is_expense' => false,
-            'values' => $buildValues($factData['ebitda'], $ebitdaForecast),
-        ],
-        [
-            'label' => 'EBITDA-маржа, %',
-            'format' => 'percent',
-            'italic' => true,
-            'values' => $buildValues($factData['margin'], $ebitdaMarginForecast),
-        ],
-        [
-            'label' => 'Налог (от EBIT)',
-            'format' => 'money',
-            'is_expense' => true,
-            'values' => $buildValues($factTax, $taxForecast),
-        ],
-        [
-            'label' => 'Поддерживающий CAPEX',
-            'format' => 'money',
-            'is_expense' => true,
-            'values' => $buildValues($nullFact, $supportCapex),
-        ],
-        [
-            'label' => 'ΔNWC',
-            'format' => 'money',
-            'is_expense' => true,
-            'values' => $buildValues($nullFact, $deltaNwcForecast),
-        ],
-        [
-            'label' => 'FCFF',
-            'format' => 'money',
-            'is_expense' => false,
-            'star_columns' => [$forecastLabels[0]],
-            'values' => $buildValues($nullFact, $fcffDisplay, $terminalValue), // TV включен в строку FCFF
-        ],
-        [
-            'label' => 'Фактор дисконтирования',
-            'format' => 'decimal',
-            'values' => $buildValues($nullFact, $discountFactors, $discountFactors['TV']),
-        ],
-        [
-            'label' => 'Discounted FCFF',
-            'format' => 'money',
-            'is_expense' => false,
-            'values' => $buildValues($nullFact, $discountedCf, $terminalPv),
-        ],
+            'values' => $buildValues($factData['commercial_admin'], $commercialAdminForecast),
+        ];
+    }
+    
+    // Прибыль от продаж - всегда показываем (рассчитывается)
+    $rows[] = [
+        'label' => 'Прибыль от продаж',
+        'format' => 'money',
+        'is_expense' => false,
+        'values' => $buildValues($factData['operating_profit'], $operatingProfitForecast),
+    ];
+    
+    // Налог на прибыль - всегда показываем
+    $rows[] = [
+        'label' => 'Налог на прибыль',
+        'format' => 'money',
+        'is_expense' => true,
+        'values' => $buildValues($factTax, $taxForecast),
+    ];
+    
+    // Амортизация - показываем только если есть данные в факте или всегда в прогнозе
+    $factDeprForDisplay = [];
+    foreach ($factYears as $year) {
+        $factDeprForDisplay[$year] = $hasFactData($factData['depr']) ? ($factData['depr'][$year] ?? null) : null;
+    }
+    $rows[] = [
+        'label' => 'Амортизация',
+        'format' => 'money',
+        'is_expense' => false,
+        'values' => $buildValues($factDeprForDisplay, $deprForecast),
+    ];
+    
+    // Поддерживающий CAPEX - всегда показываем (только в прогнозе)
+    $rows[] = [
+        'label' => 'Поддерживающий CAPEX',
+        'format' => 'money',
+        'is_expense' => true,
+        'values' => $buildValues($nullFact, $supportCapex),
+    ];
+    
+    // ΔNWC - всегда показываем (только в прогнозе)
+    $rows[] = [
+        'label' => 'ΔNWC',
+        'format' => 'money',
+        'is_expense' => true,
+        'values' => $buildValues($nullFact, $deltaNwcForecast),
+    ];
+    
+    // FCFF - всегда показываем
+    $rows[] = [
+        'label' => 'FCFF',
+        'format' => 'money',
+        'is_expense' => false,
+        'star_columns' => [$forecastLabels[0]],
+        'values' => $buildValues($nullFact, $fcffDisplay, $terminalValue), // TV включен в строку FCFF
+    ];
+    
+    // Фактор дисконтирования - всегда показываем
+    $rows[] = [
+        'label' => 'Фактор дисконтирования',
+        'format' => 'decimal',
+        'values' => $buildValues($nullFact, $discountFactors, $discountFactors['TV']),
+    ];
+    
+    // Discounted FCFF - всегда показываем
+    $rows[] = [
+        'label' => 'Discounted FCFF',
+        'format' => 'money',
+        'is_expense' => false,
+        'values' => $buildValues($nullFact, $discountedCf, $terminalPv),
     ];
 
     $warnings = [];
@@ -962,7 +1046,10 @@ function calculateUserDCF(array $form): array {
         'rows' => $rows,
         'wacc' => $defaults['wacc'],
         'perpetual_growth' => $defaults['perpetual_growth'],
-        'footnotes' => ['* FCFF₁ скорректирован на оставшуюся часть года'],
+        'footnotes' => [
+            '*с учетом амортизации',
+            '* FCFF₁ скорректирован на оставшуюся часть года'
+        ],
         'warnings' => $warnings,
         'ev_breakdown' => [
             'ev' => $enterpriseValue,
@@ -1033,7 +1120,7 @@ if ($latestForm) {
     <link rel="stylesheet" href="styles.css?v=<?php echo time(); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
     <style>
         .dashboard-header {
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
@@ -1627,6 +1714,14 @@ if ($latestForm) {
             background: radial-gradient(circle at top left, rgba(99,102,241,0.12), rgba(15,23,42,0.02) 45%) #fff;
             box-shadow: 0 25px 60px rgba(15,23,42,0.08);
         }
+        .teaser-section,
+        .teaser-section p,
+        .teaser-section li,
+        .teaser-section .teaser-status,
+        .teaser-section .teaser-card__footer,
+        .teaser-section .btn {
+            font-family: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
         .teaser-section::before,
         .teaser-section::after {
             content: "";
@@ -1654,7 +1749,9 @@ if ($latestForm) {
         }
         .teaser-header h2 {
             margin: 0;
-            font-size: 26px;
+            font-size: 28px;
+            font-family: 'Space Grotesk', 'Manrope', 'Inter', sans-serif;
+            letter-spacing: 0.01em;
         }
         .teaser-header p {
             margin: 0;
@@ -1759,6 +1856,8 @@ if ($latestForm) {
             margin: 0 0 10px;
             font-size: 16px;
             color: var(--text-primary);
+            font-family: 'Space Grotesk', 'Manrope', 'Inter', sans-serif;
+            letter-spacing: 0.01em;
         }
         .teaser-card__subtitle {
             margin: 0 0 12px;
@@ -1843,37 +1942,15 @@ if ($latestForm) {
         }
         .teaser-chart {
             position: relative;
-            padding: 14px 14px 10px 14px;
             border: 1px solid rgba(99, 102, 241, 0.15);
             border-radius: 18px;
             background: rgba(99, 102, 241, 0.03);
             width: 100%;
+            min-height: 260px;
+            padding: 8px 8px 0;
         }
-        .teaser-chart svg {
-            width: 100%;
-            height: auto;
-            max-height: 220px;
-            display: block;
-        }
-        .teaser-chart-legend {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            font-size: 11px;
-            margin-top: 10px;
-            color: var(--text-secondary);
-            justify-content: center;
-        }
-        .teaser-chart-legend span {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .teaser-chart-legend i {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
+        .teaser-chart .apexcharts-canvas {
+            margin: 0 auto;
         }
         .teaser-chart__note {
             margin-top: 6px;
@@ -1882,6 +1959,7 @@ if ($latestForm) {
             text-align: center;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
 </head>
 <body>
     <!-- Navigation -->
@@ -2356,6 +2434,7 @@ if ($latestForm) {
                     }
 
                     teaserResult.innerHTML = payload.html;
+                    initTeaserCharts();
                     const formatted = formatRuDateTime(payload.generated_at);
                     teaserStatus.textContent = formatted
                         ? `Тизер обновлён: ${formatted}`
@@ -2422,6 +2501,112 @@ if ($latestForm) {
                 teaserBtn.addEventListener('click', handleTeaserGenerate);
             };
 
+            const initTeaserCharts = () => {
+                if (typeof ApexCharts === 'undefined') {
+                    console.warn('ApexCharts is not available.');
+                    return;
+                }
+                const containers = document.querySelectorAll('.teaser-chart[data-chart]');
+                if (!containers.length) {
+                    return;
+                }
+                containers.forEach((container) => {
+                    if (container.dataset.chartReady === '1') {
+                        return;
+                    }
+                    let payload;
+                    try {
+                        payload = JSON.parse(container.getAttribute('data-chart') || '{}');
+                    } catch (error) {
+                        console.error('Chart payload parse error', error);
+                        return;
+                    }
+                    if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
+                        return;
+                    }
+                    const options = {
+                        chart: {
+                            type: 'line',
+                            height: 300,
+                            toolbar: { show: false },
+                            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                        },
+                        colors: payload.colors || ['#6366F1', '#0EA5E9', '#F97316', '#10B981'],
+                        series: payload.series,
+                        stroke: {
+                            width: 3,
+                            curve: 'smooth',
+                        },
+                        markers: {
+                            size: 4,
+                            strokeWidth: 2,
+                            hover: { size: 7 },
+                        },
+                        dataLabels: { enabled: false },
+                        grid: {
+                            strokeDashArray: 5,
+                            borderColor: 'rgba(15,23,42,0.08)',
+                        },
+                        xaxis: {
+                            categories: payload.categories || [],
+                            labels: {
+                                style: {
+                                    colors: 'rgba(71,85,105,0.9)',
+                                    fontSize: '12px',
+                                },
+                            },
+                            axisBorder: { show: false },
+                            axisTicks: { show: false },
+                        },
+                        yaxis: {
+                            labels: {
+                                style: {
+                                    colors: 'rgba(71,85,105,0.9)',
+                                    fontSize: '12px',
+                                },
+                                formatter: (value) => {
+                                    if (value === null || value === undefined) {
+                                        return '';
+                                    }
+                                    const unit = payload.unit || '';
+                                    return `${Math.round(value).toLocaleString('ru-RU')} ${unit}`.trim();
+                                },
+                            },
+                        },
+                        legend: {
+                            position: 'top',
+                            horizontalAlign: 'center',
+                            fontSize: '12px',
+                            markers: { radius: 12 },
+                        },
+                        tooltip: {
+                            theme: 'light',
+                            y: {
+                                formatter: (value) => {
+                                    if (value === null || value === undefined) {
+                                        return '—';
+                                    }
+                                    const unit = payload.unit || '';
+                                    return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ${unit}`.trim();
+                                },
+                            },
+                        },
+                        fill: {
+                            type: 'gradient',
+                            gradient: {
+                                shadeIntensity: 0.3,
+                                opacityFrom: 0.8,
+                                opacityTo: 0.1,
+                                stops: [0, 90, 100],
+                            },
+                        },
+                    };
+                    const chart = new ApexCharts(container, options);
+                    chart.render();
+                    container.dataset.chartReady = '1';
+                });
+            };
+
             document.addEventListener('DOMContentLoaded', () => {
                 try {
                     initDcfPrint();
@@ -2443,6 +2628,12 @@ if ($latestForm) {
                     if (teaserStatus) {
                         teaserStatus.textContent = 'Не удалось инициализировать управление тизером.';
                     }
+                }
+
+                try {
+                    initTeaserCharts();
+                } catch (error) {
+                    console.error('Teaser charts init failed', error);
                 }
             });
 
