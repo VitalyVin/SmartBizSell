@@ -1663,6 +1663,34 @@ if ($latestForm) {
             color: var(--text-primary);
         }
         @media print {
+            @page {
+                size: A4;
+                margin: 6mm;
+            }
+            /* Prevent empty pages */
+            body.print-teaser {
+                height: auto !important;
+                overflow: visible !important;
+            }
+            body.print-teaser * {
+                page-break-after: avoid !important;
+                page-break-before: avoid !important;
+            }
+            body.print-teaser .teaser-section {
+                page-break-after: auto !important;
+                height: auto !important;
+                max-height: none !important;
+                page-break-inside: avoid !important;
+            }
+            /* Prevent orphaned elements */
+            body.print-teaser .teaser-hero,
+            body.print-teaser .teaser-grid {
+                page-break-inside: avoid !important;
+            }
+            /* Ensure no empty pages */
+            body.print-teaser .teaser-section:empty {
+                display: none !important;
+            }
             body.print-dcf * {
                 visibility: hidden !important;
             }
@@ -1693,6 +1721,201 @@ if ($latestForm) {
                 box-shadow: none;
                 border: none;
                 background: #fff;
+                padding: 6px 10px !important;
+                margin: 0 !important;
+                font-size: 9px;
+                max-height: 100vh;
+                overflow: hidden;
+            }
+            body.print-teaser [data-print-exclude] {
+                display: none !important;
+            }
+            /* Optimize teaser hero for print */
+            body.print-teaser .teaser-hero {
+                padding: 6px 8px !important;
+                margin-bottom: 4px !important;
+                border-radius: 4px !important;
+                gap: 4px !important;
+                grid-template-columns: 1fr !important;
+            }
+            body.print-teaser .teaser-hero__content h3 {
+                font-size: 12px !important;
+                margin-bottom: 1px !important;
+                line-height: 1.15 !important;
+            }
+            body.print-teaser .teaser-hero__description {
+                font-size: 8px !important;
+                line-height: 1.25 !important;
+                margin: 1px 0 3px !important;
+            }
+            body.print-teaser .teaser-hero__tags {
+                gap: 4px !important;
+                margin-bottom: 4px !important;
+            }
+            body.print-teaser .teaser-chip {
+                padding: 2px 6px !important;
+                font-size: 8px !important;
+                min-width: auto !important;
+            }
+            body.print-teaser .teaser-chip strong {
+                font-size: 9px !important;
+            }
+            body.print-teaser .teaser-hero__stats {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 4px !important;
+            }
+            body.print-teaser .teaser-stat {
+                padding: 4px 6px !important;
+                border-radius: 4px !important;
+            }
+            body.print-teaser .teaser-stat span {
+                font-size: 7px !important;
+            }
+            body.print-teaser .teaser-stat strong {
+                font-size: 11px !important;
+                margin-top: 1px !important;
+            }
+            body.print-teaser .teaser-stat small {
+                font-size: 7px !important;
+                margin-top: 1px !important;
+            }
+            body.print-teaser .teaser-hero__status {
+                margin-top: 4px !important;
+            }
+            body.print-teaser .teaser-status {
+                font-size: 8px !important;
+                padding-left: 12px !important;
+            }
+            body.print-teaser .teaser-status::before {
+                width: 5px !important;
+                height: 5px !important;
+            }
+            /* Optimize teaser header */
+            body.print-teaser .teaser-header {
+                margin-bottom: 4px !important;
+            }
+            body.print-teaser .teaser-header h2 {
+                font-size: 12px !important;
+                margin-bottom: 1px !important;
+            }
+            body.print-teaser .teaser-header p {
+                font-size: 9px !important;
+                margin: 0 !important;
+            }
+            body.print-teaser .teaser-actions {
+                display: none !important;
+            }
+            /* Optimize teaser result */
+            body.print-teaser .teaser-result {
+                padding: 4px !important;
+                border-radius: 4px !important;
+                margin-top: 4px !important;
+            }
+            /* Optimize teaser grid for compact layout */
+            body.print-teaser .teaser-grid {
+                display: grid !important;
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 3px !important;
+                margin-top: 3px !important;
+                page-break-inside: avoid !important;
+            }
+            body.print-teaser .teaser-grid .teaser-card[data-variant="overview"] {
+                grid-column: 1 / -1 !important;
+            }
+            body.print-teaser .teaser-grid .teaser-card[data-variant="chart"] {
+                grid-column: span 1 !important;
+            }
+            /* Optimize teaser cards */
+            body.print-teaser .teaser-card {
+                padding: 5px 6px !important;
+                border-radius: 3px !important;
+                margin: 0 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            body.print-teaser .teaser-card::before {
+                display: none !important;
+            }
+            body.print-teaser .teaser-card__icon {
+                width: 18px !important;
+                height: 18px !important;
+                font-size: 10px !important;
+                margin-bottom: 3px !important;
+                border-radius: 3px !important;
+            }
+            body.print-teaser .teaser-card h3 {
+                font-size: 9px !important;
+                margin: 0 0 1px !important;
+                line-height: 1.15 !important;
+            }
+            body.print-teaser .teaser-card__subtitle {
+                font-size: 7px !important;
+                margin: 0 0 2px !important;
+            }
+            body.print-teaser .teaser-card p,
+            body.print-teaser .teaser-card li {
+                font-size: 7px !important;
+                line-height: 1.2 !important;
+                margin: 0 !important;
+            }
+            body.print-teaser .teaser-card ul {
+                gap: 2px !important;
+            }
+            body.print-teaser .teaser-card ul li {
+                padding-left: 10px !important;
+                line-height: 1.25 !important;
+            }
+            body.print-teaser .teaser-card ul li::before {
+                width: 3px !important;
+                height: 3px !important;
+                top: 4px !important;
+            }
+            body.print-teaser .teaser-card__footer {
+                font-size: 7px !important;
+                margin-top: 3px !important;
+            }
+            /* Optimize chart card - ensure it renders properly */
+            body.print-teaser .teaser-chart-card {
+                min-height: 80px !important;
+                max-height: 85px !important;
+                height: auto !important;
+                page-break-inside: avoid;
+            }
+            /* ApexCharts for print - compact version */
+            body.print-teaser .teaser-chart {
+                min-height: 60px !important;
+                max-height: 70px !important;
+                height: 70px !important;
+                padding: 2px !important;
+                margin: 0 !important;
+            }
+            body.print-teaser .teaser-chart__note {
+                font-size: 5px !important;
+                margin-top: 1px !important;
+                display: none !important;
+            }
+            body.print-teaser .teaser-card[data-variant="chart"] {
+                padding: 3px 4px !important;
+                margin: 0 !important;
+            }
+            body.print-teaser .teaser-card[data-variant="chart"] h3 {
+                font-size: 7px !important;
+                margin: 0 0 1px 0 !important;
+            }
+            body.print-teaser .apexcharts-canvas,
+            body.print-teaser .apexcharts-canvas * {
+                visibility: visible !important;
+            }
+            body.print-teaser .apexcharts-svg {
+                height: 60px !important;
+            }
+            /* Hide decorative elements */
+            body.print-teaser .teaser-section::before,
+            body.print-teaser .teaser-section::after {
+                display: none !important;
+            }
+            body.print-teaser .teaser-progress {
+                display: none !important;
             }
         }
         .dcf-source-note {
@@ -1725,9 +1948,9 @@ if ($latestForm) {
             border-radius: 32px;
             position: relative;
             overflow: hidden;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            background: radial-gradient(circle at top left, rgba(99,102,241,0.12), rgba(15,23,42,0.02) 45%) #fff;
-            box-shadow: 0 25px 60px rgba(15,23,42,0.08);
+            border: 1px solid rgba(15, 23, 42, 0.06);
+            background: linear-gradient(180deg, #ffffff 0%, #f7f8fb 100%);
+            box-shadow: 0 15px 45px rgba(15,23,42,0.06);
         }
         .teaser-section,
         .teaser-section p,
@@ -1753,6 +1976,31 @@ if ($latestForm) {
         }
         .teaser-section::after {
             inset: -140px -60px auto auto;
+        }
+        .teaser-section--investors {
+            margin-top: 28px;
+            background: linear-gradient(180deg, #fdfdfd 0%, #f3f6fb 100%);
+            color: var(--text-primary);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .teaser-section--investors::before,
+        .teaser-section--investors::after {
+            display: none;
+        }
+        .teaser-section--investors .teaser-header p {
+            color: var(--text-secondary);
+        }
+        .teaser-section--investors .investor-controls {
+            border: 1px dashed rgba(99, 102, 241, 0.25);
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .teaser-section--investors .investor-result {
+            margin-top: 20px;
+        }
+        .teaser-section--investors .investor-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: rgba(99, 102, 241, 0.35);
+            color: var(--text-primary);
         }
         .teaser-header {
             display: flex;
@@ -2115,6 +2363,273 @@ if ($latestForm) {
         .investor-result {
             margin-top: 18px;
         }
+        /* --- Modern teaser visuals --- */
+        :root {
+            --teaser-night: #f7f8fb;
+            --teaser-card-surface: #ffffff;
+            --teaser-stroke: rgba(15, 23, 42, 0.08);
+            --teaser-highlight: #6366f1;
+            --teaser-highlight-alt: #0ea5e9;
+            --teaser-text: #0f172a;
+            --teaser-muted: rgba(71, 85, 105, 0.9);
+        }
+        .teaser-section {
+            color: var(--teaser-text);
+            background: radial-gradient(circle at 0% -20%, rgba(99,102,241,0.14), transparent 55%),
+                        radial-gradient(circle at 100% 0%, rgba(14,165,233,0.12), transparent 45%),
+                        var(--teaser-night);
+            border: 1px solid rgba(15,23,42,0.05);
+            box-shadow: 0 18px 55px rgba(15,23,42,0.08);
+        }
+        .teaser-section::before,
+        .teaser-section::after {
+            width: 420px;
+            height: 420px;
+            opacity: 0.15;
+            filter: blur(30px);
+        }
+        .teaser-section::before {
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.4), transparent 70%);
+        }
+        .teaser-section::after {
+            background: radial-gradient(circle, rgba(14, 165, 233, 0.3), transparent 70%);
+        }
+        .teaser-header h2 {
+            color: var(--teaser-text);
+            font-size: 30px;
+        }
+        .teaser-header p {
+            color: var(--teaser-muted);
+        }
+        .teaser-actions .btn {
+            padding: 12px 24px;
+            font-size: 14px;
+            border-radius: 999px;
+        }
+        .teaser-actions .btn-primary {
+            background: linear-gradient(120deg, var(--teaser-highlight), var(--teaser-highlight-alt));
+            border: none;
+            box-shadow: 0 18px 35px rgba(99,102,241,0.25);
+            color: #fff;
+        }
+        .teaser-actions .btn-primary:hover {
+            box-shadow: 0 22px 46px rgba(99,102,241,0.3);
+            transform: translateY(-2px);
+        }
+        .teaser-actions .btn-secondary {
+            border-color: rgba(99,102,241,0.25);
+            background: rgba(255,255,255,0.9);
+            color: var(--teaser-text);
+        }
+        .teaser-actions .btn-secondary:hover {
+            border-color: rgba(99,102,241,0.4);
+            color: var(--teaser-highlight);
+        }
+        .teaser-hero {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 28px;
+            border: 1px solid var(--teaser-stroke);
+            border-radius: 28px;
+            padding: 28px 32px;
+            background: linear-gradient(135deg, #ffffff, rgba(247,248,251,0.7));
+            box-shadow: 0 16px 36px rgba(15,23,42,0.08);
+            margin-bottom: 28px;
+            align-items: flex-start;
+        }
+        .teaser-hero__content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .teaser-hero__content h3 {
+            margin: 0;
+            font-size: 26px;
+            font-family: 'Space Grotesk', 'Manrope', 'Inter', sans-serif;
+            letter-spacing: 0.01em;
+        }
+        .teaser-hero__description {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--teaser-muted);
+            margin: 4px 0 12px;
+            max-width: 640px;
+        }
+        .teaser-hero__tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .teaser-chip {
+            display: inline-flex;
+            flex-direction: column;
+            padding: 10px 14px;
+            border-radius: 16px;
+            background: rgba(99,102,241,0.08);
+            border: 1px solid rgba(99,102,241,0.15);
+            min-width: 140px;
+            color: var(--teaser-muted);
+            font-size: 12px;
+        }
+        .teaser-chip strong {
+            color: var(--teaser-text);
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .teaser-hero__stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+        }
+        .teaser-stat {
+            padding: 16px;
+            border-radius: 20px;
+            background: var(--teaser-card-surface);
+            border: 1px solid var(--teaser-stroke);
+            box-shadow: 0 12px 30px rgba(15,23,42,0.08);
+        }
+        .teaser-stat span {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(71,85,105,0.8);
+        }
+        .teaser-stat strong {
+            display: block;
+            font-size: 20px;
+            margin-top: 6px;
+            color: var(--teaser-text);
+        }
+        .teaser-stat small {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--teaser-muted);
+        }
+        .teaser-hero__status {
+            grid-column: 1 / -1;
+            margin-top: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .teaser-status {
+            font-size: 14px;
+            color: var(--teaser-muted);
+            position: relative;
+            padding-left: 22px;
+        }
+        .teaser-status::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--teaser-highlight), var(--teaser-highlight-alt));
+            box-shadow: 0 0 10px rgba(99,102,241,0.35);
+        }
+        .teaser-progress {
+            background: rgba(99,102,241,0.12);
+        }
+        .teaser-progress__bar {
+            background: linear-gradient(120deg, var(--teaser-highlight), var(--teaser-highlight-alt));
+        }
+        .teaser-result {
+            background: rgba(255,255,255,0.95);
+            border: 1px dashed rgba(99,102,241,0.2);
+            border-radius: 28px;
+            padding: 24px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+            color: var(--teaser-text);
+        }
+        .teaser-result p {
+            color: var(--teaser-muted) !important;
+        }
+        .teaser-grid {
+            margin-top: 28px;
+        }
+        .teaser-section .teaser-card {
+            background: var(--teaser-card-surface);
+            border: 1px solid var(--teaser-stroke);
+            color: var(--teaser-text);
+            box-shadow: 0 14px 35px rgba(15,23,42,0.08);
+        }
+        .teaser-section .teaser-card::before {
+            opacity: 0.1;
+        }
+        .teaser-section .teaser-card h3 {
+            color: var(--teaser-text);
+        }
+        .teaser-section .teaser-card p,
+        .teaser-section .teaser-card li,
+        .teaser-section .teaser-card__footer {
+            color: var(--teaser-muted);
+        }
+        .teaser-section .teaser-card ul li::before {
+            content: "•";
+            color: var(--teaser-highlight);
+            position: absolute;
+            left: 0;
+        }
+        .teaser-card__icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.25);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: var(--teaser-highlight);
+        }
+        .investor-section {
+            border: 1px solid rgba(15,23,42,0.06);
+            background: linear-gradient(180deg, #ffffff 0%, #f3f6fb 100%);
+            color: var(--teaser-text);
+        }
+        .investor-card {
+            background: rgba(255,255,255,0.95);
+            border: 1px solid rgba(15,23,42,0.08);
+            color: var(--teaser-text);
+        }
+        .investor-card__focus,
+        .investor-card__reason,
+        .investor-card__check {
+            color: var(--teaser-muted);
+        }
+        .investor-controls {
+            border-color: rgba(99,102,241,0.25);
+            background: rgba(255,255,255,0.92);
+        }
+        .investor-status {
+            color: var(--teaser-muted);
+        }
+        @media (max-width: 1024px) {
+            .teaser-hero {
+                grid-template-columns: 1fr;
+            }
+            .teaser-hero__stats {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+        @media (max-width: 640px) {
+            .teaser-section {
+                padding: 28px 20px;
+            }
+            .teaser-hero {
+                padding: 24px;
+                border-radius: 24px;
+            }
+            .teaser-actions .btn {
+                width: 100%;
+            }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
 </head>
@@ -2437,24 +2952,127 @@ if ($latestForm) {
         <?php endif; ?>
 
         <?php if ($latestForm): ?>
-            <div class="teaser-section" id="teaser-section">
-                <div class="teaser-header">
-                    <h2>AI-тизер компании</h2>
-                    <p>Краткая презентация актива на основе данных анкеты и открытых источников.</p>
-                    <div class="teaser-actions">
-                        <button type="button" class="btn btn-primary" id="generate-teaser-btn">
-                            <?php echo $savedTeaserHtml ? 'Обновить тизер' : 'Создать тизер'; ?>
-                        </button>
-                        <button type="button" class="btn btn-secondary" id="export-teaser-pdf" <?php echo $savedTeaserHtml ? '' : 'disabled'; ?>>
-                            Сохранить тизер в PDF
-                        </button>
-                    </div>
+        <div class="teaser-section" id="teaser-section" data-print-scope="teaser">
+            <div class="teaser-header">
+                <h2>AI-тизер компании</h2>
+                <p>Краткая презентация актива на основе данных анкеты и открытых источников.</p>
+                <div class="teaser-actions">
+                    <button type="button" class="btn btn-primary" id="generate-teaser-btn">
+                        <?php echo $savedTeaserHtml ? 'Обновить тизер' : 'Создать тизер'; ?>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="export-teaser-pdf" <?php echo $savedTeaserHtml ? '' : 'disabled'; ?>>
+                        Сохранить тизер в PDF
+                    </button>
                 </div>
-                <div class="teaser-status" id="teaser-status">
-                    <?php if ($savedTeaserTimestamp): ?>
-                        Последнее обновление: <?php echo date('d.m.Y H:i', strtotime($savedTeaserTimestamp)); ?>
+            </div>
+            <?php
+                $heroCompanyName = trim((string)($latestForm['asset_name'] ?? ''));
+                if ($heroCompanyName === '') {
+                    $heroCompanyName = 'Ваш проект';
+                }
+                $heroDescription = trim((string)($latestForm['company_description'] ?? $latestForm['additional_info'] ?? 'Подготовьте краткое описание, чтобы сделать тизер ещё выразительнее.'));
+                // Remove "M&A платформа" and similar phrases
+                $heroDescription = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $heroDescription);
+                $heroDescription = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $heroDescription);
+                $heroDescription = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $heroDescription);
+                $heroDescription = trim(preg_replace('/\s+/', ' ', $heroDescription));
+                if (mb_strlen($heroDescription) > 220) {
+                    $heroDescription = mb_substr($heroDescription, 0, 220) . '…';
+                }
+                $heroIndustry = trim((string)($latestForm['products_services'] ?? ''));
+                $heroRegion = trim((string)($latestForm['presence_regions'] ?? ''));
+                $heroGoal = trim((string)($latestForm['deal_goal'] ?? ''));
+                $heroChips = [];
+                if ($heroIndustry !== '') {
+                    $heroChips[] = ['label' => 'Сегмент', 'value' => $heroIndustry];
+                }
+                if ($heroRegion !== '') {
+                    $heroChips[] = ['label' => 'Рынки', 'value' => $heroRegion];
+                }
+                if ($heroGoal !== '') {
+                    $heroChips[] = ['label' => 'Цель', 'value' => $heroGoal];
+                }
+                $heroStats = [];
+                if (is_array($dcfData ?? null)) {
+                    if (isset($dcfData['wacc'])) {
+                        $heroStats[] = [
+                            'label' => 'WACC',
+                            'value' => number_format((float)$dcfData['wacc'] * 100, 1, '.', ' ') . '%',
+                            'caption' => 'стоимость капитала',
+                        ];
+                    }
+                    if (isset($dcfData['perpetual_growth'])) {
+                        $heroStats[] = [
+                            'label' => 'Темп роста',
+                            'value' => number_format((float)$dcfData['perpetual_growth'] * 100, 1, '.', ' ') . '%',
+                            'caption' => 'горизонт 5 лет',
+                        ];
+                    }
+                    if (!empty($dcfData['ev_breakdown']['equity'])) {
+                        $heroEquityValue = (float)$dcfData['ev_breakdown']['equity'];
+                        $heroStats[] = [
+                            'label' => 'Equity Value',
+                            'value' => number_format($heroEquityValue, 0, '.', ' ') . ' млн ₽',
+                            'caption' => 'оценка бизнеса',
+                        ];
+                    }
+                }
+                $heroRevenueValue = null;
+                if (!empty($latestForm['financial_results'])) {
+                    $heroFinancial = json_decode($latestForm['financial_results'], true);
+                    if (is_array($heroFinancial) && isset($heroFinancial['revenue']['2024_fact']) && $heroFinancial['revenue']['2024_fact'] !== '') {
+                        $cleanRevenue = preg_replace('/[^0-9\.\-]/', '', (string)$heroFinancial['revenue']['2024_fact']);
+                        if ($cleanRevenue !== '' && is_numeric($cleanRevenue)) {
+                            $heroRevenueValue = (float)$cleanRevenue;
+                        }
+                    }
+                }
+                if ($heroRevenueValue !== null) {
+                    $heroStats[] = [
+                        'label' => 'Выручка 2024',
+                        'value' => number_format($heroRevenueValue, 0, '.', ' ') . ' млн ₽',
+                        'caption' => 'по данным анкеты',
+                    ];
+                }
+                $heroStats = array_slice(array_filter($heroStats, fn($item) => !empty($item['value'])), 0, 3);
+                $teaserStatusText = $savedTeaserTimestamp
+                    ? 'Тизер обновлён: ' . date('d.m.Y H:i', strtotime($savedTeaserTimestamp))
+                    : 'Нажмите «Создать тизер», чтобы подготовить актуальную версию.';
+            ?>
+            <div class="teaser-hero">
+                <div class="teaser-hero__content">
+                    <h3><?php echo htmlspecialchars($heroCompanyName, ENT_QUOTES, 'UTF-8'); ?></h3>
+                    <p class="teaser-hero__description"><?php echo htmlspecialchars($heroDescription, ENT_QUOTES, 'UTF-8'); ?></p>
+                    <?php if (!empty($heroChips)): ?>
+                        <div class="teaser-hero__tags">
+                            <?php foreach ($heroChips as $chip): ?>
+                                <span class="teaser-chip">
+                                    <span><?php echo htmlspecialchars($chip['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                    <strong><?php echo htmlspecialchars($chip['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                                </span>
+                            <?php endforeach; ?>
+                        </div>
                     <?php endif; ?>
                 </div>
+                <?php if (!empty($heroStats)): ?>
+                    <div class="teaser-hero__stats">
+                        <?php foreach ($heroStats as $stat): ?>
+                            <div class="teaser-stat">
+                                <span><?php echo htmlspecialchars($stat['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                <strong><?php echo htmlspecialchars($stat['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                                <?php if (!empty($stat['caption'])): ?>
+                                    <small><?php echo htmlspecialchars($stat['caption'], ENT_QUOTES, 'UTF-8'); ?></small>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+                <div class="teaser-hero__status">
+                    <div class="teaser-status" id="teaser-status">
+                        <?php echo htmlspecialchars($teaserStatusText, ENT_QUOTES, 'UTF-8'); ?>
+                    </div>
+                </div>
+            </div>
                 <div class="teaser-progress" id="teaser-progress" aria-hidden="true">
                     <div class="teaser-progress__bar" id="teaser-progress-bar"></div>
                 </div>
@@ -2464,6 +3082,12 @@ if ($latestForm) {
                     <?php else: ?>
                         <p style="color: var(--text-secondary); margin: 0;">Нажмите «Создать тизер», чтобы получить структурированный документ для инвесторов.</p>
                     <?php endif; ?>
+                </div>
+            </div>
+            <div class="teaser-section teaser-section--investors" data-print-exclude>
+                <div class="teaser-header">
+                    <h2>Возможные инвесторы</h2>
+                    <p>Подбор релевантных инвесторов на основе каталога SmartBizSell и AI-рекомендаций.</p>
                 </div>
                 <div
                     class="investor-controls"
@@ -2613,28 +3237,12 @@ if ($latestForm) {
             };
 
             const handleTeaserPrint = () => {
-                const { teaserPrintBtn, teaserSection } = getTeaserElements();
-                if (!teaserPrintBtn || !teaserSection || teaserPrintBtn.disabled) {
+                const { teaserPrintBtn } = getTeaserElements();
+                if (!teaserPrintBtn || teaserPrintBtn.disabled) {
                     return;
                 }
-                const originalText = teaserPrintBtn.textContent;
-                const restore = () => {
-                    document.body.classList.remove('print-teaser');
-                    teaserPrintBtn.disabled = false;
-                    teaserPrintBtn.textContent = originalText;
-                };
-                const afterPrint = () => {
-                    restore();
-                    window.removeEventListener('afterprint', afterPrint);
-                };
-                document.body.classList.add('print-teaser');
-                teaserPrintBtn.disabled = true;
-                teaserPrintBtn.textContent = 'Открывается диалог...';
-                window.addEventListener('afterprint', afterPrint);
-                setTimeout(() => {
-                    window.print();
-                    setTimeout(restore, 1000);
-                }, 50);
+                // Open PDF page in new window
+                window.open('teaser_pdf.php', '_blank');
             };
 
             const handleTeaserGenerate = async () => {
@@ -2687,6 +3295,18 @@ if ($latestForm) {
                         throw new Error(payload.message || 'Не удалось создать тизер.');
                     }
 
+                    // Destroy existing charts before inserting new HTML
+                    const existingCharts = document.querySelectorAll('.teaser-chart[data-chart-ready="1"]');
+                    existingCharts.forEach((container) => {
+                        const chartId = container.id || container.getAttribute('data-chart-id');
+                        if (chartId && window.ApexCharts) {
+                            const chart = ApexCharts.exec(chartId);
+                            if (chart) {
+                                chart.destroy();
+                            }
+                        }
+                    });
+                    
                     teaserResult.innerHTML = payload.html;
                     initTeaserCharts();
                     const formatted = formatRuDateTime(payload.generated_at);
@@ -2860,10 +3480,31 @@ if ($latestForm) {
                 if (!containers.length) {
                     return;
                 }
-                containers.forEach((container) => {
+                containers.forEach((container, index) => {
+                    // Clear any existing content in container
+                    container.innerHTML = '';
+                    
+                    // Generate unique ID for chart if not exists
+                    if (!container.id) {
+                        container.id = 'teaser-chart-' + Date.now() + '-' + index;
+                    }
+                    const chartId = container.id;
+                    
+                    // Check if chart already exists
                     if (container.dataset.chartReady === '1') {
+                        const existingChart = ApexCharts.exec(chartId);
+                        if (existingChart && document.body.classList.contains('print-teaser')) {
+                            // Update existing chart for print mode
+                            existingChart.updateOptions({
+                                chart: { height: 75 },
+                                legend: { fontSize: '6px', offsetY: -6 },
+                                xaxis: { labels: { style: { fontSize: '5px' } } },
+                                yaxis: { labels: { style: { fontSize: '5px' } } }
+                            }, false, true);
+                        }
                         return;
                     }
+                    
                     let payload;
                     try {
                         payload = JSON.parse(container.getAttribute('data-chart') || '{}');
@@ -2874,11 +3515,13 @@ if ($latestForm) {
                     if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
                         return;
                     }
+                    const isPrintMode = document.body.classList.contains('print-teaser');
                     const options = {
                         chart: {
+                            id: chartId,
                             type: 'line',
-                            height: 300,
-                            parentHeightOffset: 10,
+                            height: isPrintMode ? 75 : 300,
+                            parentHeightOffset: isPrintMode ? 0 : 10,
                             toolbar: { show: false },
                             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                         },
@@ -2903,7 +3546,7 @@ if ($latestForm) {
                             labels: {
                                 style: {
                                     colors: 'rgba(71,85,105,0.9)',
-                                    fontSize: '12px',
+                                    fontSize: isPrintMode ? '6px' : '12px',
                                 },
                             },
                             axisBorder: { show: false },
@@ -2913,7 +3556,7 @@ if ($latestForm) {
                             labels: {
                                 style: {
                                     colors: 'rgba(71,85,105,0.9)',
-                                    fontSize: '12px',
+                                    fontSize: isPrintMode ? '6px' : '12px',
                                 },
                                 formatter: (value) => {
                                     if (value === null || value === undefined) {
@@ -2927,12 +3570,12 @@ if ($latestForm) {
                         legend: {
                             position: 'top',
                             horizontalAlign: 'left',
-                            fontSize: '12px',
-                            offsetY: 0,
+                            fontSize: isPrintMode ? '7px' : '6px',
+                            offsetY: isPrintMode ? -4 : -5,
                             offsetX: 0,
-                            markers: { width: 10, height: 10, radius: 4 },
+                            markers: { width: isPrintMode ? 6 : 5, height: isPrintMode ? 6 : 5, radius: 2 },
                             itemMargin: {
-                                horizontal: 12,
+                                horizontal: isPrintMode ? 6 : 6,
                                 vertical: 0,
                             },
                         },
@@ -2958,9 +3601,23 @@ if ($latestForm) {
                             },
                         },
                     };
+                    // Ensure container is empty and ready
+                    container.innerHTML = '';
+                    container.style.minHeight = isPrintMode ? '75px' : '260px';
+                    
                     const chart = new ApexCharts(container, options);
-                    chart.render();
-                    container.dataset.chartReady = '1';
+                    chart.render().then(() => {
+                        container.dataset.chartReady = '1';
+                        container.setAttribute('data-chart-id', chartId);
+                        // Ensure no text content remains
+                        const textNodes = Array.from(container.childNodes).filter(node => 
+                            node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''
+                        );
+                        textNodes.forEach(node => node.remove());
+                    }).catch((error) => {
+                        console.error('Chart render error:', error);
+                        container.innerHTML = '<p style="font-size: 10px; color: #999; text-align: center; padding: 20px;">График временно недоступен</p>';
+                    });
                 });
             };
 

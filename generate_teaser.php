@@ -695,6 +695,7 @@ function renderTeaserChart(array $series): string
         return '';
     }
 
+    // Build data for ApexCharts
     $apexPayload = [
         'categories' => $labels,
         'unit' => 'млн ₽',
@@ -727,6 +728,139 @@ function renderTeaserChart(array $series): string
     $html .= '<p class="teaser-chart__note">Показатели указаны в млн ₽. Источник: анкета продавца (факт + бюджет).</p>';
     $html .= '</div>';
     return $html;
+}
+
+/**
+ * Генерирует статический SVG-график для отображения динамики финансов.
+ * Этот график будет корректно отображаться как в браузере, так и в PDF.
+ */
+function generateStaticSvgChart(array $labels, array $series): string
+{
+    $width = 700;
+    $height = 280;
+    $padding = ['top' => 40, 'right' => 50, 'bottom' => 50, 'left' => 70];
+    $chartWidth = $width - $padding['left'] - $padding['right'];
+    $chartHeight = $height - $padding['top'] - $padding['bottom'];
+    
+    // Find min and max values
+    $allValues = [];
+    foreach ($series as $serie) {
+        foreach ($serie['data'] as $value) {
+            if ($value !== null) {
+                $allValues[] = $value;
+            }
+        }
+    }
+    if (empty($allValues)) {
+        return '<p style="text-align: center; color: #999; padding: 20px;">Нет данных для графика</p>';
+    }
+    
+    $minValue = min($allValues);
+    $maxValue = max($allValues);
+    $valueRange = $maxValue - $minValue;
+    if ($valueRange === 0) {
+        $valueRange = 1;
+    }
+    
+    // Calculate Y-axis scale
+    $yTicks = 5;
+    $yStep = $valueRange / ($yTicks - 1);
+    $yTickValues = [];
+    for ($i = 0; $i < $yTicks; $i++) {
+        $yTickValues[] = $minValue + ($yStep * $i);
+    }
+    
+    // Build SVG
+    $svg = '<svg width="' . $width . '" height="' . $height . '" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">';
+    
+    // Background with subtle gradient
+    $svg .= '<defs>';
+    $svg .= '<linearGradient id="chartBg" x1="0%" y1="0%" x2="0%" y2="100%">';
+    $svg .= '<stop offset="0%" style="stop-color:#fafbfc;stop-opacity:1" />';
+    $svg .= '<stop offset="100%" style="stop-color:#ffffff;stop-opacity:1" />';
+    $svg .= '</linearGradient>';
+    $svg .= '</defs>';
+    $svg .= '<rect width="' . $width . '" height="' . $height . '" fill="url(#chartBg)"/>';
+    
+    // Grid lines with better styling
+    foreach ($yTickValues as $tickValue) {
+        $y = $padding['top'] + $chartHeight - (($tickValue - $minValue) / $valueRange * $chartHeight);
+        $svg .= '<line x1="' . $padding['left'] . '" y1="' . $y . '" x2="' . ($width - $padding['right']) . '" y2="' . $y . '" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.6"/>';
+    }
+    
+    // Y-axis line
+    $svg .= '<line x1="' . $padding['left'] . '" y1="' . $padding['top'] . '" x2="' . $padding['left'] . '" y2="' . ($height - $padding['bottom']) . '" stroke="#cbd5e1" stroke-width="2"/>';
+    // X-axis line
+    $svg .= '<line x1="' . $padding['left'] . '" y1="' . ($height - $padding['bottom']) . '" x2="' . ($width - $padding['right']) . '" y2="' . ($height - $padding['bottom']) . '" stroke="#cbd5e1" stroke-width="2"/>';
+    
+    // Draw lines for each series
+    $labelCount = count($labels);
+    $xStep = $chartWidth / max(1, $labelCount - 1);
+    
+    foreach ($series as $serieIndex => $serie) {
+        $points = [];
+        $pathData = '';
+        
+        foreach ($serie['data'] as $dataIndex => $value) {
+            if ($value === null) {
+                continue;
+            }
+            $x = $padding['left'] + ($dataIndex * $xStep);
+            $y = $padding['top'] + $chartHeight - (($value - $minValue) / $valueRange * $chartHeight);
+            $points[] = ['x' => $x, 'y' => $y, 'value' => $value];
+            
+            if ($pathData === '') {
+                $pathData = 'M ' . $x . ' ' . $y;
+            } else {
+                $pathData .= ' L ' . $x . ' ' . $y;
+            }
+        }
+        
+        // Draw line with gradient effect
+        if ($pathData !== '') {
+            $svg .= '<path d="' . $pathData . '" fill="none" stroke="' . $serie['color'] . '" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>';
+        }
+        
+        // Draw points with shadow effect
+        foreach ($points as $point) {
+            // Shadow
+            $svg .= '<circle cx="' . ($point['x'] + 1) . '" cy="' . ($point['y'] + 1) . '" r="5" fill="rgba(0,0,0,0.1)"/>';
+            // Main point
+            $svg .= '<circle cx="' . $point['x'] . '" cy="' . $point['y'] . '" r="5" fill="' . $serie['color'] . '" stroke="#fff" stroke-width="2.5"/>';
+            // Inner highlight
+            $svg .= '<circle cx="' . $point['x'] . '" cy="' . $point['y'] . '" r="2" fill="#fff" opacity="0.6"/>';
+        }
+    }
+    
+    // Y-axis labels with better styling
+    foreach ($yTickValues as $tickValue) {
+        $y = $padding['top'] + $chartHeight - (($tickValue - $minValue) / $valueRange * $chartHeight);
+        $label = number_format($tickValue, 0, '.', ' ');
+        $svg .= '<text x="' . ($padding['left'] - 15) . '" y="' . ($y + 5) . '" text-anchor="end" font-size="12" fill="#475569" font-family="Arial, sans-serif" font-weight="500">' . htmlspecialchars($label, ENT_XML1) . '</text>';
+    }
+    
+    // X-axis labels with better styling
+    foreach ($labels as $index => $label) {
+        $x = $padding['left'] + ($index * $xStep);
+        $svg .= '<text x="' . $x . '" y="' . ($height - $padding['bottom'] + 25) . '" text-anchor="middle" font-size="12" fill="#475569" font-family="Arial, sans-serif" font-weight="500">' . htmlspecialchars($label, ENT_XML1) . '</text>';
+    }
+    
+    // Legend with better styling
+    $legendX = $padding['left'];
+    $legendY = 20;
+    foreach ($series as $serieIndex => $serie) {
+        $legendItemX = $legendX + ($serieIndex * 180);
+        // Legend background
+        $svg .= '<rect x="' . ($legendItemX - 4) . '" y="' . ($legendY - 10) . '" width="140" height="20" fill="rgba(255,255,255,0.8)" rx="4"/>';
+        // Legend marker
+        $svg .= '<rect x="' . $legendItemX . '" y="' . ($legendY - 4) . '" width="14" height="14" fill="' . $serie['color'] . '" rx="2"/>';
+        // Legend text
+        $svg .= '<text x="' . ($legendItemX + 20) . '" y="' . ($legendY + 5) . '" font-size="13" fill="#1e293b" font-family="Arial, sans-serif" font-weight="600">' . htmlspecialchars($serie['name'], ENT_XML1) . '</text>';
+    }
+    
+    $svg .= '</svg>';
+    
+    return $svg;
 }
 
 function normalizeTeaserData(array $data, array $payload): array
@@ -815,6 +949,11 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
         $prompt = buildOverviewRefinementPrompt($data['overview'], $payload);
         $aiText = trim(callTogetherCompletions($prompt, $apiKey));
         $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
+        // Remove "M&A платформа" and similar phrases
+        $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
+        $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
+        $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
+        $aiText = trim(preg_replace('/\s+/', ' ', $aiText));
         if ($aiText !== '') {
             $sentences = splitIntoSentences($aiText);
             $data['overview']['summary'] = buildParagraphsFromSentences(
@@ -1482,6 +1621,11 @@ function formatMarketBlockText(array $market): array
 function buildHeroSummary(?string $aiSummary, array $payload, string $fallback): string
 {
     $summary = trim(constrainToRussianNarrative(sanitizeAiArtifacts((string)$aiSummary)));
+    // Remove "M&A платформа" and similar phrases
+    $summary = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $summary);
+    $summary = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $summary);
+    $summary = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $summary);
+    $summary = trim(preg_replace('/\s+/', ' ', $summary));
     if ($summary !== '' && !looksLikeStructuredDump($summary)) {
         return enrichSummaryWithAdvantages($summary, $payload);
     }
