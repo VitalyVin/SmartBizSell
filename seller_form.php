@@ -29,6 +29,7 @@ $draftMessage = false;
  * При сохранении черновика валидация не выполняется, все поля опциональны
  */
 $requiredFields = [
+    'company_inn',
     'asset_name',
     'deal_share_range',
     'deal_goal',
@@ -125,7 +126,7 @@ function normalizeDraftValue($value)
 function buildDraftPayload(array $source): array
 {
     $scalarFields = [
-        'asset_name', 'deal_share_range', 'deal_goal', 'asset_disclosure',
+        'company_inn', 'asset_name', 'deal_share_range', 'deal_goal', 'asset_disclosure',
         'company_description', 'presence_regions', 'products_services',
         'company_brands', 'own_production', 'production_sites_count',
         'production_sites_region', 'production_area', 'production_capacity',
@@ -240,6 +241,7 @@ function hydrateFormFromDb(array $form): void
 
     // Иначе используем отдельные поля из базы данных (для старых форм или отправленных форм)
     $mapping = [
+        'company_inn' => 'company_inn',
         'asset_name' => 'asset_name',
         'deal_share_range' => 'deal_subject',
         'deal_goal' => 'deal_purpose',
@@ -395,6 +397,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Получаем данные формы
     $asset_name = sanitizeInput($_POST['asset_name'] ?? '');
+    $companyInnRaw = sanitizeInput($_POST['company_inn'] ?? '');
+    $companyInnDigits = preg_replace('/\D+/', '', $companyInnRaw);
+    $_POST['company_inn'] = $companyInnDigits;
     
     // Определяем режим сохранения: черновик или отправка
     // Используем два флага для надежности (save_draft кнопка и скрытое поле save_draft_flag)
@@ -408,6 +413,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$isDraftSave) {
         if ($asset_name === '') {
             $errors['asset_name'] = 'Укажите название актива';
+        }
+        if ($companyInnDigits === '') {
+            $errors['company_inn'] = 'Укажите ИНН';
+        } elseif (!preg_match('/^\d{10}$|^\d{12}$/', $companyInnDigits)) {
+            $errors['company_inn'] = 'ИНН должен содержать 10 или 12 цифр';
         }
         if (!isset($_POST['agree'])) {
             $errors['agree'] = 'Необходимо согласие на обработку данных';
@@ -446,13 +456,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Статус всегда 'draft', остальные поля не заполняются
                 if ($formId && $existingForm) {
                     // Обновление существующего черновика
-                    $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
-                    $stmt->execute([$asset_name, $dataJson, $formId, $_SESSION['user_id']]);
+                    $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
+                    $stmt->execute([$asset_name, $companyInnDigits, $dataJson, $formId, $_SESSION['user_id']]);
                     error_log("DRAFT UPDATED - form_id: $formId");
                 } else {
                     // Создание нового черновика
-                    $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, data_json, status) VALUES (?, ?, ?, 'draft')");
-                    $stmt->execute([$_SESSION['user_id'], $asset_name, $dataJson]);
+                    $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, company_inn, data_json, status) VALUES (?, ?, ?, ?, 'draft')");
+                    $stmt->execute([$_SESSION['user_id'], $asset_name, $companyInnDigits, $dataJson]);
                     $formId = $pdo->lastInsertId();
                     error_log("DRAFT INSERTED - new form_id: $formId");
                 }
@@ -506,7 +516,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($formId && $existingForm) {
                     $stmt = $pdo->prepare("UPDATE seller_forms SET
-                        asset_name = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
+                        asset_name = ?, company_inn = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
                         company_description = ?, presence_regions = ?, products_services = ?, company_brands = ?,
                         own_production = ?, production_sites_count = ?, production_sites_region = ?, production_area = ?,
                         production_capacity = ?, production_load = ?, production_building_ownership = ?, production_land_ownership = ?,
@@ -520,7 +530,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         status = 'submitted', submitted_at = NOW(), updated_at = NOW()
                         WHERE id = ? AND user_id = ?");
                     $stmt->execute([
-                        $asset_name, $dealSubject, $dealPurpose, $assetDisclosure,
+                        $asset_name, $companyInnDigits, $dealSubject, $dealPurpose, $assetDisclosure,
                         $companyDescription, $presenceRegions, $productsServices, $companyBrands,
                         $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
                         $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
@@ -535,7 +545,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (
-                                    user_id, asset_name, deal_subject, deal_purpose, asset_disclosure,
+                                    user_id, asset_name, company_inn, deal_subject, deal_purpose, asset_disclosure,
                                     company_description, presence_regions, products_services, company_brands,
                         own_production, production_sites_count, production_sites_region, production_area,
                         production_capacity, production_load, production_building_ownership, production_land_ownership,
@@ -549,7 +559,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         status, submitted_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
                             $stmt->execute([
-                        $_SESSION['user_id'], $asset_name, $dealSubject, $dealPurpose, $assetDisclosure,
+                        $_SESSION['user_id'], $asset_name, $companyInnDigits, $dealSubject, $dealPurpose, $assetDisclosure,
                         $companyDescription, $presenceRegions, $productsServices, $companyBrands,
                         $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
                         $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
@@ -638,6 +648,7 @@ function ensureSellerFormSchema(PDO $pdo): void
 
     // Список колонок для добавления: название колонки => SQL для ALTER TABLE
     $columnsToAdd = [
+        'company_inn' => "ALTER TABLE seller_forms ADD COLUMN company_inn VARCHAR(20) DEFAULT NULL AFTER asset_name",
         'asset_disclosure' => "ALTER TABLE seller_forms ADD COLUMN asset_disclosure ENUM('yes','no') DEFAULT NULL AFTER deal_purpose",
         'offline_sales_third_party' => "ALTER TABLE seller_forms ADD COLUMN offline_sales_third_party ENUM('yes','no') DEFAULT NULL AFTER offline_sales_area",
         'offline_sales_distributors' => "ALTER TABLE seller_forms ADD COLUMN offline_sales_distributors ENUM('yes','no') DEFAULT NULL AFTER offline_sales_third_party",
@@ -794,8 +805,17 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                     <div class="form-section">
                         <h3 class="form-section-title">I. Детали предполагаемой сделки</h3>
+                        <div class="form-group<?php echo requiredClass('company_inn'); ?>">
+                            <label for="company_inn">ИНН организации:</label>
+                            <input type="text" id="company_inn" name="company_inn"<?php echo requiredAttr('company_inn'); ?>
+                                   value="<?php echo htmlspecialchars($_POST['company_inn'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                   placeholder="Например, 7707083893 или 500100732259">
+                            <?php if (isset($errors['company_inn'])): ?>
+                                <span class="error-message"><?php echo $errors['company_inn']; ?></span>
+                            <?php endif; ?>
+                        </div>
                         <div class="form-group<?php echo requiredClass('asset_name'); ?>">
-                            <label for="asset_name">Название актива (название ЮЛ, группы компаний или бренда), ИНН:</label>
+                            <label for="asset_name">Название актива (название ЮЛ, группы компаний или бренда):</label>
                             <input type="text" id="asset_name" name="asset_name"<?php echo requiredAttr('asset_name'); ?>
                                    value="<?php echo htmlspecialchars($_POST['asset_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <?php if (isset($errors['asset_name'])): ?>

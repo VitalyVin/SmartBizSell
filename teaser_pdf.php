@@ -5,12 +5,25 @@
  * Отдельная страница для формирования PDF тизера компании.
  * Оптимизирована для печати на одной странице формата A4.
  * 
+ * Функциональность:
+ * - Загружает сохраненный HTML тизера из базы данных
+ * - Отображает тизер с оптимизированными стилями для A4 (210mm x 297mm)
+ * - Автоматически инициализирует ApexCharts для отображения финансовых графиков
+ * - Автоматически запускает печать через 1 секунду после загрузки
+ * - Использует градиентные фоны и визуальные эффекты для всех элементов
+ * - Гарантирует размещение всего контента на одной странице A4
+ * 
+ * Создано: 2025-01-XX
+ * 
  * @package SmartBizSell
  */
 
 require_once 'config.php';
 
-// Проверка авторизации
+/**
+ * Проверка авторизации пользователя
+ * Если пользователь не авторизован, происходит редирект на страницу входа
+ */
 if (!isLoggedIn()) {
     redirectToLogin();
 }
@@ -21,7 +34,12 @@ if (!$user) {
     redirectToLogin();
 }
 
-// Получение данных тизера из БД
+/**
+ * Получение данных тизера из базы данных
+ * Загружается последняя отправленная анкета пользователя со статусом
+ * 'submitted', 'review' или 'approved', из которой извлекается
+ * сохраненный HTML тизера (teaser_snapshot).
+ */
 try {
     $pdo = getDBConnection();
     $stmt = $pdo->prepare("
@@ -39,11 +57,13 @@ try {
         die('Нет отправленных анкет для формирования тизера.');
     }
 
+    // Извлечение данных тизера из JSON поля data_json
     $formData = json_decode($form['data_json'] ?? '{}', true);
     if (!is_array($formData)) {
         $formData = [];
     }
 
+    // Получение сохраненного HTML тизера
     $teaserSnapshot = $formData['teaser_snapshot'] ?? null;
     if (!$teaserSnapshot || empty($teaserSnapshot['html'])) {
         die('Тизер еще не создан. Пожалуйста, создайте тизер в личном кабинете.');
@@ -66,13 +86,22 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Тизер компании - <?php echo htmlspecialchars($assetName, ENT_QUOTES, 'UTF-8'); ?></title>
     <style>
-        /* A4 Page Setup */
+        /**
+         * Настройки страницы A4
+         * Размер: 210mm x 297mm (стандартный формат A4)
+         * Отступы: 8mm со всех сторон
+         * Рабочая область: 194mm x 281mm
+         */
         @page {
             size: A4;
             margin: 8mm;
             overflow: hidden;
         }
         
+        /**
+         * HTML элемент настроен на точную высоту A4
+         * overflow: hidden предотвращает появление второй страницы
+         */
         html {
             height: 297mm;
             max-height: 297mm;
@@ -85,6 +114,11 @@ try {
             box-sizing: border-box;
         }
 
+        /**
+         * Основной контейнер body
+         * Фиксированная высота 297mm (A4) с overflow: hidden для предотвращения второй страницы
+         * Flexbox layout для вертикального распределения контента
+         */
         body {
             font-family: 'Arial', 'Helvetica', sans-serif;
             font-size: 10px;
@@ -101,7 +135,13 @@ try {
             overflow: hidden;
         }
 
-        /* Teaser Section */
+        /**
+         * Основная секция тизера
+         * Высота: 281mm (297mm - 8mm*2 отступы)
+         * Padding: 5mm для внутренних отступов
+         * Градиентный фон для визуальной привлекательности
+         * Flexbox для распределения hero-блока и grid с карточками
+         */
         .teaser-section {
             width: 100%;
             height: 281mm;
@@ -131,7 +171,11 @@ try {
             z-index: 1;
         }
 
-        /* Hero Block */
+        /**
+         * Hero блок - верхний блок с названием компании и ключевыми метриками
+         * flex-shrink: 0 предотвращает сжатие блока при нехватке места
+         * Градиентный фон и радиальный градиент через ::before для визуального эффекта
+         */
         .teaser-hero {
             margin-bottom: 3mm;
             padding: 3mm;
@@ -215,7 +259,12 @@ try {
             color: #64748b;
         }
 
-        /* Teaser Grid */
+        /**
+         * Сетка карточек тизера
+         * 3 колонки для размещения карточек в ряд
+         * flex: 1 занимает оставшееся пространство после hero-блока
+         * min-height: 0 позволяет flex-элементу сжиматься при необходимости
+         */
         .teaser-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -284,10 +333,17 @@ try {
             z-index: 1;
         }
 
+        /**
+         * Блок "Обзор возможности" занимает всю ширину сетки (все 3 колонки)
+         */
         .teaser-card[data-variant="overview"] {
             grid-column: 1 / -1;
         }
 
+        /**
+         * Блок финансового графика занимает две колонки из трех
+         * Это обеспечивает больший размер графика для лучшей читаемости
+         */
         .teaser-card[data-variant="chart"] {
             grid-column: span 2;
         }
@@ -358,7 +414,12 @@ try {
             opacity: 0.8;
         }
 
-        /* Chart */
+        /**
+         * Контейнер для финансового графика
+         * Высота: 200px (оптимизирована для размещения на одной странице A4)
+         * Градиентный фон для визуального выделения
+         * ApexCharts будет отрендерен внутри этого контейнера
+         */
         .teaser-chart {
             min-height: 180px;
             max-height: 200px;
@@ -381,7 +442,11 @@ try {
             display: none;
         }
 
-        /* Print specific styles */
+        /**
+         * Стили для печати в PDF
+         * print-color-adjust: exact гарантирует сохранение всех цветов и градиентов при печати
+         * Фиксированные размеры предотвращают перенос на вторую страницу
+         */
         @media print {
             @page {
                 size: A4;
@@ -465,13 +530,26 @@ try {
     </div>
 
     <script>
-        // Initialize ApexCharts for PDF
+        /**
+         * Инициализация ApexCharts для отображения финансовых графиков в PDF
+         * 
+         * Процесс:
+         * 1. Ожидание загрузки DOM
+         * 2. Проверка наличия библиотеки ApexCharts
+         * 3. Поиск всех контейнеров с атрибутом data-chart
+         * 4. Парсинг JSON данных графика из атрибута data-chart
+         * 5. Создание и рендеринг графика с оптимизированными настройками для PDF
+         * 6. Автоматический запуск печати через 1 секунду после рендеринга
+         * 
+         * Создано: 2025-01-XX
+         */
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof ApexCharts === 'undefined') {
                 console.warn('ApexCharts is not available.');
                 return;
             }
 
+            // Поиск всех контейнеров для графиков
             const containers = document.querySelectorAll('.teaser-chart[data-chart]');
             containers.forEach((container, index) => {
                 container.innerHTML = '';
@@ -580,7 +658,11 @@ try {
                 });
             });
 
-            // Wait for charts to render, then trigger print
+            /**
+             * Автоматический запуск печати после рендеринга графиков
+             * Задержка 1 секунда необходима для полного рендеринга ApexCharts
+             * Это гарантирует, что графики будут видны в PDF
+             */
             setTimeout(() => {
                 window.print();
             }, 1000);

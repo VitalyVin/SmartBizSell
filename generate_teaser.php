@@ -489,7 +489,7 @@ function renderCard(string $title, array $payload, string $variant = ''): string
     $variantAttr = $variant !== '' ? ' data-variant="' . htmlspecialchars($variant, ENT_QUOTES, 'UTF-8') . '"' : '';
     $html = '<div class="teaser-card"' . $variantAttr . '>';
     $icon = getTeaserIcon($title);
-    $html .= '<div class="teaser-card__icon">' . htmlspecialchars($icon, ENT_QUOTES, 'UTF-8') . '</div>';
+    $html .= '<div class="teaser-card__icon" aria-hidden="true">' . $icon . '</div>';
     $html .= '<h3>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h3>';
 
     if (!empty($payload['subtitle'])) {
@@ -535,16 +535,109 @@ function formatMetric(string $label, string $value): string
 function getTeaserIcon(string $title): string
 {
     $map = [
-        'Обзор возможности' => '📊',
-        'Профиль компании' => '🏢',
-        'Продукты и клиенты' => '🧩',
-        'Рынок и тенденции' => '🌍',
-        'Финансовый профиль' => '💰',
-        'Инвестиционные преимущества' => '✨',
-        'Параметры сделки' => '🤝',
-        'Следующие шаги' => '➡️',
+        'Обзор возможности' => 'overview',
+        'Профиль компании' => 'company',
+        'Продукты и клиенты' => 'products',
+        'Рынок и тенденции' => 'market',
+        'Финансовый профиль' => 'finance',
+        'Инвестиционные преимущества' => 'highlights',
+        'Параметры сделки' => 'deal',
+        'Следующие шаги' => 'next',
     ];
-    return $map[$title] ?? '📌';
+    $key = $map[$title] ?? 'default';
+    return teaserSvgIcon($key);
+}
+
+function teaserSvgIcon(string $name): string
+{
+    switch ($name) {
+        case 'overview':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="5" y="16" width="4" height="11" rx="2" fill="#6366F1"/>
+    <rect x="14" y="9" width="4" height="18" rx="2" fill="#8B5CF6"/>
+    <rect x="23" y="4" width="4" height="23" rx="2" fill="#A5B4FC"/>
+</svg>
+SVG;
+        case 'company':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="6" y="10" width="20" height="16" rx="3" fill="#0EA5E9" opacity="0.2"/>
+    <rect x="9" y="6" width="14" height="20" rx="3" stroke="#0EA5E9" stroke-width="2" fill="none"/>
+    <rect x="13" y="14" width="6" height="8" rx="1" fill="#0EA5E9"/>
+</svg>
+SVG;
+        case 'products':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="10" cy="10" r="4" stroke="#F97316" stroke-width="2"/>
+    <circle cx="22" cy="10" r="4" stroke="#FACC15" stroke-width="2"/>
+    <circle cx="16" cy="22" r="4" stroke="#FB923C" stroke-width="2"/>
+    <path d="M12 12L15 19M20 12L17 19" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+</svg>
+SVG;
+        case 'market':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="16" cy="16" r="11" stroke="#0EA5E9" stroke-width="2"/>
+    <path d="M5 16H27M16 5C19.5 8.5 21.5 12.5 21.5 16C21.5 19.5 19.5 23.5 16 27C12.5 23.5 10.5 19.5 10.5 16C10.5 12.5 12.5 8.5 16 5Z" stroke="#38BDF8" stroke-width="2"/>
+</svg>
+SVG;
+        case 'finance':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="16" cy="16" r="11" stroke="#10B981" stroke-width="2" opacity="0.6"/>
+    <path d="M16 7V16L23 19" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M10 21C12 23 14 24 16 24C20 24 23 21 23 17" stroke="#34D399" stroke-width="2" stroke-linecap="round"/>
+</svg>
+SVG;
+        case 'highlights':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 6L18.4721 12.5279L25 15L18.4721 17.4721L16 24L13.5279 17.4721L7 15L13.5279 12.5279L16 6Z" fill="url(#gradStar)"/>
+    <defs>
+        <linearGradient id="gradStar" x1="7" y1="6" x2="25" y2="24" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#FDE047"/>
+            <stop offset="1" stop-color="#F97316"/>
+        </linearGradient>
+    </defs>
+</svg>
+SVG;
+        case 'deal':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 14L16 20L22 14" stroke="#F472B6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M8 12L14 18L11 23H7L4 19L8 12Z" stroke="#EC4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M24 12L18 18L21 23H25L28 19L24 12Z" stroke="#EC4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+SVG;
+        case 'next':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 16H24" stroke="#6366F1" stroke-width="2" stroke-linecap="round"/>
+    <path d="M18 10L24 16L18 22" stroke="#A5B4FC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="10" cy="16" r="3" fill="#6366F1"/>
+</svg>
+SVG;
+        case 'chart':
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 22L13 15L18 21L26 10" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="13" cy="15" r="2" fill="#22D3EE"/>
+    <circle cx="18" cy="21" r="2" fill="#22D3EE"/>
+    <circle cx="26" cy="10" r="2" fill="#22D3EE"/>
+</svg>
+SVG;
+        default:
+            return <<<SVG
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="16" cy="16" r="10" stroke="#94A3B8" stroke-width="2"/>
+    <circle cx="16" cy="16" r="3" fill="#94A3B8"/>
+    <path d="M16 7V3" stroke="#94A3B8" stroke-width="2" stroke-linecap="round"/>
+    <path d="M12 27L16 21L20 27" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+SVG;
+    }
 }
 
 /**
@@ -675,15 +768,40 @@ function valueForLabel(array $points, string $label): ?float
     return null;
 }
 
+/**
+ * Генерирует HTML для блока финансового графика с использованием ApexCharts
+ * 
+ * Функциональность:
+ * - Формирует список периодов (годы) из данных серий
+ * - Создает JSON payload для ApexCharts с категориями, сериями данных и цветами
+ * - Поддерживает отображение нескольких метрик (Выручка, Прибыль от продаж)
+ * - Генерирует HTML контейнер с атрибутом data-chart, содержащим JSON данные
+ * - График инициализируется на клиенте через JavaScript (initTeaserCharts)
+ * 
+ * Параметры:
+ * @param array $series Массив серий данных, каждая содержит:
+ *                      - 'title': название метрики (например, 'Выручка')
+ *                      - 'unit': единица измерения (например, 'млн ₽')
+ *                      - 'points': массив точек данных с 'label' и 'value'
+ * 
+ * Возвращает:
+ * @return string HTML код блока графика или пустую строку, если данных недостаточно
+ * 
+ * Создано: 2025-01-XX
+ */
 function renderTeaserChart(array $series): string
 {
+    // Порядок отображения периодов (фактические годы и прогнозные)
     $periodOrder = ['2022', '2023', '2024', '2025E', '2026E', '2027E'];
     $labels = [];
+    
+    // Сбор меток периодов в правильном порядке
     foreach ($periodOrder as $label) {
         if (seriesHasLabel($series, $label)) {
             $labels[] = $label;
         }
     }
+    // Добавление любых дополнительных меток, не входящих в стандартный порядок
     foreach ($series as $metric) {
         foreach ($metric['points'] as $point) {
             if (!in_array($point['label'], $labels, true)) {
@@ -691,20 +809,26 @@ function renderTeaserChart(array $series): string
             }
         }
     }
+    // Проверка наличия достаточного количества данных для графика
     if (count($labels) < 2) {
         return '';
     }
 
-    // Build data for ApexCharts
+    /**
+     * Формирование JSON payload для ApexCharts
+     * Структура данных, которая будет передана в JavaScript для инициализации графика
+     */
     $apexPayload = [
-        'categories' => $labels,
-        'unit' => 'млн ₽',
-        'series' => [],
-        'colors' => ['#6366F1', '#0EA5E9', '#F97316', '#10B981'],
+        'categories' => $labels,  // Метки по оси X (периоды)
+        'unit' => 'млн ₽',        // Единица измерения
+        'series' => [],           // Массив серий данных
+        'colors' => ['#6366F1', '#0EA5E9', '#F97316', '#10B981'],  // Цвета для линий графика
     ];
 
+    // Преобразование данных серий в формат ApexCharts
     foreach ($series as $index => $metric) {
         $dataPoints = [];
+        // Создание массива точек данных для каждого периода
         foreach ($labels as $label) {
             $value = valueForLabel($metric['points'], $label);
             $dataPoints[] = $value !== null ? round($value, 2) : null;
@@ -719,11 +843,14 @@ function renderTeaserChart(array $series): string
         return '';
     }
 
+    // Кодирование JSON данных для безопасного размещения в HTML атрибуте
     $chartJson = htmlspecialchars(json_encode($apexPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8');
 
+    // Генерация HTML блока графика
     $html = '<div class="teaser-card teaser-chart-card" data-variant="chart">';
-    $html .= '<div class="teaser-card__icon">📈</div>';
+    $html .= '<div class="teaser-card__icon" aria-hidden="true">' . teaserSvgIcon('chart') . '</div>';
     $html .= '<h3>Динамика финансов</h3>';
+    // Контейнер с атрибутом data-chart, содержащим JSON данные для ApexCharts
     $html .= '<div class="teaser-chart" data-chart="' . $chartJson . '"></div>';
     $html .= '<p class="teaser-chart__note">Показатели указаны в млн ₽. Источник: анкета продавца (факт + бюджет).</p>';
     $html .= '</div>';
@@ -732,7 +859,14 @@ function renderTeaserChart(array $series): string
 
 /**
  * Генерирует статический SVG-график для отображения динамики финансов.
+ * 
+ * ВНИМАНИЕ: Эта функция в настоящее время не используется.
+ * Вместо неё используется ApexCharts через функцию renderTeaserChart().
+ * Оставлена для возможного использования в будущем или как резервный вариант.
+ * 
  * Этот график будет корректно отображаться как в браузере, так и в PDF.
+ * 
+ * @deprecated Используйте renderTeaserChart() с ApexCharts
  */
 function generateStaticSvgChart(array $labels, array $series): string
 {

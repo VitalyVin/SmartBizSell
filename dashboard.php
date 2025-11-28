@@ -317,6 +317,47 @@ function clampFloat(float $value, float $min, float $max): float
 }
 
 /**
+ * Удаляет упоминания вида «M&A платформа» из текста.
+ * Используется для предотвращения появления служебных описаний в тизере.
+ *
+ * @param string $text Исходный текст
+ * @return string Текст без упоминаний M&A платформы
+ */
+function removeMaPlatformPhrase(string $text): string
+{
+    if ($text === '') {
+        return $text;
+    }
+
+    $decoded = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
+
+    $phrases = [
+        'M&A платформа',
+        'M&A-платформа',
+        'M&A platform',
+        'M&amp;A платформа',
+        'M&amp;A-платформа',
+        'M&amp;A platform',
+        'М&A платформа',
+        'М&A-платформа',
+        'М&amp;A платформа',
+        'М&amp;A-платформа',
+    ];
+
+    foreach ($phrases as $phrase) {
+        $decoded = str_ireplace($phrase, '', $decoded);
+    }
+
+    $decoded = preg_replace('/M\s*&(?:amp;)?\s*A\s*-?\s*платформ[аы]/iu', '', $decoded);
+    $decoded = preg_replace('/М\s*&(?:amp;)?\s*А\s*-?\s*платформ[аы]/iu', '', $decoded);
+    $decoded = preg_replace('/M\s*&(?:amp;)?\s*A\s*-?\s*platform[aы]?/iu', '', $decoded);
+
+    $decoded = trim(preg_replace('/\s+/u', ' ', $decoded));
+
+    return $decoded;
+}
+
+/**
  * Строит полную DCF-модель на основе последней отправленной анкеты пользователя.
  * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
  * для отображения в личном кабинете.
@@ -757,15 +798,39 @@ function calculateUserDCF(array $form): array {
         $prevOS = $currentOS;
     }
 
+    /**
+     * Распределение амортизации 50/50 между себестоимостью и коммерческими/административными расходами
+     * Амортизация включается в расходы для расчета операционной прибыли
+     * Также распределяется между отдельными компонентами для корректного расчета NWC
+     */
+    foreach ($forecastLabels as $label) {
+        $deprHalf = $deprForecast[$label] * 0.5; // 50% амортизации
+        $forecastCogs[$label] += $deprHalf; // Добавляем 50% амортизации к себестоимости
+        
+        // Распределяем 50% амортизации между коммерческими и административными расходами
+        // Если есть административные расходы, распределяем пропорционально их долям
+        if ($adminExists && $commercialAdminForecast[$label] > 0) {
+            $commercialRatio = $forecastCommercial[$label] / ($forecastCommercial[$label] + $adminForecast[$label]);
+            $adminRatio = 1 - $commercialRatio;
+            $forecastCommercial[$label] += $deprHalf * $commercialRatio;
+            $adminForecast[$label] += $deprHalf * $adminRatio;
+        } else {
+            // Если административных расходов нет, вся амортизация идет в коммерческие расходы
+            $forecastCommercial[$label] += $deprHalf;
+        }
+        // Обновляем объединенные коммерческие и административные расходы
+        $commercialAdminForecast[$label] = $forecastCommercial[$label] + $adminForecast[$label];
+    }
+
     // Расчет "Прибыли от продаж" (которая математически соответствует EBIT) и налога на прибыль
     $operatingProfitForecast = [];
     $taxForecast = [];
     foreach ($forecastLabels as $label) {
-        // Прибыль от продаж = Выручка - Себестоимость - Коммерческие и административные расходы - Амортизация
+        // Прибыль от продаж = Выручка - Себестоимость (с учетом амортизации) - Коммерческие и административные расходы (с учетом амортизации)
+        // Амортизация уже включена в расходы, поэтому отдельно не вычитается
         $operatingProfitForecast[$label] = $forecastRevenue[$label] 
             - $forecastCogs[$label] 
-            - $commercialAdminForecast[$label]
-            - $deprForecast[$label];
+            - $commercialAdminForecast[$label];
         // Налог на прибыль = Прибыль от продаж * Ставка налога (только если Прибыль от продаж > 0)
         $taxForecast[$label] = max(0, $operatingProfitForecast[$label]) * $defaults['tax_rate'];
     }
@@ -2967,21 +3032,18 @@ if ($latestForm) {
             </div>
             <?php
                 $heroCompanyName = trim((string)($latestForm['asset_name'] ?? ''));
+                $heroCompanyName = removeMaPlatformPhrase($heroCompanyName);
                 if ($heroCompanyName === '') {
                     $heroCompanyName = 'Ваш проект';
                 }
                 $heroDescription = trim((string)($latestForm['company_description'] ?? $latestForm['additional_info'] ?? 'Подготовьте краткое описание, чтобы сделать тизер ещё выразительнее.'));
-                // Remove "M&A платформа" and similar phrases
-                $heroDescription = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $heroDescription);
-                $heroDescription = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $heroDescription);
-                $heroDescription = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $heroDescription);
-                $heroDescription = trim(preg_replace('/\s+/', ' ', $heroDescription));
+                $heroDescription = removeMaPlatformPhrase($heroDescription);
                 if (mb_strlen($heroDescription) > 220) {
                     $heroDescription = mb_substr($heroDescription, 0, 220) . '…';
                 }
-                $heroIndustry = trim((string)($latestForm['products_services'] ?? ''));
-                $heroRegion = trim((string)($latestForm['presence_regions'] ?? ''));
-                $heroGoal = trim((string)($latestForm['deal_goal'] ?? ''));
+                $heroIndustry = removeMaPlatformPhrase(trim((string)($latestForm['products_services'] ?? '')));
+                $heroRegion = removeMaPlatformPhrase(trim((string)($latestForm['presence_regions'] ?? '')));
+                $heroGoal = removeMaPlatformPhrase(trim((string)($latestForm['deal_goal'] ?? '')));
                 $heroChips = [];
                 if ($heroIndustry !== '') {
                     $heroChips[] = ['label' => 'Сегмент', 'value' => $heroIndustry];
@@ -3236,12 +3298,22 @@ if ($latestForm) {
                 }, success ? 600 : 0);
             };
 
+            /**
+             * Обработчик нажатия кнопки "Сохранить тизер в PDF"
+             * 
+             * Функциональность:
+             * - Открывает отдельную страницу teaser_pdf.php в новом окне
+             * - Страница автоматически оптимизирована для печати на A4
+             * - Графики инициализируются и автоматически запускается печать
+             * 
+             * Создано: 2025-01-XX
+             */
             const handleTeaserPrint = () => {
                 const { teaserPrintBtn } = getTeaserElements();
                 if (!teaserPrintBtn || teaserPrintBtn.disabled) {
                     return;
                 }
-                // Open PDF page in new window
+                // Открытие PDF страницы в новом окне
                 window.open('teaser_pdf.php', '_blank');
             };
 
@@ -3455,6 +3527,15 @@ if ($latestForm) {
                 });
             };
 
+            /**
+             * Инициализация обработчика кнопки печати тизера в PDF
+             * 
+             * Функциональность:
+             * - Находит кнопку "Сохранить тизер в PDF" в DOM
+             * - Привязывает обработчик клика, который открывает teaser_pdf.php
+             * 
+             * Создано: 2025-01-XX
+             */
             const initTeaserPrint = () => {
                 const { teaserPrintBtn, teaserSection } = getTeaserElements();
                 if (!teaserPrintBtn || !teaserSection) {
@@ -3463,6 +3544,15 @@ if ($latestForm) {
                 teaserPrintBtn.addEventListener('click', handleTeaserPrint);
             };
 
+            /**
+             * Инициализация обработчика кнопки генерации/обновления тизера
+             * 
+             * Функциональность:
+             * - Находит кнопку "Создать тизер" / "Обновить тизер" в DOM
+             * - Привязывает обработчик клика, который отправляет AJAX запрос на generate_teaser.php
+             * 
+             * Создано: 2025-01-XX
+             */
             const initTeaserGenerator = () => {
                 const { teaserBtn } = getTeaserElements();
                 if (!teaserBtn) {
@@ -3471,30 +3561,45 @@ if ($latestForm) {
                 teaserBtn.addEventListener('click', handleTeaserGenerate);
             };
 
+            /**
+             * Инициализация ApexCharts для отображения финансовых графиков в тизере
+             * 
+             * Функциональность:
+             * - Находит все контейнеры с атрибутом data-chart
+             * - Парсит JSON данные графика из атрибута data-chart
+             * - Создает уникальный ID для каждого графика
+             * - Проверяет, не был ли график уже отрендерен
+             * - Создает и рендерит график с настройками для обычного просмотра или печати
+             * - Использует градиентную заливку и плавные кривые для красивого отображения
+             * - Легенда уменьшена в два раза для компактного размещения внутри графика
+             * 
+             * Создано: 2025-01-XX
+             */
             const initTeaserCharts = () => {
                 if (typeof ApexCharts === 'undefined') {
                     console.warn('ApexCharts is not available.');
                     return;
                 }
+                // Поиск всех контейнеров для графиков
                 const containers = document.querySelectorAll('.teaser-chart[data-chart]');
                 if (!containers.length) {
                     return;
                 }
                 containers.forEach((container, index) => {
-                    // Clear any existing content in container
+                    // Очистка контейнера от предыдущего содержимого
                     container.innerHTML = '';
                     
-                    // Generate unique ID for chart if not exists
+                    // Генерация уникального ID для графика, если его нет
                     if (!container.id) {
                         container.id = 'teaser-chart-' + Date.now() + '-' + index;
                     }
                     const chartId = container.id;
                     
-                    // Check if chart already exists
+                    // Проверка, не был ли график уже отрендерен
                     if (container.dataset.chartReady === '1') {
                         const existingChart = ApexCharts.exec(chartId);
                         if (existingChart && document.body.classList.contains('print-teaser')) {
-                            // Update existing chart for print mode
+                            // Обновление существующего графика для режима печати
                             existingChart.updateOptions({
                                 chart: { height: 75 },
                                 legend: { fontSize: '6px', offsetY: -6 },
@@ -3505,6 +3610,7 @@ if ($latestForm) {
                         return;
                     }
                     
+                    // Парсинг JSON данных графика из атрибута data-chart
                     let payload;
                     try {
                         payload = JSON.parse(container.getAttribute('data-chart') || '{}');
@@ -3515,6 +3621,7 @@ if ($latestForm) {
                     if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
                         return;
                     }
+                    // Определение режима отображения (обычный или печать)
                     const isPrintMode = document.body.classList.contains('print-teaser');
                     const options = {
                         chart: {
@@ -3570,6 +3677,7 @@ if ($latestForm) {
                         legend: {
                             position: 'top',
                             horizontalAlign: 'left',
+                            // Легенда уменьшена в два раза для компактного размещения внутри графика
                             fontSize: isPrintMode ? '7px' : '6px',
                             offsetY: isPrintMode ? -4 : -5,
                             offsetX: 0,
