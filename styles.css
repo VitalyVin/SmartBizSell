@@ -54,6 +54,11 @@ body {
     transition: all 0.3s ease;
 }
 
+.navbar.scrolled {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.95);
+}
+
 .nav-content {
     display: flex;
     justify-content: space-between;
@@ -364,6 +369,30 @@ section {
 .feature-icon {
     font-size: 48px;
     margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+    padding: 8px;
+    transition: all 0.3s ease;
+}
+
+.feature-icon svg {
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease;
+}
+
+.feature-card:hover .feature-icon {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+    transform: scale(1.05);
+}
+
+.feature-card:hover .feature-icon svg {
+    transform: scale(1.1);
 }
 
 .feature-title {
@@ -1453,6 +1482,31 @@ section {
 .contact-icon {
     font-size: 48px;
     margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 16px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+    padding: 16px;
+    transition: all 0.3s ease;
+}
+
+.contact-icon svg {
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease;
+}
+
+.contact-card:hover .contact-icon {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+    transform: scale(1.05);
+}
+
+.contact-card:hover .contact-icon svg {
+    transform: scale(1.1);
 }
 
 .contact-card h3 {

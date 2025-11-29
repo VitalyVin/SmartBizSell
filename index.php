@@ -28,6 +28,9 @@ require_once 'config.php';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- GSAP для плавных анимаций в стиле Apple.com -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
     <!-- Navigation -->
@@ -93,15 +96,15 @@ require_once 'config.php';
                     </a>
                 </div>
                 <div class="hero-stats">
-                    <div class="stat-item">
+                    <div class="stat-item" data-stat="500">
                         <div class="stat-number">500+</div>
                         <div class="stat-label">Проверенных инвесторов</div>
                     </div>
-                    <div class="stat-item">
+                    <div class="stat-item" data-stat="150">
                         <div class="stat-number">150+</div>
                         <div class="stat-label">Закрытых M&amp;A-сделок</div>
                     </div>
-                    <div class="stat-item">
+                    <div class="stat-item" data-stat="48">
                         <div class="stat-number">48ч</div>
                         <div class="stat-label">На подготовку материалов</div>
                     </div>
@@ -119,42 +122,84 @@ require_once 'config.php';
             </div>
             <div class="features-grid">
                 <div class="feature-card">
-                    <div class="feature-icon">🤖</div>
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="5" y="16" width="4" height="11" rx="2" fill="#6366F1"/>
+                            <rect x="14" y="9" width="4" height="18" rx="2" fill="#8B5CF6"/>
+                            <rect x="23" y="4" width="4" height="23" rx="2" fill="#A5B4FC"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">ИИ-Генерация тизеров</h3>
                     <p class="feature-description">
                         Используем проверенные нами подходы к тизерам и подключаем ИИ для точной аналитики, чтобы каждый инвестор сразу видел ценность бизнеса.
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">📊</div>
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 22L13 15L18 21L26 10" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="13" cy="15" r="2" fill="#22D3EE"/>
+                            <circle cx="18" cy="21" r="2" fill="#22D3EE"/>
+                            <circle cx="26" cy="10" r="2" fill="#22D3EE"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Автоматические финансовые модели</h3>
                     <p class="feature-description">
                         Формируем финансовые модели по стандартам сделок M&amp;A и ускоряем расчёты с помощью нейросетей — быстро, прозрачно и с учётом ключевых метрик.
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16 6L18.4721 12.5279L25 15L18.4721 17.4721L16 24L13.5279 17.4721L7 15L13.5279 12.5279L16 6Z" fill="url(#gradStar1)"/>
+                            <defs>
+                                <linearGradient id="gradStar1" x1="7" y1="6" x2="25" y2="24" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#FDE047"/>
+                                    <stop offset="1" stop-color="#F97316"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Ускорение процессов</h3>
                     <p class="feature-description">
                         Цифровые пайплайны заменяют ручные задачи: готовим материалы, структурируем данные и запускаем показы в разы быстрее традиционных процессов.
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🎯</div>
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="10" cy="10" r="4" stroke="#F97316" stroke-width="2"/>
+                            <circle cx="22" cy="10" r="4" stroke="#FACC15" stroke-width="2"/>
+                            <circle cx="16" cy="22" r="4" stroke="#FB923C" stroke-width="2"/>
+                            <path d="M12 12L15 19M20 12L17 19" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Умный подбор покупателей</h3>
                     <p class="feature-description">
                         Соединяем данные о прошлых сделках, нашу экспертную оценку и алгоритмы рекомендаций, чтобы вывести к вам релевантных инвесторов без лишнего шума.
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">📱</div>
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="6" y="10" width="20" height="16" rx="3" fill="#0EA5E9" opacity="0.2"/>
+                            <rect x="9" y="6" width="14" height="20" rx="3" stroke="#0EA5E9" stroke-width="2" fill="none"/>
+                            <rect x="13" y="14" width="6" height="8" rx="1" fill="#0EA5E9"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Современный интерфейс</h3>
                     <p class="feature-description">
                         Управляйте ходом сделки в едином цифровом кабинете: согласовывайте материалы, отслеживайте статус и общайтесь с командой в режиме реального времени.
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🔒</div>
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="16" cy="16" r="11" stroke="#10B981" stroke-width="2" opacity="0.6"/>
+                            <path d="M16 7V16L23 19" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M10 21C12 23 14 24 16 24C20 24 23 21 23 17" stroke="#34D399" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Безопасность данных</h3>
                     <p class="feature-description">
                         Следуем лучшим практикам комплаенса и используем корпоративный уровень защиты, чтобы вся информация о сделке оставалась конфиденциальной.
@@ -740,17 +785,32 @@ require_once 'config.php';
             </div>
             <div class="contact-grid">
                 <div class="contact-card">
-                    <div class="contact-icon">📧</div>
+                    <div class="contact-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="4" y="6" width="24" height="20" rx="3" stroke="#6366F1" stroke-width="2" fill="none"/>
+                            <path d="M4 10L16 18L28 10" stroke="#6366F1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
                     <h3>Email</h3>
                     <p>info@smartbizsell.ru</p>
                 </div>
                 <div class="contact-card">
-                    <div class="contact-icon">📱</div>
+                    <div class="contact-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="6" y="4" width="20" height="24" rx="4" stroke="#0EA5E9" stroke-width="2" fill="none"/>
+                            <path d="M12 8H20M12 12H20M12 16H18" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <h3>Телефон</h3>
                     <p>+7 (495) 123-45-67</p>
                 </div>
                 <div class="contact-card">
-                    <div class="contact-icon">📍</div>
+                    <div class="contact-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="16" cy="12" r="6" stroke="#10B981" stroke-width="2" fill="none"/>
+                            <path d="M16 18C10 18 4 20 4 24V28H28V24C28 20 22 18 16 18Z" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
                     <h3>Адрес</h3>
                     <p>Москва, Россия</p>
                 </div>

@@ -16,6 +16,198 @@
 console.log('SmartBizSell script.js loaded at:', new Date().toISOString());
 
 /**
+ * GSAP Animations - Плавные анимации в стиле Apple.com
+ * Использует GSAP и ScrollTrigger для создания современных эффектов
+ */
+if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+    gsap.registerPlugin(ScrollTrigger);
+    
+    // Анимация hero-секции при загрузке
+    gsap.from('.hero-title', {
+        duration: 1.2,
+        y: 60,
+        opacity: 0,
+        ease: 'power3.out',
+        delay: 0.2
+    });
+    
+    gsap.from('.hero-subtitle', {
+        duration: 1,
+        y: 40,
+        opacity: 0,
+        ease: 'power3.out',
+        delay: 0.4
+    });
+    
+    gsap.from('.hero-buttons', {
+        duration: 1,
+        y: 30,
+        opacity: 0,
+        ease: 'power3.out',
+        delay: 0.6
+    });
+    
+    // Анимация статистики с счетчиками
+    const statItems = document.querySelectorAll('.stat-item');
+    statItems.forEach((item, index) => {
+        gsap.from(item, {
+            duration: 0.8,
+            y: 30,
+            opacity: 0,
+            ease: 'power2.out',
+            delay: 0.8 + (index * 0.1),
+            scrollTrigger: {
+                trigger: item,
+                start: 'top 80%',
+                toggleActions: 'play none none none'
+            }
+        });
+    });
+    
+    // Анимация карточек преимуществ при скролле
+    gsap.utils.toArray('.feature-card').forEach((card, index) => {
+        gsap.from(card, {
+            duration: 0.8,
+            y: 60,
+            opacity: 0,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: card,
+                start: 'top 85%',
+                toggleActions: 'play none none none'
+            },
+            delay: index * 0.1
+        });
+        
+        // Hover эффект для иконок
+        const icon = card.querySelector('.feature-icon');
+        if (icon) {
+            card.addEventListener('mouseenter', () => {
+                gsap.to(icon, {
+                    duration: 0.3,
+                    scale: 1.1,
+                    rotation: 5,
+                    ease: 'power2.out'
+                });
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                gsap.to(icon, {
+                    duration: 0.3,
+                    scale: 1,
+                    rotation: 0,
+                    ease: 'power2.out'
+                });
+            });
+        }
+    });
+    
+    // Анимация шагов "Как это работает"
+    gsap.utils.toArray('.step-item').forEach((step, index) => {
+        gsap.from(step, {
+            duration: 0.8,
+            x: -60,
+            opacity: 0,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: step,
+                start: 'top 85%',
+                toggleActions: 'play none none none'
+            },
+            delay: index * 0.15
+        });
+    });
+    
+    // Анимация карточек бизнесов
+    gsap.utils.toArray('.business-card').forEach((card, index) => {
+        gsap.from(card, {
+            duration: 0.8,
+            y: 80,
+            opacity: 0,
+            scale: 0.9,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: card,
+                start: 'top 85%',
+                toggleActions: 'play none none none'
+            },
+            delay: index * 0.1
+        });
+        
+        // Плавное увеличение при hover
+        card.addEventListener('mouseenter', () => {
+            gsap.to(card, {
+                duration: 0.4,
+                scale: 1.02,
+                y: -8,
+                ease: 'power2.out'
+            });
+        });
+        
+        card.addEventListener('mouseleave', () => {
+            gsap.to(card, {
+                duration: 0.4,
+                scale: 1,
+                y: 0,
+                ease: 'power2.out'
+            });
+        });
+    });
+    
+    // Параллакс эффект для hero background
+    gsap.to('.gradient-orb', {
+        y: (i, el) => {
+            return ScrollTrigger.maxScroll(window) * 0.3;
+        },
+        ease: 'none',
+        scrollTrigger: {
+            trigger: '.hero',
+            start: 'top top',
+            end: 'bottom top',
+            scrub: true
+        }
+    });
+    
+    // Анимация заголовков секций
+    gsap.utils.toArray('.section-title').forEach((title) => {
+        gsap.from(title, {
+            duration: 1,
+            y: 40,
+            opacity: 0,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: title,
+                start: 'top 80%',
+                toggleActions: 'play none none none'
+            }
+        });
+    });
+    
+    // Анимация контактных карточек
+    gsap.utils.toArray('.contact-card').forEach((card, index) => {
+        gsap.from(card, {
+            duration: 0.8,
+            y: 40,
+            opacity: 0,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: card,
+                start: 'top 85%',
+                toggleActions: 'play none none none'
+            },
+            delay: index * 0.15
+        });
+    });
+    
+    // Плавная анимация навигации при скролле
+    ScrollTrigger.create({
+        start: 'top -80',
+        end: 99999,
+        toggleClass: { className: 'scrolled', targets: '.navbar' }
+    });
+}
+
+/**
  * Мобильное меню - переключение видимости на мобильных устройствах
  */
 const navToggle = document.querySelector('.nav-toggle');
@@ -76,29 +268,31 @@ window.addEventListener('scroll', () => {
     lastScroll = currentScroll;
 });
 
-// Intersection Observer for fade-in animations
-const observerOptions = {
-    threshold: 0.1,
-    rootMargin: '0px 0px -50px 0px'
-};
+// Fallback: Intersection Observer for fade-in animations (если GSAP не загружен)
+if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') {
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
 
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.style.opacity = '1';
-            entry.target.style.transform = 'translateY(0)';
-        }
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, observerOptions);
+
+    // Animate elements on scroll
+    const animateElements = document.querySelectorAll('.feature-card, .step-item, .contact-card');
+    animateElements.forEach(el => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(el);
     });
-}, observerOptions);
-
-// Animate elements on scroll
-const animateElements = document.querySelectorAll('.feature-card, .step-item, .contact-card');
-animateElements.forEach(el => {
-    el.style.opacity = '0';
-    el.style.transform = 'translateY(20px)';
-    el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-    observer.observe(el);
-});
+}
 
 /**
  * Улучшенная валидация формы на клиентской стороне
@@ -242,62 +436,91 @@ document.head.appendChild(style);
 /**
  * Параллакс эффект для hero секции
  * Градиентные орбы двигаются с разной скоростью при прокрутке
+ * Используется GSAP ScrollTrigger если доступен, иначе fallback
  */
-window.addEventListener('scroll', () => {
-    const scrolled = window.pageYOffset;
-    const hero = document.querySelector('.hero-background');
-    if (hero) {
-        const orbs = hero.querySelectorAll('.gradient-orb');
-        orbs.forEach((orb, index) => {
-            const speed = 0.5 + (index * 0.2);
-            orb.style.transform = `translateY(${scrolled * speed}px)`;
-        });
-    }
-});
+if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') {
+    window.addEventListener('scroll', () => {
+        const scrolled = window.pageYOffset;
+        const hero = document.querySelector('.hero-background');
+        if (hero) {
+            const orbs = hero.querySelectorAll('.gradient-orb');
+            orbs.forEach((orb, index) => {
+                const speed = 0.5 + (index * 0.2);
+                orb.style.transform = `translateY(${scrolled * speed}px)`;
+            });
+        }
+    });
+}
 
 /**
- * Анимация счетчиков для статистики
+ * Анимация счетчиков для статистики с использованием GSAP
  * Плавное увеличение чисел от 0 до целевого значения
- * @param {HTMLElement} element - Элемент для анимации
- * @param {number} target - Целевое значение
- * @param {number} duration - Длительность анимации в мс
  */
-const animateCounter = (element, target, duration = 2000) => {
-    let start = 0;
-    const increment = target / (duration / 16);
-    const timer = setInterval(() => {
-        start += increment;
-        if (start >= target) {
-            element.textContent = target + (element.textContent.includes('+') ? '+' : '');
-            clearInterval(timer);
+const initCounterAnimations = () => {
+    const statItems = document.querySelectorAll('.stat-item[data-stat]');
+    
+    statItems.forEach((item) => {
+        const statNumber = item.querySelector('.stat-number');
+        if (!statNumber || statNumber.dataset.animated) return;
+        
+        const originalText = statNumber.textContent;
+        const target = parseInt(item.dataset.stat);
+        const hasPlus = originalText.includes('+');
+        const hasHours = originalText.includes('ч');
+        
+        if (typeof gsap !== 'undefined') {
+            // Используем GSAP для плавной анимации
+            ScrollTrigger.create({
+                trigger: item,
+                start: 'top 80%',
+                onEnter: () => {
+                    if (statNumber.dataset.animated) return;
+                    statNumber.dataset.animated = 'true';
+                    
+                    const obj = { value: 0 };
+                    gsap.to(obj, {
+                        value: target,
+                        duration: 2,
+                        ease: 'power2.out',
+                        onUpdate: () => {
+                            const val = Math.floor(obj.value);
+                            statNumber.textContent = val + (hasPlus ? '+' : '') + (hasHours ? 'ч' : '');
+                        }
+                    });
+                }
+            });
         } else {
-            element.textContent = Math.floor(start) + (element.textContent.includes('+') ? '+' : '');
-        }
-    }, 16);
-};
-
-// Observe stats section for counter animation
-const statsSection = document.querySelector('.hero-stats');
-if (statsSection) {
-    const statsObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const statNumbers = entry.target.querySelectorAll('.stat-number');
-                statNumbers.forEach(stat => {
-                    const text = stat.textContent;
-                    const number = parseInt(text.replace(/\D/g, ''));
-                    if (number && !stat.dataset.animated) {
-                        stat.dataset.animated = 'true';
-                        stat.textContent = '0' + (text.includes('+') ? '+' : '') + (text.includes('ч') ? 'ч' : '');
-                        animateCounter(stat, number, 2000);
+            // Fallback: простая анимация без GSAP
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && !statNumber.dataset.animated) {
+                        statNumber.dataset.animated = 'true';
+                        let start = 0;
+                        const increment = target / 120;
+                        const timer = setInterval(() => {
+                            start += increment;
+                            if (start >= target) {
+                                statNumber.textContent = target + (hasPlus ? '+' : '') + (hasHours ? 'ч' : '');
+                                clearInterval(timer);
+                            } else {
+                                statNumber.textContent = Math.floor(start) + (hasPlus ? '+' : '') + (hasHours ? 'ч' : '');
+                            }
+                        }, 16);
+                        observer.unobserve(entry.target);
                     }
                 });
-                statsObserver.unobserve(entry.target);
-            }
-        });
-    }, { threshold: 0.5 });
-    
-    statsObserver.observe(statsSection);
+            }, { threshold: 0.5 });
+            
+            observer.observe(item);
+        }
+    });
+};
+
+// Инициализация анимации счетчиков
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCounterAnimations);
+} else {
+    initCounterAnimations();
 }
 
 // Add loading state to form submit button
@@ -776,24 +999,29 @@ document.addEventListener('keydown', (e) => {
 /**
  * Анимация карточек бизнесов при загрузке страницы
  * Карточки появляются с эффектом плавного появления снизу вверх
+ * Используется GSAP если доступен, иначе fallback
  */
 function animateCardsOnLoad() {
-    const cards = document.querySelectorAll('.business-card');
-    cards.forEach((card, index) => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(30px)';
+    if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') {
+        // Fallback анимация без GSAP
+        const cards = document.querySelectorAll('.business-card');
+        cards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(30px)';
 
-        setTimeout(() => {
-            card.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        }, index * 100);
-    });
+            setTimeout(() => {
+                card.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+    }
+    // GSAP анимации уже инициализированы выше
 }
 
 // Initialize animations when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('>>> MAIN: DOMContentLoaded fired, calling animateCardsOnLoad');
+    console.log('>>> MAIN: DOMContentLoaded fired');
     animateCardsOnLoad();
 });
 

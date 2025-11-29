@@ -1205,6 +1205,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             margin-bottom: 40px;
             margin-top: 80px;
         }
+        
+        @media (max-width: 768px) {
+            .dashboard-header {
+                margin-top: 70px;
+            }
+        }
         .dashboard-header-content {
             max-width: 1200px;
             margin: 0 auto;
@@ -1222,6 +1228,262 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 20px 40px;
+            position: relative;
+        }
+        
+        /* Навигация между блоками */
+        .dashboard-nav {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 80px;
+            z-index: 100;
+            background: transparent;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 16px 24px;
+            margin-bottom: 32px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.25);
+            will-change: transform;
+        }
+        
+        .dashboard-nav__list {
+            display: flex;
+            gap: 8px;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .dashboard-nav__item {
+            margin: 0;
+        }
+        
+        .dashboard-nav__link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(10px);
+        }
+        
+        .dashboard-nav__link:hover {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .dashboard-nav__link.active {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .dashboard-nav__icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .dashboard-nav__icon svg {
+            width: 100%;
+            height: 100%;
+            fill: currentColor;
+            transition: transform 0.3s ease;
+        }
+        
+        .dashboard-nav__link:hover .dashboard-nav__icon svg {
+            transform: scale(1.1);
+        }
+        
+        .dashboard-nav__link.active .dashboard-nav__icon svg {
+            transform: scale(1.05);
+        }
+        
+        .dashboard-nav__text {
+            display: inline;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-nav {
+                position: fixed !important;
+                top: 70px !important;
+                left: 0 !important;
+                right: 0 !important;
+                z-index: 1000 !important;
+                padding: 12px 8px !important;
+                margin-bottom: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                border-radius: 0 !important;
+                border-left: none !important;
+                border-right: none !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+                /* Убеждаемся, что навигация остается видимой */
+                will-change: transform;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+                background: rgba(255, 255, 255, 0.3) !important;
+                backdrop-filter: blur(20px) !important;
+                border: 1px solid transparent !important;
+                /* Скрываем навигацию по умолчанию на мобильных */
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(-100%);
+                transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+            }
+            
+            /* Показываем навигацию при прокрутке */
+            .dashboard-nav.nav-visible {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0);
+            }
+            
+            /* Убираем отрицательные отступы у родительского контейнера, если они есть */
+            .dashboard-container {
+                overflow-x: visible;
+            }
+            
+            /* Вычисляем высоту навигации: top (70px) + padding (12px*2) + высота контента (~50px) = ~134px */
+            /* Добавляем отступ для всех элементов после навигации, чтобы они не перекрывались */
+            .dashboard-nav ~ .dcf-card,
+            .dashboard-nav ~ .teaser-section,
+            .dashboard-nav ~ .forms-table {
+                margin-top: 90px !important;
+                padding-top: 0 !important;
+            }
+            
+            /* Если навигация идет сразу после dashboard-actions или dashboard-stats */
+            .dashboard-actions + .dashboard-nav ~ *,
+            .dashboard-stats + .dashboard-nav ~ * {
+                margin-top: 90px !important;
+            }
+            
+            /* Специальный отступ для первого блока после навигации */
+            .dashboard-nav + .dcf-card,
+            .dashboard-nav + .teaser-section {
+                margin-top: 90px !important;
+                padding-top: 0 !important;
+            }
+            
+            /* Универсальный отступ для любого элемента после навигации */
+            .dashboard-nav + * {
+                margin-top: 90px !important;
+            }
+            
+            /* Дополнительный отступ для элементов, которые могут быть перекрыты */
+            .dashboard-container > .dashboard-nav ~ * {
+                scroll-margin-top: 90px;
+            }
+            
+            .dashboard-nav__list {
+                gap: 8px;
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none; /* Firefox */
+                -ms-overflow-style: none; /* IE and Edge */
+                padding: 0 12px;
+                scroll-snap-type: x proximity;
+            }
+            
+            .dashboard-nav__list::-webkit-scrollbar {
+                display: none; /* Chrome, Safari, Opera */
+            }
+            
+            .dashboard-nav__item {
+                flex-shrink: 0;
+                scroll-snap-align: start;
+            }
+            
+            .dashboard-nav__link {
+                padding: 10px 18px;
+                font-size: 13px;
+                white-space: nowrap;
+                min-width: fit-content;
+                display: inline-flex;
+                border-radius: 4px !important; /* Прямоугольная форма для мобильных */
+            }
+            
+            .dashboard-nav__icon {
+                font-size: 14px;
+                flex-shrink: 0;
+            }
+            
+            /* Показываем текст на мобильных устройствах (768px и меньше) */
+            .dashboard-nav__text {
+                display: inline;
+                margin-left: 8px;
+                font-size: 11px; /* Уменьшенный размер шрифта для мобильных */
+            }
+            
+            /* Индикатор прокрутки для мобильных */
+            .dashboard-nav__list::after {
+                content: '';
+                flex-shrink: 0;
+                width: 20px;
+                height: 1px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .dashboard-nav {
+                position: fixed;
+                top: 70px;
+                left: 0;
+                right: 0;
+                z-index: 100;
+                padding: 10px 4px;
+                will-change: transform;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+            
+            .dashboard-nav__list {
+                gap: 6px;
+                padding: 0 8px;
+            }
+            
+            .dashboard-nav__link {
+                padding: 8px 14px;
+                font-size: 12px;
+                border-radius: 4px !important; /* Прямоугольная форма для очень маленьких экранов */
+            }
+            
+            .dashboard-nav__icon {
+                width: 16px;
+                height: 16px;
+            }
+            
+            /* Показываем текст на мобильных устройствах */
+            .dashboard-nav__text {
+                display: inline;
+                margin-left: 6px;
+                font-size: 10px; /* Еще меньший размер для очень маленьких экранов */
+            }
+            
+            .dashboard-nav__link {
+                padding: 10px 12px;
+                border-radius: 4px !important; /* Прямоугольная форма вместо круглой */
+                aspect-ratio: auto; /* Убираем квадратную форму */
+                justify-content: center;
+            }
         }
         .dashboard-stats {
             display: grid;
@@ -2987,8 +3249,59 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         </div>
         <?php endif; ?>
 
+        <!-- Навигация между блоками - показывается только после отправки анкеты -->
+        <?php 
+        // Навигация показывается только если есть отправленная анкета
+        $hasSubmittedForm = $latestForm && in_array($latestForm['status'] ?? '', ['submitted', 'review', 'approved'], true);
+        ?>
+        <?php if ($hasSubmittedForm): ?>
+        <nav class="dashboard-nav" id="dashboard-nav" aria-label="Навигация по разделам">
+            <ul class="dashboard-nav__list" role="list">
+                <?php if ($dcfData): ?>
+                <li class="dashboard-nav__item" role="listitem">
+                    <a href="#dcf-model" class="dashboard-nav__link" data-section="dcf-model" aria-label="Перейти к DCF модели">
+                        <span class="dashboard-nav__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 3V21H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M7 16L12 11L16 15L21 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M21 10V3H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
+                        <span class="dashboard-nav__text">DCF модель</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+                <li class="dashboard-nav__item" role="listitem">
+                    <a href="#teaser-section" class="dashboard-nav__link" data-section="teaser-section" aria-label="Перейти к AI тизеру">
+                        <span class="dashboard-nav__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
+                        <span class="dashboard-nav__text">AI тизер</span>
+                    </a>
+                </li>
+                <li class="dashboard-nav__item" role="listitem">
+                    <a href="#investors-section" class="dashboard-nav__link" data-section="investors-section" aria-label="Перейти к инвесторам">
+                        <span class="dashboard-nav__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
+                        <span class="dashboard-nav__text">Инвесторы</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <?php endif; ?>
+
         <?php if ($dcfData): ?>
-            <div class="dcf-card" id="dcf-card">
+            <div class="dcf-card" id="dcf-model">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
                     <div>
                         <h2 style="margin-bottom:4px;">DCF Model</h2>
@@ -3291,7 +3604,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <?php endif; ?>
                 </div>
             </div>
-            <div class="teaser-section teaser-section--investors" data-print-exclude>
+            <div class="teaser-section teaser-section--investors" id="investors-section" data-print-exclude>
                 <div class="teaser-header">
                     <h2>Возможные инвесторы</h2>
                     <p>Подбор релевантных инвесторов на основе каталога SmartBizSell и AI-рекомендаций.</p>
@@ -3337,6 +3650,199 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
     </div>
 
     <script>
+        /**
+         * Навигация между блоками личного кабинета
+         * 
+         * Функциональность:
+         * - Плавная прокрутка к выбранному блоку
+         * - Подсветка активного пункта меню при прокрутке
+         * - Обновление активного пункта при клике
+         * 
+         * Создано: 2025-01-XX
+         */
+        (function() {
+            const nav = document.getElementById('dashboard-nav');
+            if (!nav) return;
+            
+            const navLinks = nav.querySelectorAll('.dashboard-nav__link');
+            const sections = {};
+            
+            // Собираем все секции
+            navLinks.forEach(link => {
+                const sectionId = link.getAttribute('data-section');
+                if (sectionId) {
+                    const section = document.getElementById(sectionId);
+                    if (section) {
+                        sections[sectionId] = {
+                            element: section,
+                            link: link
+                        };
+                    }
+                }
+            });
+            
+            // Плавная прокрутка при клике
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const sectionId = this.getAttribute('data-section');
+                    const section = sections[sectionId];
+                    if (section) {
+                        // Убираем активный класс со всех ссылок
+                        navLinks.forEach(l => l.classList.remove('active'));
+                        // Добавляем активный класс к текущей ссылке
+                        this.classList.add('active');
+                        
+                        // Плавная прокрутка с учетом высоты навигации
+                        const navHeight = nav.offsetHeight;
+                        const sectionTop = section.element.offsetTop - navHeight - 20;
+                        
+                        window.scrollTo({
+                            top: sectionTop,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+            
+            // Определение активного пункта меню при прокрутке
+            const updateActiveNav = () => {
+                const scrollPos = window.scrollY + nav.offsetHeight + 100;
+                
+                let activeSection = null;
+                let maxTop = -Infinity;
+                
+                Object.keys(sections).forEach(sectionId => {
+                    const section = sections[sectionId];
+                    const sectionTop = section.element.offsetTop;
+                    const sectionHeight = section.element.offsetHeight;
+                    const sectionBottom = sectionTop + sectionHeight;
+                    
+                    // Если секция видна на экране
+                    if (scrollPos >= sectionTop && scrollPos <= sectionBottom) {
+                        if (sectionTop > maxTop) {
+                            maxTop = sectionTop;
+                            activeSection = sectionId;
+                        }
+                    }
+                });
+                
+                // Если ни одна секция не видна, проверяем какая ближе всего
+                if (!activeSection) {
+                    Object.keys(sections).forEach(sectionId => {
+                        const section = sections[sectionId];
+                        const sectionTop = section.element.offsetTop;
+                        if (scrollPos >= sectionTop && sectionTop > maxTop) {
+                            maxTop = sectionTop;
+                            activeSection = sectionId;
+                        }
+                    });
+                }
+                
+                // Обновляем активный класс
+                navLinks.forEach(link => {
+                    const sectionId = link.getAttribute('data-section');
+                    if (sectionId === activeSection) {
+                        link.classList.add('active');
+                    } else {
+                        link.classList.remove('active');
+                    }
+                });
+            };
+            
+            // Обновление при прокрутке (с throttling для производительности)
+            let ticking = false;
+            window.addEventListener('scroll', () => {
+                if (!ticking) {
+                    window.requestAnimationFrame(() => {
+                        updateActiveNav();
+                        ticking = false;
+                    });
+                    ticking = true;
+                }
+            });
+            
+            // Инициализация при загрузке
+            updateActiveNav();
+            
+            /**
+             * Показ навигации на мобильных устройствах после прокрутки анкеты
+             * 
+             * Функциональность:
+             * - Навигация скрыта по умолчанию на мобильных
+             * - Появляется после того, как пользователь проскроллил блок с анкетами
+             * 
+             * Создано: 2025-01-XX
+             */
+            const showNavOnScroll = () => {
+                const checkScroll = () => {
+                    // Проверяем, что мы на мобильном устройстве
+                    const isMobile = window.innerWidth <= 768;
+                    
+                    if (!isMobile) {
+                        // На десктопе навигация всегда видна
+                        nav.classList.add('nav-visible');
+                        return;
+                    }
+                    
+                    // На мобильных: находим все блоки с анкетами
+                    const formsTables = document.querySelectorAll('.forms-table');
+                    if (!formsTables || formsTables.length === 0) {
+                        // Если блоков с анкетами нет, показываем навигацию сразу
+                        nav.classList.add('nav-visible');
+                        return;
+                    }
+                    
+                    // Находим последний блок с анкетами (самый нижний)
+                    let lastTableBottom = 0;
+                    formsTables.forEach(table => {
+                        const tableBottom = table.offsetTop + table.offsetHeight;
+                        if (tableBottom > lastTableBottom) {
+                            lastTableBottom = tableBottom;
+                        }
+                    });
+                    
+                    // Вычисляем точку, после которой нужно показать навигацию
+                    // Это конец последнего блока с анкетами + небольшой отступ
+                    const triggerPoint = lastTableBottom + 50; // 50px после конца анкет
+                    const scrollY = window.scrollY || window.pageYOffset;
+                    
+                    if (scrollY >= triggerPoint) {
+                        nav.classList.add('nav-visible');
+                    } else {
+                        nav.classList.remove('nav-visible');
+                    }
+                };
+                
+                // Проверяем при загрузке
+                checkScroll();
+                
+                // Проверяем при прокрутке (используем существующий throttling)
+                // Добавляем проверку в существующий обработчик scroll
+                const originalScrollHandler = window.addEventListener;
+                
+                // Также проверяем при изменении размера окна
+                window.addEventListener('resize', () => {
+                    checkScroll();
+                });
+                
+                // Добавляем проверку в существующий обработчик прокрутки
+                // (используем тот же throttling механизм)
+                let scrollTicking = false;
+                window.addEventListener('scroll', () => {
+                    if (!scrollTicking) {
+                        window.requestAnimationFrame(() => {
+                            checkScroll();
+                            scrollTicking = false;
+                        });
+                        scrollTicking = true;
+                    }
+                });
+            };
+            
+            // Инициализируем показ навигации при прокрутке
+            showNavOnScroll();
+        })();
         (() => {
             let teaserProgressTimer = null;
             let investorProgressTimer = null;
