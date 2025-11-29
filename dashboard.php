@@ -1183,6 +1183,9 @@ if ($latestForm) {
         }
     }
 }
+
+// Если мы в режиме API (для generate_teaser.php), не выводим HTML
+if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -1341,6 +1344,30 @@ if ($latestForm) {
             display: inline;
         }
         @media (max-width: 768px) {
+            body, html {
+                overflow-x: hidden;
+                width: 100%;
+                max-width: 100vw;
+                box-sizing: border-box;
+                position: relative;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            /* Разрешаем прокрутку только для обертки таблицы */
+            .dcf-card {
+                position: relative;
+            }
+            .dcf-table-wrapper {
+                position: relative;
+                left: 0;
+                right: 0;
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+            .dcf-card {
+                overflow-x: visible !important;
+            }
             .dashboard-header {
                 padding: 24px 0;
                 margin-top: 60px;
@@ -1354,6 +1381,10 @@ if ($latestForm) {
             }
             .dashboard-container {
                 padding: 0 16px 24px;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow-x: visible;
             }
             .dashboard-stats {
                 grid-template-columns: repeat(2, 1fr);
@@ -1394,6 +1425,11 @@ if ($latestForm) {
                 padding: 16px;
                 margin-top: 24px;
                 border-radius: 12px;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow-x: hidden;
+                overflow-y: visible;
             }
             .dcf-card h2 {
                 font-size: 18px;
@@ -1434,29 +1470,90 @@ if ($latestForm) {
                 font-size: 12px;
             }
             /* Обертка для горизонтальной прокрутки таблиц DCF */
+            .dcf-card {
+                overflow-x: visible;
+                overflow-y: visible;
+                max-width: 100%;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .dcf-card > div {
+                max-width: 100%;
+                width: 100%;
+                overflow-x: visible;
+                overflow-y: visible;
+                box-sizing: border-box;
+            }
             .dcf-table-wrapper {
                 overflow-x: auto;
+                overflow-y: visible;
                 -webkit-overflow-scrolling: touch;
                 margin: 0 -16px;
-                padding: 0 16px;
+                padding: 0 16px 8px 16px;
+                width: calc(100% + 32px);
+                max-width: 100vw;
+                position: relative;
+                box-sizing: content-box;
+                display: block;
+            }
+            /* Стилизация скроллбара для таблицы */
+            .dcf-table-wrapper::-webkit-scrollbar {
+                height: 8px;
+            }
+            .dcf-table-wrapper::-webkit-scrollbar-track {
+                background: rgba(0,0,0,0.05);
+                border-radius: 4px;
+                margin: 0 4px;
+            }
+            .dcf-table-wrapper::-webkit-scrollbar-thumb {
+                background: rgba(0,0,0,0.2);
+                border-radius: 4px;
+            }
+            .dcf-table-wrapper::-webkit-scrollbar-thumb:hover {
+                background: rgba(0,0,0,0.3);
+            }
+            /* Убеждаемся, что таблица может быть шире контейнера */
+            .dcf-table-wrapper .dcf-table--full {
+                display: table;
+                width: auto;
+                min-width: 500px;
             }
             .dcf-table {
-                min-width: 600px;
-                font-size: 12px;
+                min-width: 500px;
+                font-size: 11px;
+                width: auto;
+                display: table;
+                table-layout: auto;
+            }
+            .dcf-table--full {
+                width: auto;
+                min-width: 500px;
+                display: table;
+                table-layout: auto;
             }
             .dcf-table th,
             .dcf-table td {
-                padding: 8px 6px;
+                padding: 6px 4px;
+            }
+            .dcf-table th:not(:first-child),
+            .dcf-table td:not(:first-child) {
                 white-space: nowrap;
+                font-size: 10px;
             }
             .dcf-table--full th:first-child {
-                width: 140px;
-                min-width: 140px;
+                width: 100px;
+                min-width: 100px;
+                max-width: 100px;
                 position: sticky;
                 left: 0;
                 z-index: 10;
                 background: rgba(245,247,250,0.98);
                 box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+                white-space: normal;
+                word-wrap: break-word;
+                line-height: 1.2;
+                font-size: 10px;
+                padding: 6px 4px;
             }
             .dcf-table--full td:first-child {
                 position: sticky;
@@ -1464,6 +1561,14 @@ if ($latestForm) {
                 z-index: 9;
                 background: white;
                 box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+                white-space: normal;
+                word-wrap: break-word;
+                line-height: 1.2;
+                font-size: 10px;
+                padding: 6px 4px;
+                width: 100px;
+                min-width: 100px;
+                max-width: 100px;
             }
             .dcf-table--full tr:nth-child(even) td:first-child {
                 background: rgba(248,250,252,0.98);
@@ -1493,7 +1598,8 @@ if ($latestForm) {
                 text-align: right;
                 width: 50%;
                 padding-left: 2px;
-                white-space: nowrap; /* Числа не переносятся */
+                word-break: break-word;
+                overflow-wrap: break-word;
             }
             .dcf-table--ev tr:last-child td {
                 font-weight: 600;
@@ -1510,7 +1616,7 @@ if ($latestForm) {
             }
             /* Убираем обертку для таблицы EV на мобильных, чтобы она была видна полностью */
             .dcf-table-wrapper--ev {
-                overflow-x: visible !important;
+                overflow-x: hidden !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 width: 100%;
@@ -1543,6 +1649,8 @@ if ($latestForm) {
                 display: flex;
                 flex-direction: column;
                 width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
                 border: 1px solid var(--border-color);
                 border-radius: 10px;
                 padding: 6px 8px;
@@ -1565,9 +1673,10 @@ if ($latestForm) {
             .dcf-table--ev td:first-child {
                 font-size: 10px;
                 color: var(--text-secondary);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+                white-space: normal;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                max-width: 100%;
             }
             .dcf-table--ev td:last-child {
                 margin-top: 4px;
@@ -1575,7 +1684,10 @@ if ($latestForm) {
                 font-weight: 600;
                 color: var(--text-primary);
                 white-space: normal;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
                 text-align: left !important;
+                max-width: 100%;
             }
             .dcf-table--ev tr:last-child td:last-child {
                 font-size: 15px;
@@ -1619,6 +1731,39 @@ if ($latestForm) {
             }
         }
         @media (max-width: 375px) {
+            .dcf-card {
+                padding: 12px;
+            }
+            .dcf-table-wrapper {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                max-width: 100%;
+            }
+            .dcf-table {
+                min-width: 450px;
+                font-size: 10px;
+            }
+            .dcf-table th,
+            .dcf-table td {
+                padding: 5px 3px;
+            }
+            .dcf-table--full th:first-child {
+                width: 90px;
+                min-width: 90px;
+                max-width: 90px;
+                font-size: 9px;
+            }
+            .dcf-table--full td:first-child {
+                width: 90px;
+                min-width: 90px;
+                max-width: 90px;
+                font-size: 9px;
+            }
+            .dcf-table th:not(:first-child),
+            .dcf-table td:not(:first-child) {
+                font-size: 9px;
+            }
             .dcf-table--ev tr {
                 padding: 5px 6px !important;
             }
@@ -3794,5 +3939,7 @@ if ($latestForm) {
     <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>
+<?php
+} // Конец условия !DCF_API_MODE
 
 

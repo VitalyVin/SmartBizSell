@@ -74,6 +74,10 @@ try {
     }
 
     $formPayload = buildTeaserPayload($form);
+    
+    // Получаем данные DCF модели для графика
+    // Используем упрощенную функцию для извлечения данных напрямую из формы
+    $dcfData = extractDCFDataForChart($form);
 
     if ($action === 'investors') {
         $investorPool = buildInvestorPool($formPayload, $apiKey);
@@ -104,7 +108,7 @@ try {
     $teaserData = normalizeTeaserData($teaserData, $formPayload);
     $teaserData = ensureOverviewWithAi($teaserData, $formPayload, $apiKey);
     $teaserData = ensureProductsLocalized($teaserData, $formPayload, $apiKey);
-    $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив', $formPayload);
+    $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив', $formPayload, $dcfData);
 
     $snapshot = persistTeaserSnapshot($form, $formPayload, [
         'html' => $html,
@@ -369,7 +373,7 @@ function parseTeaserResponse(string $text): array
  * На этом этапе уже всё нормализовано — остаётся собрать карточки, графики
  * и вспомогательные блоки (кнопки, подсказки, подписи и т.п.).
  */
-function renderTeaserHtml(array $data, string $assetName, array $payload = []): string
+function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null): string
 {
     $blocks = [];
 
@@ -436,7 +440,23 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = []): 
             'list' => $bullets,
         ], 'financial');
 
-        $timeline = buildTeaserTimeline($payload);
+        // Используем данные из DCF модели, если они доступны, иначе используем данные из анкеты
+        $timeline = null;
+        if ($dcfData && !empty($dcfData['rows']) && is_array($dcfData['rows'])) {
+            error_log('buildTeaserHtml: Using DCF data. Rows count: ' . count($dcfData['rows']));
+            $timeline = buildTeaserTimelineFromDCF($dcfData);
+            // Если данные DCF не дали результата, пробуем резервный метод
+            if (!$timeline || empty($timeline)) {
+                error_log('buildTeaserHtml: DCF data failed, falling back to payload data');
+                $timeline = buildTeaserTimeline($payload);
+            } else {
+                error_log('buildTeaserHtml: DCF data successful. Series count: ' . count($timeline));
+            }
+        } else {
+            // Если DCF данные недоступны, используем данные из анкеты
+            error_log('buildTeaserHtml: DCF data not available, using payload data');
+            $timeline = buildTeaserTimeline($payload);
+        }
         if ($timeline) {
             $blocks[] = renderTeaserChart($timeline);
         }
@@ -682,7 +702,7 @@ function fetchCompanyWebsiteSnapshot(string $url): ?string
 
 function extractNumericValue(string $raw): ?float
 {
-    $normalized = str_replace([' ', ' '], '', $raw);
+    $normalized = str_replace([' ', ' '], '', $raw);
     $normalized = str_replace(',', '.', $normalized);
     if (!preg_match('/-?\d+(\.\d+)?/', $normalized, $matches)) {
         return null;
@@ -695,6 +715,195 @@ function extractNumericValue(string $raw): ?float
         $number /= 1000;
     }
     return $number;
+}
+
+/**
+ * Извлекает данные DCF модели для графика напрямую из формы
+ * Использует те же алгоритмы, что и calculateUserDCF, но упрощенно - только для графика
+ * 
+ * @param array $form Данные формы из БД
+ * @return array|null Структура данных DCF (rows, columns) или null при ошибке
+ */
+function extractDCFDataForChart(array $form): ?array
+{
+    // Используем output buffering для безопасного подключения dashboard.php
+    ob_start();
+    $dcfData = null;
+    try {
+        // Устанавливаем флаг, чтобы dashboard.php не выполнял HTML вывод
+        define('DCF_API_MODE', true);
+        
+        // Проверяем, определена ли функция calculateUserDCF
+        if (!function_exists('calculateUserDCF')) {
+            $dashboardPath = __DIR__ . '/dashboard.php';
+            if (file_exists($dashboardPath)) {
+                // Включаем файл с перехватом вывода
+                include $dashboardPath;
+            }
+        }
+        
+        // Если функция доступна, вызываем её
+        if (function_exists('calculateUserDCF')) {
+            $dcfData = calculateUserDCF($form);
+            if (isset($dcfData['error'])) {
+                $dcfData = null; // Игнорируем ошибки DCF для графика
+            }
+        }
+    } catch (Exception $e) {
+        error_log('DCF calculation error in teaser: ' . $e->getMessage());
+        $dcfData = null;
+    } finally {
+        // Очищаем буфер вывода (на случай, если dashboard.php что-то вывел)
+        ob_end_clean();
+    }
+    
+    return $dcfData;
+}
+
+/**
+ * Извлекает данные для графика из результатов DCF модели
+ * 
+ * Преобразует структуру данных DCF (с периодами P1, P2, P3...) в формат,
+ * понятный для renderTeaserChart (с метками 2025E, 2026E...)
+ * 
+ * @param array $dcfData Результаты расчета DCF модели (rows, columns)
+ * @return array|null Массив серий данных для графика или null, если данных недостаточно
+ */
+function buildTeaserTimelineFromDCF(array $dcfData): ?array
+{
+    if (empty($dcfData['rows']) || !is_array($dcfData['rows'])) {
+        error_log('buildTeaserTimelineFromDCF: empty or invalid rows');
+        return null;
+    }
+    
+    // Маппинг периодов DCF на метки для графика
+    $periodMapping = [
+        '2022' => '2022',
+        '2023' => '2023',
+        '2024' => '2024',
+        'P1' => '2025E',
+        'P2' => '2026E',
+        'P3' => '2027E',
+        'P4' => '2028E',
+        'P5' => '2029E',
+    ];
+    
+    // Находим строки с нужными метриками
+    $revenueRow = null;
+    $profitRow = null;
+    
+    foreach ($dcfData['rows'] as $row) {
+        if (!isset($row['label']) || !isset($row['values'])) {
+            continue;
+        }
+        $label = trim($row['label']);
+        if ($label === 'Выручка') {
+            $revenueRow = $row;
+        } elseif ($label === 'Прибыль от продаж') {
+            $profitRow = $row;
+        }
+    }
+    
+    // Логируем для отладки
+    if (!$revenueRow) {
+        $availableLabels = array_map(function($r) { return $r['label'] ?? 'no label'; }, $dcfData['rows']);
+        error_log('buildTeaserTimelineFromDCF: revenue row not found. Available labels: ' . implode(', ', $availableLabels));
+    } else {
+        error_log('buildTeaserTimelineFromDCF: revenue row found. Values: ' . json_encode($revenueRow['values'] ?? 'no values'));
+    }
+    if (!$profitRow) {
+        error_log('buildTeaserTimelineFromDCF: profit row not found');
+    } else {
+        error_log('buildTeaserTimelineFromDCF: profit row found. Values: ' . json_encode($profitRow['values'] ?? 'no values'));
+    }
+    
+    $series = [];
+    
+    // Обрабатываем выручку
+    if ($revenueRow && !empty($revenueRow['values']) && is_array($revenueRow['values'])) {
+        $points = [];
+        foreach ($periodMapping as $dcfPeriod => $chartLabel) {
+            if (isset($revenueRow['values'][$dcfPeriod])) {
+                $value = $revenueRow['values'][$dcfPeriod];
+                if ($value !== null && is_numeric($value)) {
+                    // Значения в DCF модели хранятся в тех единицах, в которых были введены в форму
+                    // Обычно это уже в млн рублей (833, 1667, 2500 и т.д.)
+                    // Но если значение очень большое (> 1 млн), значит введено в рублях
+                    $absValue = abs($value);
+                    if ($absValue > 1000000) {
+                        // Конвертируем из рублей в млн рублей
+                        $valueInMillions = $value / 1000000;
+                    } else {
+                        // Уже в млн рублей (значения обычно в диапазоне 0-10000)
+                        $valueInMillions = $value;
+                    }
+                    // Добавляем точку для всех значений (включая 0)
+                    $points[] = [
+                        'label' => $chartLabel,
+                        'value' => $valueInMillions,
+                    ];
+                }
+            }
+        }
+        if (count($points) >= 2) {
+            $series[] = [
+                'title' => 'Выручка',
+                'unit' => 'млн ₽',
+                'points' => $points,
+            ];
+        } else {
+            error_log('buildTeaserTimelineFromDCF: revenue points count < 2. Points: ' . json_encode($points));
+            error_log('buildTeaserTimelineFromDCF: revenue row values: ' . json_encode($revenueRow['values']));
+        }
+    } else {
+        if ($revenueRow) {
+            error_log('buildTeaserTimelineFromDCF: revenue row values empty or not array. Values: ' . json_encode($revenueRow['values'] ?? 'no values key'));
+        }
+    }
+    
+    // Обрабатываем прибыль от продаж
+    if ($profitRow && !empty($profitRow['values']) && is_array($profitRow['values'])) {
+        $points = [];
+        foreach ($periodMapping as $dcfPeriod => $chartLabel) {
+            if (isset($profitRow['values'][$dcfPeriod])) {
+                $value = $profitRow['values'][$dcfPeriod];
+                if ($value !== null && is_numeric($value)) {
+                    // Значения в DCF модели хранятся в тех единицах, в которых были введены в форму
+                    // Обычно это уже в млн рублей
+                    // Но если значение очень большое (> 1 млн), значит введено в рублях
+                    $absValue = abs($value);
+                    if ($absValue > 1000000) {
+                        // Конвертируем из рублей в млн рублей
+                        $valueInMillions = $value / 1000000;
+                    } else {
+                        // Уже в млн рублей
+                        $valueInMillions = $value;
+                    }
+                    // Добавляем точку для всех значений (включая 0 и отрицательные)
+                    $points[] = [
+                        'label' => $chartLabel,
+                        'value' => $valueInMillions,
+                    ];
+                }
+            }
+        }
+        if (count($points) >= 2) {
+            $series[] = [
+                'title' => 'Прибыль от продаж',
+                'unit' => 'млн ₽',
+                'points' => $points,
+            ];
+        } else {
+            error_log('buildTeaserTimelineFromDCF: profit points count < 2. Points: ' . json_encode($points));
+            error_log('buildTeaserTimelineFromDCF: profit row values: ' . json_encode($profitRow['values']));
+        }
+    } else {
+        if ($profitRow) {
+            error_log('buildTeaserTimelineFromDCF: profit row values empty or not array. Values: ' . json_encode($profitRow['values'] ?? 'no values key'));
+        }
+    }
+    
+    return $series ?: null;
 }
 
 function buildTeaserTimeline(array $payload): ?array
