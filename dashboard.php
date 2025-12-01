@@ -317,14 +317,7 @@ function clampFloat(float $value, float $min, float $max): float
 }
 
 /**
- * Удаляет упоминания вида «M&A платформа» из текста.
- * Используется для предотвращения появления служебных описаний в тизере.
- *
- * @param string $text Исходный текст
- * @return string Текст без упоминаний M&A платформы
- */
-/**
- * Генерирует SVG иконку для элемента hero блока
+ * Генерирует SVG иконку для элемента hero блока тизера.
  * 
  * @param string $iconType Тип иконки (segment, location, people, brand, online, share, goal, default)
  * @return string SVG код иконки
@@ -345,6 +338,19 @@ function getTeaserChipIcon(string $iconType): string
     return $icons[$iconType] ?? $icons['default'];
 }
 
+/**
+ * Удаляет упоминания вида «M&A платформа» из текста.
+ * Используется для предотвращения появления служебных описаний в тизере.
+ * 
+ * Обрабатывает различные варианты написания:
+ * - M&A платформа, M&A-платформа
+ * - HTML-сущности (M&amp;A)
+ * - Кириллические варианты (М&А)
+ * - Английские варианты (M&A platform)
+ * 
+ * @param string $text Исходный текст
+ * @return string Текст без упоминаний M&A платформы
+ */
 function removeMaPlatformPhrase(string $text): string
 {
     if ($text === '') {
@@ -353,6 +359,7 @@ function removeMaPlatformPhrase(string $text): string
 
     $decoded = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
 
+    // Список фраз для удаления
     $phrases = [
         'M&A платформа',
         'M&A-платформа',
@@ -366,24 +373,22 @@ function removeMaPlatformPhrase(string $text): string
         'М&amp;A-платформа',
     ];
 
+    // Удаление точных совпадений
     foreach ($phrases as $phrase) {
         $decoded = str_ireplace($phrase, '', $decoded);
     }
 
+    // Удаление через регулярные выражения для более гибкого поиска
     $decoded = preg_replace('/M\s*&(?:amp;)?\s*A\s*-?\s*платформ[аы]/iu', '', $decoded);
     $decoded = preg_replace('/М\s*&(?:amp;)?\s*А\s*-?\s*платформ[аы]/iu', '', $decoded);
     $decoded = preg_replace('/M\s*&(?:amp;)?\s*A\s*-?\s*platform[aы]?/iu', '', $decoded);
 
+    // Нормализация пробелов
     $decoded = trim(preg_replace('/\s+/u', ' ', $decoded));
 
     return $decoded;
 }
 
-/**
- * Строит полную DCF-модель на основе последней отправленной анкеты пользователя.
- * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
- * для отображения в личном кабинете.
- */
 /**
  * Строит полную DCF-модель на основе последней отправленной анкеты пользователя.
  * Возвращает не только итоговые показатели, но и полный набор параметров/предупреждений
@@ -3261,6 +3266,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             .teaser-actions .btn {
                 width: 100%;
             }
+            .teaser-hero__stats {
+                grid-template-columns: 1fr !important;
+            }
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
@@ -3715,9 +3723,11 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 // 5. Доля онлайн продаж
                 $onlineShare = trim((string)($latestForm['online_sales_share'] ?? ''));
                 if ($onlineShare !== '' && $onlineShare !== '0') {
+                    // Убираем '%' из значения, если он там есть, чтобы избежать двойного знака
+                    $onlineShare = rtrim($onlineShare, '%');
                     $heroChips[] = [
                         'label' => 'Онлайн',
-                        'value' => $onlineShare . ($onlineShare !== '100' ? '%' : '%'),
+                        'value' => $onlineShare . '%',
                         'icon' => 'online'
                     ];
                 }
@@ -4189,6 +4199,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 investorProgressBar: document.getElementById('investor-progress-bar'),
             });
 
+            /**
+             * Форматирует ISO дату/время в русский формат.
+             * 
+             * @param {string} isoString ISO строка даты/времени (например, '2025-01-15T10:30:00Z')
+             * @returns {string|null} Отформатированная строка в формате 'ДД.ММ.ГГГГ, ЧЧ:ММ' или null при ошибке
+             */
             const formatRuDateTime = (isoString) => {
                 if (!isoString) {
                     return null;
@@ -4206,6 +4222,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 });
             };
 
+            /**
+             * Показывает прогресс-бар генерации тизера с анимацией.
+             * Прогресс увеличивается случайным образом до 85%, чтобы создать эффект реальной работы.
+             * 
+             * @param {Object} elements Объект с элементами DOM (teaserProgress, teaserProgressBar)
+             */
             const showTeaserProgress = (elements) => {
                 const { teaserProgress, teaserProgressBar } = elements;
                 if (!teaserProgress || !teaserProgressBar) {
@@ -4226,6 +4248,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }, 400);
             };
 
+            /**
+             * Завершает отображение прогресс-бара генерации тизера.
+             * При успехе устанавливает прогресс на 100% и скрывает через 700мс.
+             * При ошибке сразу скрывает прогресс-бар.
+             * 
+             * @param {Object} elements Объект с элементами DOM (teaserProgress, teaserProgressBar)
+             * @param {boolean} success true при успешной генерации, false при ошибке
+             */
             const completeTeaserProgress = (elements, success = true) => {
                 const { teaserProgress, teaserProgressBar } = elements;
                 if (!teaserProgress || !teaserProgressBar) {
@@ -4240,6 +4270,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }, success ? 700 : 0);
             };
 
+            /**
+             * Показывает прогресс-бар подбора инвесторов с анимацией.
+             * Прогресс увеличивается случайным образом до 85%.
+             * 
+             * @param {Object} elements Объект с элементами DOM (investorProgress, investorProgressBar)
+             */
             const showInvestorProgress = (elements) => {
                 const { investorProgress, investorProgressBar } = elements;
                 if (!investorProgress || !investorProgressBar) {
@@ -4260,6 +4296,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }, 350);
             };
 
+            /**
+             * Завершает отображение прогресс-бара подбора инвесторов.
+             * При успехе устанавливает прогресс на 100% и скрывает через 600мс.
+             * При ошибке сразу скрывает прогресс-бар.
+             * 
+             * @param {Object} elements Объект с элементами DOM (investorProgress, investorProgressBar)
+             * @param {boolean} success true при успешном подборе, false при ошибке
+             */
             const completeInvestorProgress = (elements, success = true) => {
                 const { investorProgress, investorProgressBar } = elements;
                 if (!investorProgress || !investorProgressBar) {
@@ -4293,6 +4337,18 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 window.open('teaser_pdf.php', '_blank');
             };
 
+            /**
+             * Обработчик генерации/обновления тизера.
+             * 
+             * Функциональность:
+             * - Отправляет AJAX запрос на generate_teaser.php
+             * - Показывает прогресс-бар во время генерации
+             * - Обновляет HTML тизера в DOM
+             * - Инициализирует графики ApexCharts
+             * - Обрабатывает ошибки и восстанавливает состояние при неудаче
+             * 
+             * @async
+             */
             const handleTeaserGenerate = async () => {
                 const elements = getTeaserElements();
                 const {
@@ -4401,6 +4457,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }
             };
 
+            /**
+             * Обработчик подбора инвесторов.
+             * 
+             * Функциональность:
+             * - Отправляет AJAX запрос на generate_teaser.php с action='investors'
+             * - Показывает прогресс-бар во время подбора
+             * - Обновляет HTML списка инвесторов в DOM
+             * - Обрабатывает ошибки и восстанавливает предыдущее состояние при неудаче
+             * 
+             * @async
+             */
             const handleInvestorGenerate = async () => {
                 const { investorBtn, investorStatus, investorResult, investorControls } = getTeaserElements();
                 if (!investorBtn || !investorStatus || !investorResult) {
@@ -4450,6 +4517,16 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }
             };
 
+            /**
+             * Обработчик отправки тизера инвестору.
+             * 
+             * При клике на кнопку "Отправить тизер" рядом с инвестором:
+             * - Блокирует кнопку и меняет текст на "Отправлено"
+             * - Показывает сообщение в статусе тизера
+             * - Восстанавливает кнопку через 3.2 секунды
+             * 
+             * @param {Event} event Событие клика
+             */
             const handleInvestorSend = (event) => {
                 const button = event.target.closest('.btn-investor-send');
                 if (!button) {
@@ -4475,6 +4552,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }, 3200);
             };
 
+            /**
+             * Инициализация функционала печати DCF модели.
+             * 
+             * Функциональность:
+             * - Добавляет класс 'print-dcf' к body при клике на кнопку экспорта
+             * - Открывает диалог печати браузера
+             * - Восстанавливает состояние после печати
+             */
             const initDcfPrint = () => {
                 const card = document.getElementById('dcf-card');
                 const exportBtn = document.getElementById('export-dcf-pdf');

@@ -556,6 +556,21 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
     return '<div class="teaser-grid">' . implode('', $blocks) . '</div>';
 }
 
+/**
+ * Рендерит HTML карточки тизера с заголовком, иконкой и содержимым.
+ * 
+ * Поддерживает различные варианты отображения через параметр $variant:
+ * - 'overview', 'profile', 'products', 'market', 'financial', 'highlights', 'deal', 'next'
+ * 
+ * @param string $title Заголовок карточки
+ * @param array $payload Данные карточки:
+ *                      - 'subtitle': подзаголовок (опционально)
+ *                      - 'text': основной текст (опционально)
+ *                      - 'list': массив элементов списка (опционально)
+ *                      - 'footer': текст в футере карточки (опционально)
+ * @param string $variant Вариант стилизации карточки (для CSS)
+ * @return string HTML код карточки
+ */
 function renderCard(string $title, array $payload, string $variant = ''): string
 {
     $variantAttr = $variant !== '' ? ' data-variant="' . htmlspecialchars($variant, ENT_QUOTES, 'UTF-8') . '"' : '';
@@ -591,11 +606,24 @@ function renderCard(string $title, array $payload, string $variant = ''): string
     return $html;
 }
 
+/**
+ * Экранирует HTML-специальные символы для безопасного вывода в HTML.
+ * 
+ * @param mixed $value Значение для экранирования
+ * @return string Экранированная строка
+ */
 function escapeHtml($value): string
 {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * Форматирует метрику в строку "Метка: Значение".
+ * 
+ * @param string $label Название метрики
+ * @param string $value Значение метрики
+ * @return string Отформатированная строка или пустая строка, если значение пустое
+ */
 function formatMetric(string $label, string $value): string
 {
     if (trim($value) === '') {
@@ -604,6 +632,12 @@ function formatMetric(string $label, string $value): string
     return "{$label}: {$value}";
 }
 
+/**
+ * Возвращает SVG иконку для карточки тизера по её заголовку.
+ * 
+ * @param string $title Заголовок карточки
+ * @return string SVG код иконки
+ */
 function getTeaserIcon(string $title): string
 {
     $map = [
@@ -752,6 +786,17 @@ function fetchCompanyWebsiteSnapshot(string $url): ?string
     return mb_substr($text, 0, 1500) . (mb_strlen($text) > 1500 ? '…' : '');
 }
 
+/**
+ * Извлекает числовое значение из строки с учетом единиц измерения.
+ * 
+ * Поддерживает:
+ * - Разделители: пробелы, запятые, точки
+ * - Единицы: "млрд" (умножает на 1000), "тыс" (делит на 1000)
+ * - Отрицательные числа
+ * 
+ * @param string $raw Исходная строка с числом
+ * @return float|null Извлеченное число в млн рублей или null, если не найдено
+ */
 function extractNumericValue(string $raw): ?float
 {
     $normalized = str_replace([' ', ' '], '', $raw);
@@ -958,11 +1003,22 @@ function buildTeaserTimelineFromDCF(array $dcfData): ?array
     return $series ?: null;
 }
 
+/**
+ * Строит временную линию финансовых данных из payload анкеты (резервный метод).
+ * 
+ * Используется как fallback, когда данные DCF модели недоступны.
+ * Извлекает финансовые показатели из структуры payload['financial'] и формирует
+ * серии данных для графика динамики финансов.
+ * 
+ * @param array $payload Данные анкеты с финансовыми показателями
+ * @return array|null Массив серий данных для графика или null, если данных недостаточно
+ */
 function buildTeaserTimeline(array $payload): ?array
 {
     if (empty($payload['financial']) || !is_array($payload['financial'])) {
         return null;
     }
+    // Маппинг колонок финансовых данных на метки периодов для графика
     $periods = [
         '2022_fact' => '2022',
         '2023_fact' => '2023',
@@ -970,18 +1026,21 @@ function buildTeaserTimeline(array $payload): ?array
         '2025_budget' => '2025E',
         '2026_budget' => '2026E',
     ];
+    // Определение метрик для отображения на графике
     $metrics = [
         'revenue' => ['title' => 'Выручка', 'unit' => 'млн ₽'],
         'sales_profit' => ['title' => 'Прибыль от продаж', 'unit' => 'млн ₽'],
     ];
     $series = [];
 
+    // Обработка каждой метрики
     foreach ($metrics as $key => $meta) {
         if (empty($payload['financial'][$key]) || !is_array($payload['financial'][$key])) {
             continue;
         }
         $row = $payload['financial'][$key];
         $points = [];
+        // Сбор точек данных для каждого периода
         foreach ($periods as $column => $label) {
             if (empty($row[$column])) {
                 continue;
@@ -995,6 +1054,7 @@ function buildTeaserTimeline(array $payload): ?array
                 'value' => $value,
             ];
         }
+        // Добавляем серию только если есть минимум 2 точки данных
         if (count($points) >= 2) {
             $series[] = [
                 'title' => $meta['title'],
@@ -1007,6 +1067,13 @@ function buildTeaserTimeline(array $payload): ?array
     return $series ?: null;
 }
 
+/**
+ * Проверяет наличие метки периода в сериях данных графика.
+ * 
+ * @param array $series Массив серий данных графика
+ * @param string $label Метка периода для поиска (например, '2025E')
+ * @return bool true, если метка найдена хотя бы в одной серии
+ */
 function seriesHasLabel(array $series, string $label): bool
 {
     foreach ($series as $metric) {
@@ -1019,6 +1086,13 @@ function seriesHasLabel(array $series, string $label): bool
     return false;
 }
 
+/**
+ * Извлекает числовое значение для указанной метки периода из массива точек.
+ * 
+ * @param array $points Массив точек данных [['label' => '2025E', 'value' => 1000], ...]
+ * @param string $label Метка периода для поиска
+ * @return float|null Значение точки или null, если метка не найдена
+ */
 function valueForLabel(array $points, string $label): ?float
 {
     foreach ($points as $point) {
@@ -1116,146 +1190,6 @@ function renderTeaserChart(array $series): string
     $html .= '<p class="teaser-chart__note">Показатели указаны в млн ₽. Источник: анкета продавца (факт + бюджет).</p>';
     $html .= '</div>';
     return $html;
-}
-
-/**
- * Генерирует статический SVG-график для отображения динамики финансов.
- * 
- * ВНИМАНИЕ: Эта функция в настоящее время не используется.
- * Вместо неё используется ApexCharts через функцию renderTeaserChart().
- * Оставлена для возможного использования в будущем или как резервный вариант.
- * 
- * Этот график будет корректно отображаться как в браузере, так и в PDF.
- * 
- * @deprecated Используйте renderTeaserChart() с ApexCharts
- */
-function generateStaticSvgChart(array $labels, array $series): string
-{
-    $width = 700;
-    $height = 280;
-    $padding = ['top' => 40, 'right' => 50, 'bottom' => 50, 'left' => 70];
-    $chartWidth = $width - $padding['left'] - $padding['right'];
-    $chartHeight = $height - $padding['top'] - $padding['bottom'];
-    
-    // Find min and max values
-    $allValues = [];
-    foreach ($series as $serie) {
-        foreach ($serie['data'] as $value) {
-            if ($value !== null) {
-                $allValues[] = $value;
-            }
-        }
-    }
-    if (empty($allValues)) {
-        return '<p style="text-align: center; color: #999; padding: 20px;">Нет данных для графика</p>';
-    }
-    
-    $minValue = min($allValues);
-    $maxValue = max($allValues);
-    $valueRange = $maxValue - $minValue;
-    if ($valueRange === 0) {
-        $valueRange = 1;
-    }
-    
-    // Calculate Y-axis scale
-    $yTicks = 5;
-    $yStep = $valueRange / ($yTicks - 1);
-    $yTickValues = [];
-    for ($i = 0; $i < $yTicks; $i++) {
-        $yTickValues[] = $minValue + ($yStep * $i);
-    }
-    
-    // Build SVG
-    $svg = '<svg width="' . $width . '" height="' . $height . '" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">';
-    
-    // Background with subtle gradient
-    $svg .= '<defs>';
-    $svg .= '<linearGradient id="chartBg" x1="0%" y1="0%" x2="0%" y2="100%">';
-    $svg .= '<stop offset="0%" style="stop-color:#fafbfc;stop-opacity:1" />';
-    $svg .= '<stop offset="100%" style="stop-color:#ffffff;stop-opacity:1" />';
-    $svg .= '</linearGradient>';
-    $svg .= '</defs>';
-    $svg .= '<rect width="' . $width . '" height="' . $height . '" fill="url(#chartBg)"/>';
-    
-    // Grid lines with better styling
-    foreach ($yTickValues as $tickValue) {
-        $y = $padding['top'] + $chartHeight - (($tickValue - $minValue) / $valueRange * $chartHeight);
-        $svg .= '<line x1="' . $padding['left'] . '" y1="' . $y . '" x2="' . ($width - $padding['right']) . '" y2="' . $y . '" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.6"/>';
-    }
-    
-    // Y-axis line
-    $svg .= '<line x1="' . $padding['left'] . '" y1="' . $padding['top'] . '" x2="' . $padding['left'] . '" y2="' . ($height - $padding['bottom']) . '" stroke="#cbd5e1" stroke-width="2"/>';
-    // X-axis line
-    $svg .= '<line x1="' . $padding['left'] . '" y1="' . ($height - $padding['bottom']) . '" x2="' . ($width - $padding['right']) . '" y2="' . ($height - $padding['bottom']) . '" stroke="#cbd5e1" stroke-width="2"/>';
-    
-    // Draw lines for each series
-    $labelCount = count($labels);
-    $xStep = $chartWidth / max(1, $labelCount - 1);
-    
-    foreach ($series as $serieIndex => $serie) {
-        $points = [];
-        $pathData = '';
-        
-        foreach ($serie['data'] as $dataIndex => $value) {
-            if ($value === null) {
-                continue;
-            }
-            $x = $padding['left'] + ($dataIndex * $xStep);
-            $y = $padding['top'] + $chartHeight - (($value - $minValue) / $valueRange * $chartHeight);
-            $points[] = ['x' => $x, 'y' => $y, 'value' => $value];
-            
-            if ($pathData === '') {
-                $pathData = 'M ' . $x . ' ' . $y;
-            } else {
-                $pathData .= ' L ' . $x . ' ' . $y;
-            }
-        }
-        
-        // Draw line with gradient effect
-        if ($pathData !== '') {
-            $svg .= '<path d="' . $pathData . '" fill="none" stroke="' . $serie['color'] . '" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>';
-        }
-        
-        // Draw points with shadow effect
-        foreach ($points as $point) {
-            // Shadow
-            $svg .= '<circle cx="' . ($point['x'] + 1) . '" cy="' . ($point['y'] + 1) . '" r="5" fill="rgba(0,0,0,0.1)"/>';
-            // Main point
-            $svg .= '<circle cx="' . $point['x'] . '" cy="' . $point['y'] . '" r="5" fill="' . $serie['color'] . '" stroke="#fff" stroke-width="2.5"/>';
-            // Inner highlight
-            $svg .= '<circle cx="' . $point['x'] . '" cy="' . $point['y'] . '" r="2" fill="#fff" opacity="0.6"/>';
-        }
-    }
-    
-    // Y-axis labels with better styling
-    foreach ($yTickValues as $tickValue) {
-        $y = $padding['top'] + $chartHeight - (($tickValue - $minValue) / $valueRange * $chartHeight);
-        $label = number_format($tickValue, 0, '.', ' ');
-        $svg .= '<text x="' . ($padding['left'] - 15) . '" y="' . ($y + 5) . '" text-anchor="end" font-size="12" fill="#475569" font-family="Arial, sans-serif" font-weight="500">' . htmlspecialchars($label, ENT_XML1) . '</text>';
-    }
-    
-    // X-axis labels with better styling
-    foreach ($labels as $index => $label) {
-        $x = $padding['left'] + ($index * $xStep);
-        $svg .= '<text x="' . $x . '" y="' . ($height - $padding['bottom'] + 25) . '" text-anchor="middle" font-size="12" fill="#475569" font-family="Arial, sans-serif" font-weight="500">' . htmlspecialchars($label, ENT_XML1) . '</text>';
-    }
-    
-    // Legend with better styling
-    $legendX = $padding['left'];
-    $legendY = 20;
-    foreach ($series as $serieIndex => $serie) {
-        $legendItemX = $legendX + ($serieIndex * 180);
-        // Legend background
-        $svg .= '<rect x="' . ($legendItemX - 4) . '" y="' . ($legendY - 10) . '" width="140" height="20" fill="rgba(255,255,255,0.8)" rx="4"/>';
-        // Legend marker
-        $svg .= '<rect x="' . $legendItemX . '" y="' . ($legendY - 4) . '" width="14" height="14" fill="' . $serie['color'] . '" rx="2"/>';
-        // Legend text
-        $svg .= '<text x="' . ($legendItemX + 20) . '" y="' . ($legendY + 5) . '" font-size="13" fill="#1e293b" font-family="Arial, sans-serif" font-weight="600">' . htmlspecialchars($serie['name'], ENT_XML1) . '</text>';
-    }
-    
-    $svg .= '</svg>';
-    
-    return $svg;
 }
 
 function normalizeTeaserData(array $data, array $payload): array
@@ -1457,6 +1391,17 @@ function parseProductsLocalizationResponse(string $response): array
     return [];
 }
 
+/**
+ * Определяет, нужно ли улучшать блок "Обзор возможности" через дополнительный AI-запрос.
+ * 
+ * Улучшение требуется, если:
+ * - summary пустой
+ * - содержит фразу "Информация уточняется"
+ * - содержит фразу "Ключевые преимущества" (устаревший формат)
+ * 
+ * @param array $overview Данные блока overview
+ * @return bool true, если требуется улучшение
+ */
 function shouldEnhanceOverview(array $overview): bool
 {
     $summary = trim((string)($overview['summary'] ?? ''));
@@ -1478,6 +1423,16 @@ function shouldEnhanceOverview(array $overview): bool
     return false;
 }
 
+/**
+ * Формирует промпт для улучшения блока "Обзор возможности" через AI.
+ * 
+ * Собирает факты из анкеты и формирует структурированный промпт для генерации
+ * улучшенного текста обзора с четырьмя абзацами по одному предложению.
+ * 
+ * @param array $overview Текущие данные блока overview
+ * @param array $payload Данные анкеты
+ * @return string Промпт для AI
+ */
 function buildOverviewRefinementPrompt(array $overview, array $payload): string
 {
     $facts = [
@@ -1514,6 +1469,16 @@ function buildOverviewRefinementPrompt(array $overview, array $payload): string
 PROMPT;
 }
 
+/**
+ * Нормализует значение в массив строк, удаляя пустые элементы.
+ * 
+ * Если значение уже массив - фильтрует и возвращает его.
+ * Если строка - возвращает массив с одним элементом.
+ * Если значение пустое - возвращает массив с placeholder-текстом.
+ * 
+ * @param mixed $value Значение для нормализации
+ * @return array Массив строк
+ */
 function normalizeArray($value): array
 {
     if (is_array($value)) {
@@ -1527,6 +1492,15 @@ function normalizeArray($value): array
     return ['Дополнительные сведения доступны по запросу.'];
 }
 
+/**
+ * Формирует текст описания каналов продаж из данных анкеты.
+ * 
+ * Объединяет информацию об оффлайн, онлайн и контрактном производстве
+ * в единую строку с разделителями.
+ * 
+ * @param array $payload Данные анкеты
+ * @return string Текст описания каналов продаж
+ */
 function buildSalesChannelsText(array $payload): string
 {
     $channels = [];
@@ -2778,6 +2752,21 @@ function looksLikeStructuredDump(string $text): bool
     return false;
 }
 
+/**
+ * Сохраняет snapshot тизера в БД в поле data_json формы.
+ * 
+ * Snapshot содержит HTML тизера, hero_description, дату генерации и другие метаданные.
+ * Данные сохраняются в JSON формате в поле data_json таблицы seller_forms.
+ * 
+ * @param array $form Данные формы из БД
+ * @param array $payload Данные анкеты (будут объединены с snapshot)
+ * @param array $snapshot Данные snapshot для сохранения:
+ *                       - 'html': HTML код тизера
+ *                       - 'hero_description': описание для hero блока
+ *                       - 'generated_at': дата генерации
+ *                       - 'model': модель AI, использованная для генерации
+ * @return array Возвращает переданный snapshot
+ */
 function persistTeaserSnapshot(array $form, array $payload, array $snapshot): array
 {
     $payload['teaser_snapshot'] = $snapshot;
@@ -2798,6 +2787,19 @@ function persistTeaserSnapshot(array $form, array $payload, array $snapshot): ar
     return $snapshot;
 }
 
+/**
+ * Сохраняет snapshot списка инвесторов в БД в поле data_json формы.
+ * 
+ * Snapshot содержит HTML списка инвесторов и дату генерации.
+ * Данные сохраняются в JSON формате в поле data_json таблицы seller_forms.
+ * 
+ * @param array $form Данные формы из БД
+ * @param array $payload Данные анкеты (будут объединены с snapshot)
+ * @param array $snapshot Данные snapshot для сохранения:
+ *                       - 'html': HTML код списка инвесторов
+ *                       - 'generated_at': дата генерации
+ * @return array Возвращает переданный snapshot
+ */
 function persistInvestorSnapshot(array $form, array $payload, array $snapshot): array
 {
     $payload['investor_snapshot'] = $snapshot;
