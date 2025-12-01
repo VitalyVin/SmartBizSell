@@ -323,6 +323,28 @@ function clampFloat(float $value, float $min, float $max): float
  * @param string $text Исходный текст
  * @return string Текст без упоминаний M&A платформы
  */
+/**
+ * Генерирует SVG иконку для элемента hero блока
+ * 
+ * @param string $iconType Тип иконки (segment, location, people, brand, online, share, goal, default)
+ * @return string SVG код иконки
+ */
+function getTeaserChipIcon(string $iconType): string
+{
+    $icons = [
+        'segment' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'location' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 13C13.6569 13 15 11.6569 15 10C15 8.34315 13.6569 7 12 7C10.3431 7 9 8.34315 9 10C9 11.6569 10.3431 13 12 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'people' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7C9 9.20914 7.20914 11 5 11C2.79086 11 1 9.20914 1 7C1 4.79086 2.79086 3 5 3C7.20914 3 9 4.79086 9 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'brand' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'online' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.93 6.5L5.34 7.91" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.07 6.5L18.66 7.91" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 3.93L7.91 5.34" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 3.93L16.09 5.34" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.93 17.5L5.34 16.09" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.07 17.5L18.66 16.09" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 20.07L7.91 18.66" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 20.07L16.09 18.66" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'share' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 8C19.6569 8 21 6.65685 21 5C21 3.34315 19.6569 2 18 2C16.3431 2 15 3.34315 15 5C15 5.12549 15.0077 5.24919 15.0227 5.37063L8.08261 9.79837C7.54305 9.29264 6.80891 9 6 9C4.34315 9 3 10.3431 3 12C3 13.6569 4.34315 15 6 15C6.80891 15 7.54305 14.7074 8.08261 14.2016L15.0227 18.6294C15.0077 18.7508 15 18.8745 15 19C15 20.6569 16.3431 22 18 22C19.6569 22 21 20.6569 21 19C21 17.3431 19.6569 16 18 16C17.1911 16 16.457 16.2926 15.9174 16.7984L8.97727 12.3706C8.99231 12.2492 9 12.1255 9 12C9 11.8745 8.99231 11.7508 8.97727 11.6294L15.9174 7.20163C16.457 7.70736 17.1911 8 18 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'goal' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'default' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    ];
+    
+    return $icons[$iconType] ?? $icons['default'];
+}
+
 function removeMaPlatformPhrase(string $text): string
 {
     if ($text === '') {
@@ -1151,6 +1173,7 @@ if ($latestForm) {
     $dcfSourceStatus = $latestForm['status'];
     $dcfData = calculateUserDCF($latestForm);
 
+    $savedHeroDescription = null;
     if (!empty($latestForm['data_json'])) {
         $teaserDecoded = json_decode($latestForm['data_json'], true);
         if (is_array($teaserDecoded)) {
@@ -1161,6 +1184,54 @@ if ($latestForm) {
             if (!empty($teaserDecoded['investor_snapshot']['html'])) {
                 $savedInvestorHtml = $teaserDecoded['investor_snapshot']['html'];
                 $savedInvestorTimestamp = $teaserDecoded['investor_snapshot']['generated_at'] ?? null;
+            }
+            // Извлекаем сгенерированное ИИ описание для hero блока
+            if (!empty($teaserDecoded['teaser_snapshot']['hero_description'])) {
+                $savedHeroDescription = trim((string)$teaserDecoded['teaser_snapshot']['hero_description']);
+            }
+        }
+    }
+    
+    // Генерируем hero_description сразу после расчета DCF, если его еще нет
+    if (empty($savedHeroDescription) && !isset($dcfData['error']) && defined('TOGETHER_API_KEY') && !empty(TOGETHER_API_KEY)) {
+        // Подключаем функции из generate_teaser.php для генерации описания
+        // Используем output buffering, чтобы избежать вывода JSON из generate_teaser.php
+        if (!function_exists('generateHeroDescription')) {
+            ob_start();
+            try {
+                // Определяем флаг, чтобы generate_teaser.php не выполнял основной код
+                define('TEASER_FUNCTIONS_ONLY', true);
+                $generateTeaserPath = __DIR__ . '/generate_teaser.php';
+                if (file_exists($generateTeaserPath)) {
+                    // Временно перехватываем header, чтобы избежать отправки JSON
+                    $originalHeaders = headers_list();
+                    include $generateTeaserPath;
+                }
+            } catch (Throwable $e) {
+                error_log('Failed to load generate_teaser functions: ' . $e->getMessage());
+            }
+            ob_end_clean();
+        }
+        
+        // Генерируем описание, если функция доступна
+        if (function_exists('generateHeroDescription')) {
+            try {
+                $generatedDescription = generateHeroDescription($latestForm, TOGETHER_API_KEY);
+                if (!empty($generatedDescription)) {
+                    $savedHeroDescription = $generatedDescription;
+                    // Обновляем данные формы, чтобы получить актуальный hero_description
+                    $latestFormStmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ?");
+                    $latestFormStmt->execute([$latestForm['id']]);
+                    $latestForm = $latestFormStmt->fetch();
+                    if ($latestForm && !empty($latestForm['data_json'])) {
+                        $teaserDecoded = json_decode($latestForm['data_json'], true);
+                        if (is_array($teaserDecoded) && !empty($teaserDecoded['teaser_snapshot']['hero_description'])) {
+                            $savedHeroDescription = trim((string)$teaserDecoded['teaser_snapshot']['hero_description']);
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                error_log('Hero description generation error in dashboard: ' . $e->getMessage());
             }
         }
     }
@@ -2225,15 +2296,27 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 margin-bottom: 4px !important;
             }
             body.print-teaser .teaser-chip {
-                padding: 2px 6px !important;
+                padding: 4px 8px !important;
                 font-size: 8px !important;
                 min-width: auto !important;
+                gap: 6px !important;
             }
-            body.print-teaser .teaser-chip strong {
+            body.print-teaser .teaser-chip__icon {
+                width: 20px !important;
+                height: 20px !important;
+            }
+            body.print-teaser .teaser-chip__icon svg {
+                width: 12px !important;
+                height: 12px !important;
+            }
+            body.print-teaser .teaser-chip__value {
                 font-size: 9px !important;
             }
+            body.print-teaser .teaser-chip__label {
+                font-size: 7px !important;
+            }
             body.print-teaser .teaser-hero__stats {
-                grid-template-columns: repeat(3, 1fr) !important;
+                grid-template-columns: repeat(2, 1fr) !important;
                 gap: 4px !important;
             }
             body.print-teaser .teaser-stat {
@@ -2899,7 +2982,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         }
         .teaser-hero {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            grid-template-columns: 1fr 2fr;
             gap: 28px;
             border: 1px solid var(--teaser-stroke);
             border-radius: 28px;
@@ -2934,63 +3017,140 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         }
         .teaser-chip {
             display: inline-flex;
-            flex-direction: column;
-            padding: 10px 14px;
-            border-radius: 16px;
-            background: rgba(99,102,241,0.08);
-            border: 1px solid rgba(99,102,241,0.15);
-            min-width: 140px;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.08) 100%);
+            border: 1.5px solid rgba(99,102,241,0.2);
+            min-width: 120px;
             color: var(--teaser-muted);
-            font-size: 12px;
+            font-size: 11px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(99,102,241,0.08);
         }
-        .teaser-chip strong {
+        .teaser-chip:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99,102,241,0.15);
+            border-color: rgba(99,102,241,0.3);
+        }
+        .teaser-chip__icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.12) 100%);
+            flex-shrink: 0;
+        }
+        .teaser-chip__icon svg {
+            width: 14px;
+            height: 14px;
+            stroke: var(--teaser-text);
+            opacity: 0.8;
+        }
+        .teaser-chip__content {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            flex: 1;
+            min-width: 0;
+        }
+        .teaser-chip__label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--teaser-muted);
+            opacity: 0.8;
+        }
+        .teaser-chip__value {
             color: var(--teaser-text);
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
+            line-height: 1.3;
+            word-break: break-word;
         }
         .teaser-hero__stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            padding: 12px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(139,92,246,0.03) 100%);
+            border: 2px solid rgba(99,102,241,0.15);
+            box-shadow: 0 8px 24px rgba(99,102,241,0.1), inset 0 1px 0 rgba(255,255,255,0.8);
+            margin-top: 8px;
+            width: 100%;
+            max-width: 100%;
         }
         .teaser-stat {
-            padding: 16px;
-            border-radius: 20px;
-            background: var(--teaser-card-surface);
-            border: 1px solid var(--teaser-stroke);
-            box-shadow: 0 12px 30px rgba(15,23,42,0.08);
+            padding: 16px 24px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.95) 100%);
+            border: 1.5px solid rgba(99,102,241,0.2);
+            box-shadow: 0 4px 16px rgba(99,102,241,0.12), 0 2px 4px rgba(15,23,42,0.06);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
+            flex: 1;
+        }
+        .teaser-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, rgba(99,102,241,0.6) 0%, rgba(139,92,246,0.6) 100%);
+            opacity: 0.8;
+        }
+        .teaser-stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99,102,241,0.18), 0 4px 8px rgba(15,23,42,0.1);
+            border-color: rgba(99,102,241,0.3);
         }
         .teaser-stat span {
-            font-size: 12px;
+            font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: rgba(71,85,105,0.8);
+            color: rgba(99,102,241,0.8);
+            font-weight: 600;
         }
         .teaser-stat strong {
             display: block;
             font-size: 20px;
-            margin-top: 6px;
+            margin-top: 4px;
             color: var(--teaser-text);
+            font-weight: 700;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         .teaser-stat small {
             display: block;
-            margin-top: 4px;
-            font-size: 12px;
+            margin-top: 3px;
+            font-size: 10px;
             color: var(--teaser-muted);
+            opacity: 0.9;
         }
         .teaser-hero__status {
             grid-column: 1 / -1;
-            margin-top: 8px;
+            margin-top: 6px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
         }
         .teaser-status {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--teaser-muted);
             position: relative;
-            padding-left: 22px;
+            padding-left: 18px;
         }
         .teaser-status::before {
             content: "";
@@ -2998,11 +3158,11 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             left: 0;
             top: 50%;
             transform: translateY(-50%);
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: linear-gradient(135deg, var(--teaser-highlight), var(--teaser-highlight-alt));
-            box-shadow: 0 0 10px rgba(99,102,241,0.35);
+            box-shadow: 0 0 8px rgba(99,102,241,0.35);
         }
         .teaser-progress {
             background: rgba(99,102,241,0.12);
@@ -3087,7 +3247,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 grid-template-columns: 1fr;
             }
             .teaser-hero__stats {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                grid-template-columns: repeat(2, 1fr);
             }
         }
         @media (max-width: 640px) {
@@ -3494,40 +3654,192 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 if ($heroCompanyName === '') {
                     $heroCompanyName = 'Ваш проект';
                 }
-                $heroDescription = trim((string)($latestForm['company_description'] ?? $latestForm['additional_info'] ?? 'Подготовьте краткое описание, чтобы сделать тизер ещё выразительнее.'));
-                $heroDescription = removeMaPlatformPhrase($heroDescription);
-                if (mb_strlen($heroDescription) > 220) {
-                    $heroDescription = mb_substr($heroDescription, 0, 220) . '…';
+                // Используем сгенерированное ИИ описание, если оно есть, иначе берем из анкеты
+                if (!empty($savedHeroDescription)) {
+                    $heroDescription = $savedHeroDescription;
+                } else {
+                    $heroDescription = trim((string)($latestForm['company_description'] ?? $latestForm['additional_info'] ?? 'Подготовьте краткое описание, чтобы сделать тизер ещё выразительнее.'));
+                    $heroDescription = removeMaPlatformPhrase($heroDescription);
+                    if (mb_strlen($heroDescription) > 220) {
+                        $heroDescription = mb_substr($heroDescription, 0, 220) . '…';
+                    }
                 }
                 $heroIndustry = removeMaPlatformPhrase(trim((string)($latestForm['products_services'] ?? '')));
                 $heroRegion = removeMaPlatformPhrase(trim((string)($latestForm['presence_regions'] ?? '')));
                 $heroGoal = removeMaPlatformPhrase(trim((string)($latestForm['deal_goal'] ?? '')));
+                // Формируем список элементов для hero блока (4-5 элементов)
                 $heroChips = [];
+                
+                // 1. Сегмент рынка
                 if ($heroIndustry !== '') {
-                    $heroChips[] = ['label' => 'Сегмент', 'value' => $heroIndustry];
+                    $heroChips[] = [
+                        'label' => 'Сегмент',
+                        'value' => $heroIndustry,
+                        'icon' => 'segment'
+                    ];
                 }
+                
+                // 2. География присутствия
                 if ($heroRegion !== '') {
-                    $heroChips[] = ['label' => 'Рынки', 'value' => $heroRegion];
+                    $heroChips[] = [
+                        'label' => 'Рынки',
+                        'value' => $heroRegion,
+                        'icon' => 'location'
+                    ];
                 }
-                if ($heroGoal !== '') {
-                    $heroChips[] = ['label' => 'Цель', 'value' => $heroGoal];
+                
+                // 3. Персонал
+                $personnelCount = trim((string)($latestForm['personnel_count'] ?? ''));
+                if ($personnelCount !== '' && $personnelCount !== '0') {
+                    $heroChips[] = [
+                        'label' => 'Персонал',
+                        'value' => $personnelCount . ' чел.',
+                        'icon' => 'people'
+                    ];
                 }
+                
+                // 4. Бренды
+                $companyBrands = removeMaPlatformPhrase(trim((string)($latestForm['company_brands'] ?? '')));
+                if ($companyBrands !== '') {
+                    // Ограничиваем длину названий брендов
+                    if (mb_strlen($companyBrands) > 30) {
+                        $companyBrands = mb_substr($companyBrands, 0, 30) . '…';
+                    }
+                    $heroChips[] = [
+                        'label' => 'Бренды',
+                        'value' => $companyBrands,
+                        'icon' => 'brand'
+                    ];
+                }
+                
+                // 5. Доля онлайн продаж
+                $onlineShare = trim((string)($latestForm['online_sales_share'] ?? ''));
+                if ($onlineShare !== '' && $onlineShare !== '0') {
+                    $heroChips[] = [
+                        'label' => 'Онлайн',
+                        'value' => $onlineShare . ($onlineShare !== '100' ? '%' : '%'),
+                        'icon' => 'online'
+                    ];
+                }
+                
+                // 6. Доля к продаже (если еще не набрали 5 элементов)
+                if (count($heroChips) < 5) {
+                    $dealShare = trim((string)($latestForm['deal_share_range'] ?? ''));
+                    if ($dealShare !== '') {
+                        $heroChips[] = [
+                            'label' => 'Доля',
+                            'value' => $dealShare,
+                            'icon' => 'share'
+                        ];
+                    }
+                }
+                
+                // 7. Цель сделки (если еще не набрали 5 элементов)
+                if (count($heroChips) < 5 && $heroGoal !== '') {
+                    $heroChips[] = [
+                        'label' => 'Цель',
+                        'value' => $heroGoal,
+                        'icon' => 'goal'
+                    ];
+                }
+                
+                // Ограничиваем до 5 элементов максимум
+                $heroChips = array_slice($heroChips, 0, 5);
                 $heroStats = [];
                 if (is_array($dcfData ?? null)) {
-                    if (isset($dcfData['wacc'])) {
+                    // Получаем выручку и прибыль P2 из DCF данных
+                    $p2Revenue = null;
+                    $p2Profit = null;
+                    if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
+                        foreach ($dcfData['rows'] as $row) {
+                            if (!isset($row['label']) || !isset($row['values']) || !is_array($row['values'])) {
+                                continue;
+                            }
+                            // Ищем выручку - используем array_key_exists для проверки наличия ключа P2
+                            // Это важно, так как isset() вернет false, если значение равно 0
+                            if ($row['label'] === 'Выручка') {
+                                if (array_key_exists('P2', $row['values'])) {
+                                    $val = $row['values']['P2'];
+                                    // Берем значение, даже если оно равно 0 (это валидное значение)
+                                    // Проверяем только на null, так как 0 - это валидное число
+                                    if ($val !== null && $val !== '') {
+                                        $p2Revenue = (float)$val;
+                                    }
+                                }
+                            }
+                            // Ищем прибыль от продаж
+                            if ($row['label'] === 'Прибыль от продаж') {
+                                if (array_key_exists('P2', $row['values'])) {
+                                    $val = $row['values']['P2'];
+                                    // Берем значение, даже если оно равно 0 (это валидное значение)
+                                    if ($val !== null && $val !== '') {
+                                        $p2Profit = (float)$val;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Добавляем выручку P2 (второй период прогноза)
+                    // Показываем значение, даже если оно равно 0 (это валидное значение)
+                    if ($p2Revenue !== null) {
+                        // Значения в DCF уже хранятся в миллионах рублей
+                        // Например, если в таблице показано 4 751, это означает 4 751 млн рублей = 4.751 миллиарда рублей
+                        // Поэтому используем значение как есть, без деления
+                        $p2RevenueInMillions = $p2Revenue;
                         $heroStats[] = [
-                            'label' => 'WACC',
-                            'value' => number_format((float)$dcfData['wacc'] * 100, 1, '.', ' ') . '%',
-                            'caption' => 'стоимость капитала',
+                            'label' => 'Выручка 2026E',
+                            'value' => number_format($p2RevenueInMillions, 0, '.', ' ') . ' млн ₽',
+                            'caption' => 'прогноз на 2026',
                         ];
                     }
-                    if (isset($dcfData['perpetual_growth'])) {
+                    
+                    // Добавляем прибыль от продаж P2 в процентах (маржинальность = Прибыль / Выручка * 100%)
+                    if ($p2Profit !== null && $p2Revenue !== null && $p2Revenue != 0) {
+                        // Рассчитываем маржинальность в процентах
+                        $marginPercent = ($p2Profit / $p2Revenue) * 100;
+                        $heroStats[] = [
+                            'label' => 'Маржинальность',
+                            'value' => number_format($marginPercent, 1, '.', ' ') . '%',
+                            'caption' => '2026E (Прибыль/Выручка)',
+                        ];
+                    }
+                    
+                    // Заменяем Temp (темп роста на горизонте 5 лет) на рост текущего года (P2) по сравнению с предыдущим (P1)
+                    $p1Revenue = null;
+                    $p2RevenueForGrowth = null;
+                    if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
+                        foreach ($dcfData['rows'] as $row) {
+                            if (isset($row['label']) && $row['label'] === 'Выручка') {
+                                if (isset($row['values']['P1']) && $row['values']['P1'] !== null) {
+                                    $p1Revenue = (float)$row['values']['P1'];
+                                }
+                                if (isset($row['values']['P2']) && $row['values']['P2'] !== null) {
+                                    $p2RevenueForGrowth = (float)$row['values']['P2'];
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if ($p1Revenue !== null && $p2RevenueForGrowth !== null && $p1Revenue != 0) {
+                        $currentYearGrowth = (($p2RevenueForGrowth - $p1Revenue) / $p1Revenue) * 100;
                         $heroStats[] = [
                             'label' => 'Темп роста',
-                            'value' => number_format((float)$dcfData['perpetual_growth'] * 100, 1, '.', ' ') . '%',
-                            'caption' => 'горизонт 5 лет',
+                            'value' => number_format($currentYearGrowth, 1, '.', ' ') . '%',
+                            'caption' => '2026E к 2025E',
                         ];
                     }
+                    
+                    // Добавляем цену из EV (Enterprise Value)
+                    if (!empty($dcfData['ev_breakdown']['ev'])) {
+                        $evValue = (float)$dcfData['ev_breakdown']['ev'];
+                        $heroStats[] = [
+                            'label' => 'Цена',
+                            'value' => number_format($evValue, 0, '.', ' ') . ' млн ₽',
+                            'caption' => 'Enterprise Value',
+                        ];
+                    }
+                    
                     if (!empty($dcfData['ev_breakdown']['equity'])) {
                         $heroEquityValue = (float)$dcfData['ev_breakdown']['equity'];
                         $heroStats[] = [
@@ -3554,7 +3866,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         'caption' => 'по данным анкеты',
                     ];
                 }
-                $heroStats = array_slice(array_filter($heroStats, fn($item) => !empty($item['value'])), 0, 3);
+                // Фильтруем только те элементы, у которых значение действительно пустое (null, '', false)
+                // Но оставляем значения "0", "0.0" и отрицательные, так как они валидны
+                // Увеличиваем лимит до 4, чтобы поместился элемент "Цена"
+                $heroStats = array_slice(array_filter($heroStats, function($item) {
+                    return isset($item['value']) && $item['value'] !== '' && $item['value'] !== null;
+                }), 0, 4);
                 $teaserStatusText = $savedTeaserTimestamp
                     ? 'Тизер обновлён: ' . date('d.m.Y H:i', strtotime($savedTeaserTimestamp))
                     : 'Нажмите «Создать тизер», чтобы подготовить актуальную версию.';
@@ -3566,9 +3883,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <?php if (!empty($heroChips)): ?>
                         <div class="teaser-hero__tags">
                             <?php foreach ($heroChips as $chip): ?>
-                                <span class="teaser-chip">
-                                    <span><?php echo htmlspecialchars($chip['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-                                    <strong><?php echo htmlspecialchars($chip['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                                <span class="teaser-chip" data-icon="<?php echo htmlspecialchars($chip['icon'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <span class="teaser-chip__icon">
+                                        <?php
+                                        $iconType = $chip['icon'] ?? 'default';
+                                        echo getTeaserChipIcon($iconType);
+                                        ?>
+                                    </span>
+                                    <span class="teaser-chip__content">
+                                        <span class="teaser-chip__label"><?php echo htmlspecialchars($chip['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                        <strong class="teaser-chip__value"><?php echo htmlspecialchars($chip['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                                    </span>
                                 </span>
                             <?php endforeach; ?>
                         </div>

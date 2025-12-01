@@ -26,20 +26,22 @@
 require_once 'config.php';
 require_once __DIR__ . '/investor_utils.php';
 
-header('Content-Type: application/json; charset=utf-8');
+// Если мы в режиме загрузки только функций (для dashboard.php), не выполняем основной код
+if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
+    header('Content-Type: application/json; charset=utf-8');
 
-if (!isLoggedIn()) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Необходима авторизация.']);
-    exit;
-}
+    if (!isLoggedIn()) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Необходима авторизация.']);
+        exit;
+    }
 
-$user = getCurrentUser();
-if (!$user) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Сессия недействительна.']);
-    exit;
-}
+    $user = getCurrentUser();
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Сессия недействительна.']);
+        exit;
+    }
 
 $requestPayload = json_decode(file_get_contents('php://input') ?: '[]', true);
 if (!is_array($requestPayload)) {
@@ -108,10 +110,15 @@ try {
     $teaserData = normalizeTeaserData($teaserData, $formPayload);
     $teaserData = ensureOverviewWithAi($teaserData, $formPayload, $apiKey);
     $teaserData = ensureProductsLocalized($teaserData, $formPayload, $apiKey);
+    
+    // Генерируем краткое описание для hero блока из overview summary
+    $heroDescription = buildHeroDescription($teaserData, $formPayload);
+    
     $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив', $formPayload, $dcfData);
 
     $snapshot = persistTeaserSnapshot($form, $formPayload, [
         'html' => $html,
+        'hero_description' => $heroDescription,
         'generated_at' => date('c'),
         'model' => TOGETHER_MODEL,
     ]);
@@ -126,6 +133,7 @@ try {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Не удалось создать тизер. Попробуйте позже.']);
 }
+} // Конец проверки TEASER_FUNCTIONS_ONLY
 
 /**
  * Собирает данные анкеты для передачи в AI.
@@ -2024,6 +2032,190 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
         4,
         2
     );
+}
+
+/**
+ * Генерирует краткое описание для hero блока тизера из overview summary
+ * 
+ * Извлекает первое предложение или первые 2-3 предложения из overview summary
+ * и форматирует их для отображения в верхнем блоке тизера
+ * 
+ * @param array $teaserData Данные тизера с overview summary
+ * @param array $payload Данные анкеты
+ * @return string Краткое описание для hero блока
+ */
+function buildHeroDescription(array $teaserData, array $payload): string
+{
+    $overviewSummary = $teaserData['overview']['summary'] ?? '';
+    
+    if (empty($overviewSummary)) {
+        // Если summary нет, создаем краткое описание из данных анкеты
+        $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
+        $industry = trim((string)($payload['products_services'] ?? ''));
+        $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+        return "{$assetName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+    }
+    
+    // Убираем HTML теги и форматирование
+    $plain = strip_tags($overviewSummary);
+    $plain = html_entity_decode($plain, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $plain = preg_replace('/\s+/', ' ', $plain);
+    $plain = trim($plain);
+    
+    // Извлекаем первое предложение или первые 2-3 предложения (до 220 символов)
+    $sentences = preg_split('/([.!?]+)/u', $plain, -1, PREG_SPLIT_DELIM_CAPTURE);
+    $result = '';
+    $sentenceCount = 0;
+    $maxLength = 220;
+    
+    for ($i = 0; $i < count($sentences) - 1; $i += 2) {
+        $sentence = trim($sentences[$i] . ($sentences[$i + 1] ?? ''));
+        if (empty($sentence)) {
+            continue;
+        }
+        
+        // Добавляем предложение, если не превышаем лимит
+        $candidate = $result === '' ? $sentence : $result . ' ' . $sentence;
+        if (mb_strlen($candidate) <= $maxLength) {
+            $result = $candidate;
+            $sentenceCount++;
+            // Останавливаемся после 2-3 предложений
+            if ($sentenceCount >= 2) {
+                break;
+            }
+        } else {
+            // Если добавление превысит лимит, останавливаемся
+            break;
+        }
+    }
+    
+    // Если не получилось извлечь предложения, берем первые 220 символов
+    if (empty($result)) {
+        $result = mb_substr($plain, 0, $maxLength);
+        // Обрезаем по последнему пробелу, чтобы не обрывать слово
+        $lastSpace = mb_strrpos($result, ' ');
+        if ($lastSpace !== false && $lastSpace > 150) {
+            $result = mb_substr($result, 0, $lastSpace);
+        }
+        $result .= '…';
+    }
+    
+    // Убираем фразу "M&A платформа"
+    $result = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $result);
+    $result = trim(preg_replace('/\s+/', ' ', $result));
+    
+    return $result;
+}
+
+/**
+ * Генерирует краткое описание для hero блока через ИИ на основе данных анкеты
+ * 
+ * Эта функция вызывается сразу после расчета DCF, до генерации полного тизера
+ * 
+ * @param array $form Данные формы из БД
+ * @param string $apiKey API ключ для Together.ai
+ * @return string|null Сгенерированное описание или null при ошибке
+ */
+function generateHeroDescription(array $form, string $apiKey): ?string
+{
+    try {
+        $payload = buildTeaserPayload($form);
+        
+        // Создаем промпт для генерации краткого описания
+        $assetName = $payload['asset_name'] ?? 'Компания';
+        $facts = [
+            'Название' => $assetName,
+            'Отрасль' => $payload['products_services'] ?? '',
+            'Регионы' => $payload['presence_regions'] ?? '',
+            'Бренды' => $payload['company_brands'] ?? '',
+            'Клиенты' => $payload['main_clients'] ?? '',
+            'Персонал' => $payload['personnel_count'] ?? '',
+            'Цель сделки' => $payload['deal_goal'] ?? '',
+            'Описание' => $payload['company_description'] ?? '',
+        ];
+        
+        $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
+        $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        
+        $prompt = <<<PROMPT
+Ты инвестиционный банкир. Напиши краткое описание компании "{$assetName}" для инвестора строго на русском языке.
+
+Требования:
+- Максимум 2-3 предложения (до 220 символов)
+- Деловой и живой тон без канцелярита
+- Укажи: кто компания, что делает, ключевые преимущества
+- Используй только приведённые факты, не придумывай цифры
+
+Факты:
+{$factsJson}
+
+Верни только текст описания, без дополнительных комментариев.
+PROMPT;
+        
+        $rawResponse = callTogetherCompletions($prompt, $apiKey);
+        
+        // Очищаем ответ от артефактов ИИ
+        $description = constrainToRussianNarrative(sanitizeAiArtifacts($rawResponse));
+        $description = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $description);
+        $description = trim(preg_replace('/\s+/', ' ', $description));
+        
+        // Ограничиваем длину до 220 символов
+        if (mb_strlen($description) > 220) {
+            $description = mb_substr($description, 0, 220);
+            $lastSpace = mb_strrpos($description, ' ');
+            if ($lastSpace !== false && $lastSpace > 150) {
+                $description = mb_substr($description, 0, $lastSpace);
+            }
+            $description .= '…';
+        }
+        
+        // Сохраняем в snapshot
+        if (!empty($description)) {
+            saveHeroDescriptionToSnapshot($form, $description);
+        }
+        
+        return $description ?: null;
+    } catch (Throwable $e) {
+        error_log('Hero description generation failed: ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Сохраняет hero_description в snapshot формы
+ * 
+ * @param array $form Данные формы из БД
+ * @param string $description Сгенерированное описание
+ */
+function saveHeroDescriptionToSnapshot(array $form, string $description): void
+{
+    try {
+        $pdo = getDBConnection();
+        
+        // Получаем текущий data_json
+        $currentJson = $form['data_json'] ?? '{}';
+        $data = json_decode($currentJson, true);
+        if (!is_array($data)) {
+            $data = [];
+        }
+        
+        // Обновляем или создаем teaser_snapshot
+        if (!isset($data['teaser_snapshot']) || !is_array($data['teaser_snapshot'])) {
+            $data['teaser_snapshot'] = [];
+        }
+        
+        $data['teaser_snapshot']['hero_description'] = $description;
+        $data['teaser_snapshot']['hero_description_generated_at'] = date('c');
+        
+        // Сохраняем обратно в БД
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json !== false) {
+            $stmt = $pdo->prepare("UPDATE seller_forms SET data_json = ? WHERE id = ?");
+            $stmt->execute([$json, $form['id']]);
+        }
+    } catch (PDOException $e) {
+        error_log('Failed to save hero description: ' . $e->getMessage());
+    }
 }
 
 function enrichSummaryWithAdvantages(string $summary, array $payload): string
