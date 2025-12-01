@@ -388,7 +388,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
     if (!empty($data['overview'])) {
         $overview = $data['overview'];
         $blocks[] = renderCard('Обзор возможности', [
-            'subtitle' => htmlspecialchars($overview['title'] ?? $assetName, ENT_QUOTES, 'UTF-8'),
+            // Убираем subtitle, чтобы не показывать "Резюме" или другие заголовки
             'text' => nl2br(htmlspecialchars($overview['summary'] ?? '', ENT_QUOTES, 'UTF-8')),
             'list' => $overview['key_metrics'] ?? [],
         ], 'overview');
@@ -437,12 +437,56 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
 
     if (!empty($data['financials'])) {
         $financials = $data['financials'];
+        
+        // Используем данные из DCF модели для текущего финансового года (P1 - 2025)
+        $revenue = null;
+        $profit = null;
+        $margin = null;
+        $capex = null;
+        $year = '2025';
+        
+        if ($dcfData && !empty($dcfData['rows']) && is_array($dcfData['rows'])) {
+            foreach ($dcfData['rows'] as $row) {
+                if (!isset($row['label']) || !isset($row['values']) || !is_array($row['values'])) {
+                    continue;
+                }
+                
+                // Получаем данные за P1 (2025 год)
+                if ($row['label'] === 'Выручка' && isset($row['values']['P1']) && $row['values']['P1'] !== null && $row['values']['P1'] !== '') {
+                    $revenue = (float)$row['values']['P1'];
+                }
+                if ($row['label'] === 'Прибыль от продаж' && isset($row['values']['P1']) && $row['values']['P1'] !== null && $row['values']['P1'] !== '') {
+                    $profit = (float)$row['values']['P1'];
+                }
+                if ($row['label'] === 'CAPEX' && isset($row['values']['P1']) && $row['values']['P1'] !== null && $row['values']['P1'] !== '') {
+                    $capex = (float)$row['values']['P1'];
+                }
+            }
+            
+            // Рассчитываем маржинальность как (прибыль / выручка) * 100%
+            if ($revenue !== null && $profit !== null && $revenue != 0) {
+                $margin = ($profit / $revenue) * 100;
+            }
+        }
+        
+        // Форматируем значения
+        $revenueText = $revenue !== null ? number_format($revenue, 0, '.', ' ') . ' млн ₽' : ($financials['revenue'] ?? '');
+        $profitText = $profit !== null ? number_format($profit, 0, '.', ' ') . ' млн ₽' : ($financials['ebitda'] ?? '');
+        $marginText = $margin !== null ? number_format($margin, 1, '.', ' ') . '%' : ($financials['margins'] ?? '');
+        $capexText = $capex !== null ? number_format($capex, 0, '.', ' ') . ' млн ₽' : ($financials['capex'] ?? '');
+        
+        // Формируем ссылку на источник данных
+        $notesText = 'Данные за ' . $year . ' год из DCF модели.';
+        if ($revenue === null && $profit === null) {
+            $notesText = $financials['notes'] ?? 'Финансовые показатели подтверждены данными анкеты.';
+        }
+        
         $bullets = array_filter([
-            formatMetric('Выручка', $financials['revenue'] ?? ''),
-                formatMetric('Прибыль от продаж', $financials['ebitda'] ?? ''),
-            formatMetric('Маржинальность', $financials['margins'] ?? ''),
-            formatMetric('CAPEX', $financials['capex'] ?? ''),
-            $financials['notes'] ?? '',
+            formatMetric('Выручка', $revenueText),
+            formatMetric('Прибыль от продаж', $profitText),
+            formatMetric('Маржинальность', $marginText),
+            formatMetric('CAPEX', $capexText),
+            $notesText,
         ]);
         $blocks[] = renderCard('Финансовый профиль', [
             'list' => $bullets,
