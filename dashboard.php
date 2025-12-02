@@ -4063,7 +4063,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 ?>
                 
                 <?php if ($hasSubmittedTermSheet): ?>
-                    <div class="term-sheet-controls" style="margin-top: 24px; margin-bottom: 24px;">
+                    <div class="term-sheet-controls" style="margin-top: 24px; margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                         <button
                             type="button"
                             class="btn btn-primary"
@@ -4072,7 +4072,35 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         >
                             🤖 Создать Term Sheet через ИИ
                         </button>
-                        <div class="term-sheet-progress" id="term-sheet-progress" aria-hidden="true" style="display: none; margin-top: 16px;">
+                        <?php
+                        // Проверяем, есть ли уже сгенерированный Term Sheet для кнопки скачивания
+                        $stmt = $pdo->prepare("
+                            SELECT data_json 
+                            FROM term_sheet_forms 
+                            WHERE user_id = ? 
+                              AND status IN ('submitted','review','approved')
+                              AND data_json IS NOT NULL
+                              AND (
+                                  JSON_EXTRACT(data_json, '$.generated_document.content') IS NOT NULL
+                                  OR JSON_EXTRACT(data_json, '$.generated_document.html') IS NOT NULL
+                              )
+                            ORDER BY submitted_at DESC, updated_at DESC 
+                            LIMIT 1
+                        ");
+                        $stmt->execute([$user['id']]);
+                        $hasGeneratedTermSheet = $stmt->fetch();
+                        ?>
+                        <?php if ($hasGeneratedTermSheet): ?>
+                            <a
+                                href="term_sheet_word.php"
+                                class="btn btn-secondary"
+                                style="padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block;"
+                                download
+                            >
+                                📄 Скачать Word
+                            </a>
+                        <?php endif; ?>
+                        <div class="term-sheet-progress" id="term-sheet-progress" aria-hidden="true" style="display: none; margin-top: 16px; width: 100%;">
                             <div class="term-sheet-progress__bar" id="term-sheet-progress-bar" style="height: 4px; background: #e9ecef; border-radius: 2px; overflow: hidden;">
                                 <div style="height: 100%; background: linear-gradient(90deg, #10B981 0%, #059669 100%); width: 0%; transition: width 0.3s ease;"></div>
                             </div>
@@ -4866,6 +4894,24 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     termSheetResult.innerHTML = payload.html;
                     termSheetBtn.textContent = 'Обновить Term Sheet';
                     completeTermSheetProgress(elements, true);
+                    
+                    // Показываем кнопку скачивания Word после успешной генерации
+                    const downloadWordBtn = document.querySelector('a[href="term_sheet_word.php"]');
+                    if (downloadWordBtn) {
+                        downloadWordBtn.style.display = 'inline-block';
+                    } else {
+                        // Создаем кнопку, если её нет
+                        const controls = document.querySelector('.term-sheet-controls');
+                        if (controls) {
+                            const newBtn = document.createElement('a');
+                            newBtn.href = 'term_sheet_word.php';
+                            newBtn.className = 'btn btn-secondary';
+                            newBtn.style.cssText = 'padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block;';
+                            newBtn.textContent = '📄 Скачать Word';
+                            newBtn.download = true;
+                            termSheetBtn.parentNode.insertBefore(newBtn, termSheetBtn.nextSibling);
+                        }
+                    }
                 } catch (error) {
                     console.error('Term Sheet generation failed', error);
                     if (!error.message.includes('Перейти к редактированию')) {
