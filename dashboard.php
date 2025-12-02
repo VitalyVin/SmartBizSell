@@ -51,6 +51,54 @@ $activeForms = array_values(array_filter($forms, fn($f) => $f['status'] !== 'dra
 $draftForms = array_values(array_filter($forms, fn($f) => $f['status'] === 'draft'));
 
 /**
+ * Получение всех Term Sheet текущего пользователя из базы данных
+ */
+try {
+    // Проверяем существование таблицы перед запросом
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS term_sheet_forms (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            buyer_name VARCHAR(500) DEFAULT NULL,
+            buyer_inn VARCHAR(20) DEFAULT NULL,
+            seller_name VARCHAR(500) DEFAULT NULL,
+            seller_inn VARCHAR(20) DEFAULT NULL,
+            asset_name VARCHAR(500) DEFAULT NULL,
+            asset_inn VARCHAR(20) DEFAULT NULL,
+            deal_type VARCHAR(255) DEFAULT NULL,
+            deal_share_percent DECIMAL(5,2) DEFAULT NULL,
+            investment_amount DECIMAL(15,2) DEFAULT NULL,
+            agreement_duration INT DEFAULT 3,
+            exclusivity ENUM('yes', 'no') DEFAULT 'no',
+            applicable_law VARCHAR(255) DEFAULT 'российское право',
+            corporate_governance_ceo VARCHAR(255) DEFAULT NULL,
+            corporate_governance_cfo VARCHAR(255) DEFAULT NULL,
+            status ENUM('draft', 'submitted', 'review', 'approved', 'rejected') DEFAULT 'draft',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            submitted_at TIMESTAMP NULL DEFAULT NULL,
+            data_json JSON DEFAULT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    
+    $stmt = $pdo->prepare("
+        SELECT id, buyer_name, seller_name, asset_name, status, created_at, updated_at, submitted_at 
+        FROM term_sheet_forms 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC
+    ");
+    $stmt->execute([$user['id']]);
+    $termSheets = $stmt->fetchAll();
+} catch (PDOException $e) {
+    error_log("Error fetching term sheets: " . $e->getMessage());
+    $termSheets = [];
+}
+
+/**
  * Маппинг статусов анкет для отображения
  * Каждый статус имеет текстовое название и цвет для визуального отображения
  */
@@ -3333,6 +3381,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
 
         <div class="dashboard-actions">
             <a href="seller_form.php" class="btn btn-primary">+ Создать новую анкету</a>
+            <a href="#term-sheet-section" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                📄 Создать Term Sheet
+            </a>
             <a href="profile.php" class="btn btn-secondary">Настройки профиля</a>
         </div>
 
@@ -3417,12 +3468,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         </div>
         <?php endif; ?>
 
-        <!-- Навигация между блоками - показывается только после отправки анкеты -->
+        <!-- Навигация между блоками - показывается если есть отправленная анкета или раздел Term Sheet -->
         <?php 
-        // Навигация показывается только если есть отправленная анкета
+        // Навигация показывается если есть отправленная анкета или раздел Term Sheet
         $hasSubmittedForm = $latestForm && in_array($latestForm['status'] ?? '', ['submitted', 'review', 'approved'], true);
+        // Term Sheet всегда доступен, поэтому навигация показывается всегда
+        $showNavigation = true;
         ?>
-        <?php if ($hasSubmittedForm): ?>
+        <?php if ($showNavigation): ?>
         <nav class="dashboard-nav" id="dashboard-nav" aria-label="Навигация по разделам">
             <ul class="dashboard-nav__list" role="list">
                 <?php if ($dcfData): ?>
@@ -3439,6 +3492,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     </a>
                 </li>
                 <?php endif; ?>
+                <?php if ($hasSubmittedForm): ?>
                 <li class="dashboard-nav__item" role="listitem">
                     <a href="#teaser-section" class="dashboard-nav__link" data-section="teaser-section" aria-label="Перейти к AI тизеру">
                         <span class="dashboard-nav__icon" aria-hidden="true">
@@ -3462,6 +3516,21 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             </svg>
                         </span>
                         <span class="dashboard-nav__text">Инвесторы</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+                <li class="dashboard-nav__item" role="listitem">
+                    <a href="#term-sheet-section" class="dashboard-nav__link" data-section="term-sheet-section" aria-label="Перейти к Term Sheet">
+                        <span class="dashboard-nav__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M10 9H9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
+                        <span class="dashboard-nav__text">Term Sheet</span>
                     </a>
                 </li>
             </ul>
@@ -3974,12 +4043,174 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <?php endif; ?>
                 </div>
             </div>
+            
+            <!-- Раздел Term Sheet -->
+            <div class="teaser-section" id="term-sheet-section" data-print-scope="term-sheet">
+                <div class="teaser-header">
+                    <h2>Term Sheet</h2>
+                    <p>Создайте инвестиционный меморандум с ключевыми условиями сделки для согласования с инвестором.</p>
+                </div>
+                
+                <?php if (empty($termSheets)): ?>
+                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.03) 100%); border: 2px solid rgba(16, 185, 129, 0.15); border-radius: 20px; padding: 32px; margin-top: 24px;">
+                        <div style="max-width: 800px; margin: 0 auto;">
+                            <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary);">Что такое Term Sheet?</h3>
+                            <div style="color: var(--text-secondary); line-height: 1.8; font-size: 16px; margin-bottom: 24px;">
+                                <p style="margin-bottom: 16px;">
+                                    <strong>Term Sheet</strong> (лист условий сделки) — это документ, который содержит основные условия инвестиционной сделки между продавцом и инвестором. Он служит основой для дальнейшей проработки деталей и подготовки окончательных юридических документов.
+                                </p>
+                                <p style="margin-bottom: 16px;">
+                                    Term Sheet помогает сторонам:
+                                </p>
+                                <ul style="margin-left: 24px; margin-bottom: 16px;">
+                                    <li>Закрепить ключевые параметры сделки (оценка, структура, условия)</li>
+                                    <li>Согласовать основные условия до детальной проработки</li>
+                                    <li>Ускорить процесс переговоров и принятия решений</li>
+                                    <li>Создать прозрачную основу для дальнейшей работы</li>
+                                </ul>
+                                <p>
+                                    После заполнения анкеты мы подготовим профессиональный Term Sheet на основе ваших данных и лучших практик M&A сделок.
+                                </p>
+                            </div>
+                            
+                            <div style="text-align: center; margin-top: 32px;">
+                                <a href="term_sheet_form.php" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); padding: 14px 32px; font-size: 16px; font-weight: 600;">
+                                    <span>Создать Term Sheet</span>
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="margin-left: 8px; vertical-align: middle;">
+                                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="forms-table" style="margin-top: 24px;">
+                        <div class="table-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Мои Term Sheet</span>
+                            <a href="term_sheet_form.php" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); padding: 10px 20px; font-size: 14px; font-weight: 600;">
+                                + Создать новый
+                            </a>
+                        </div>
+                        
+                        <div style="padding: 0;">
+                            <?php foreach ($termSheets as $ts): ?>
+                                <div class="table-row">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars($ts['asset_name'] ?: 'Без названия актива', ENT_QUOTES, 'UTF-8'); ?></strong>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                            <?php if ($ts['buyer_name']): ?>
+                                                Покупатель: <?php echo htmlspecialchars($ts['buyer_name'], ENT_QUOTES, 'UTF-8'); ?><br>
+                                            <?php endif; ?>
+                                            <?php if ($ts['seller_name']): ?>
+                                                Продавец: <?php echo htmlspecialchars($ts['seller_name'], ENT_QUOTES, 'UTF-8'); ?><br>
+                                            <?php endif; ?>
+                                            Создан: <?php echo date('d.m.Y H:i', strtotime($ts['created_at'])); ?>
+                                            <?php if ($ts['updated_at'] && $ts['updated_at'] !== $ts['created_at']): ?>
+                                                | Обновлен: <?php echo date('d.m.Y H:i', strtotime($ts['updated_at'])); ?>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <span style="padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>20; color: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>;">
+                                            <?php echo $statusLabels[$ts['status']] ?? 'Неизвестно'; ?>
+                                        </span>
+                                        <a href="term_sheet_form.php?form_id=<?php echo $ts['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px;">
+                                            <?php echo $ts['status'] === 'draft' ? 'Редактировать' : 'Просмотреть'; ?>
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
         <?php else: ?>
             <div class="teaser-section">
                 <div class="teaser-header">
                     <h2>AI-тизер компании</h2>
                     <p>Отправьте анкету, чтобы автоматически сформировать тизер.</p>
                 </div>
+            </div>
+            
+            <!-- Раздел Term Sheet (для пользователей без отправленной анкеты) -->
+            <div class="teaser-section" id="term-sheet-section" data-print-scope="term-sheet">
+                <div class="teaser-header">
+                    <h2>Term Sheet</h2>
+                    <p>Создайте инвестиционный меморандум с ключевыми условиями сделки для согласования с инвестором.</p>
+                </div>
+                
+                <?php if (empty($termSheets)): ?>
+                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.03) 100%); border: 2px solid rgba(16, 185, 129, 0.15); border-radius: 20px; padding: 32px; margin-top: 24px;">
+                        <div style="max-width: 800px; margin: 0 auto;">
+                            <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary);">Что такое Term Sheet?</h3>
+                            <div style="color: var(--text-secondary); line-height: 1.8; font-size: 16px; margin-bottom: 24px;">
+                                <p style="margin-bottom: 16px;">
+                                    <strong>Term Sheet</strong> (лист условий сделки) — это документ, который содержит основные условия инвестиционной сделки между продавцом и инвестором. Он служит основой для дальнейшей проработки деталей и подготовки окончательных юридических документов.
+                                </p>
+                                <p style="margin-bottom: 16px;">
+                                    Term Sheet помогает сторонам:
+                                </p>
+                                <ul style="margin-left: 24px; margin-bottom: 16px;">
+                                    <li>Закрепить ключевые параметры сделки (оценка, структура, условия)</li>
+                                    <li>Согласовать основные условия до детальной проработки</li>
+                                    <li>Ускорить процесс переговоров и принятия решений</li>
+                                    <li>Создать прозрачную основу для дальнейшей работы</li>
+                                </ul>
+                                <p>
+                                    После заполнения анкеты мы подготовим профессиональный Term Sheet на основе ваших данных и лучших практик M&A сделок.
+                                </p>
+                            </div>
+                            
+                            <div style="text-align: center; margin-top: 32px;">
+                                <a href="term_sheet_form.php" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); padding: 14px 32px; font-size: 16px; font-weight: 600;">
+                                    <span>Создать Term Sheet</span>
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="margin-left: 8px; vertical-align: middle;">
+                                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="forms-table" style="margin-top: 24px;">
+                        <div class="table-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Мои Term Sheet</span>
+                            <a href="term_sheet_form.php" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); padding: 10px 20px; font-size: 14px; font-weight: 600;">
+                                + Создать новый
+                            </a>
+                        </div>
+                        
+                        <div style="padding: 0;">
+                            <?php foreach ($termSheets as $ts): ?>
+                                <div class="table-row">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars($ts['asset_name'] ?: 'Без названия актива', ENT_QUOTES, 'UTF-8'); ?></strong>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                            <?php if ($ts['buyer_name']): ?>
+                                                Покупатель: <?php echo htmlspecialchars($ts['buyer_name'], ENT_QUOTES, 'UTF-8'); ?><br>
+                                            <?php endif; ?>
+                                            <?php if ($ts['seller_name']): ?>
+                                                Продавец: <?php echo htmlspecialchars($ts['seller_name'], ENT_QUOTES, 'UTF-8'); ?><br>
+                                            <?php endif; ?>
+                                            Создан: <?php echo date('d.m.Y H:i', strtotime($ts['created_at'])); ?>
+                                            <?php if ($ts['updated_at'] && $ts['updated_at'] !== $ts['created_at']): ?>
+                                                | Обновлен: <?php echo date('d.m.Y H:i', strtotime($ts['updated_at'])); ?>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <span style="padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>20; color: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>;">
+                                            <?php echo $statusLabels[$ts['status']] ?? 'Неизвестно'; ?>
+                                        </span>
+                                        <a href="term_sheet_form.php?form_id=<?php echo $ts['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px;">
+                                            <?php echo $ts['status'] === 'draft' ? 'Редактировать' : 'Просмотреть'; ?>
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
@@ -4036,6 +4267,35 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             top: sectionTop,
                             behavior: 'smooth'
                         });
+                    }
+                });
+            });
+            
+            // Обработка кликов по кнопкам в dashboard-actions с якорями (для Term Sheet)
+            document.querySelectorAll('.dashboard-actions a[href^="#"]').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const href = this.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const targetId = href.substring(1);
+                        const target = document.getElementById(targetId);
+                        if (target) {
+                            const navHeight = nav ? nav.offsetHeight : 0;
+                            const offset = navHeight + 20;
+                            const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - offset;
+                            
+                            window.scrollTo({
+                                top: targetPosition,
+                                behavior: 'smooth'
+                            });
+                            
+                            // Обновляем активный пункт навигации, если он есть
+                            const navLink = nav.querySelector(`[data-section="${targetId}"]`);
+                            if (navLink) {
+                                navLinks.forEach(l => l.classList.remove('active'));
+                                navLink.classList.add('active');
+                            }
+                        }
                     }
                 });
             });
