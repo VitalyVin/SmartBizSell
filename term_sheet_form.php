@@ -147,6 +147,7 @@ function termSheetFormsColumnExists(PDO $pdo, string $column): bool
 
 /**
  * Восстанавливает данные формы из базы данных в $_POST
+ * Исключает generated_document, так как это служебная информация
  */
 function hydrateFormFromDb(array $form): void
 {
@@ -154,12 +155,16 @@ function hydrateFormFromDb(array $form): void
     if (!empty($form['data_json'])) {
         $decodedData = json_decode($form['data_json'], true);
         if (is_array($decodedData)) {
-            $_POST = $decodedData;
-            return;
+            // Восстанавливаем все данные, кроме generated_document
+            foreach ($decodedData as $key => $value) {
+                if ($key !== 'generated_document') {
+                    $_POST[$key] = $value;
+                }
+            }
         }
     }
 
-    // Иначе используем отдельные поля из базы данных
+    // Дополняем данными из отдельных полей таблицы (если их нет в data_json)
     $mapping = [
         'buyer_name' => 'buyer_name',
         'buyer_inn' => 'buyer_inn',
@@ -173,20 +178,15 @@ function hydrateFormFromDb(array $form): void
         'agreement_duration' => 'agreement_duration',
         'exclusivity' => 'exclusivity',
         'applicable_law' => 'applicable_law',
+        'corporate_governance_ceo' => 'corporate_governance_ceo',
+        'corporate_governance_cfo' => 'corporate_governance_cfo',
     ];
 
     foreach ($mapping as $postKey => $column) {
-        $_POST[$postKey] = $form[$column] ?? '';
-    }
-
-    // Восстановление JSON полей
-    if (!empty($form['data_json'])) {
-        $data = json_decode($form['data_json'], true);
-        if (is_array($data)) {
-            foreach ($data as $key => $value) {
-                if (!isset($_POST[$key])) {
-                    $_POST[$key] = $value;
-                }
+        // Используем значение из БД только если его нет в $_POST
+        if (!isset($_POST[$postKey]) || empty($_POST[$postKey])) {
+            if (!empty($form[$column])) {
+                $_POST[$postKey] = $form[$column];
             }
         }
     }
@@ -307,6 +307,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $firstSeller = !empty($_POST['sellers'][0]['name']) ? $_POST['sellers'][0]['name'] : '';
                 $firstAsset = !empty($_POST['assets'][0]['name']) ? $_POST['assets'][0]['name'] : '';
                 
+                // Сохраняем существующий generated_document, если он есть
+                if ($formId && $existingForm && !empty($existingForm['data_json'])) {
+                    $existingData = json_decode($existingForm['data_json'], true);
+                    if (is_array($existingData) && !empty($existingData['generated_document'])) {
+                        $draftPayload['generated_document'] = $existingData['generated_document'];
+                        $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                    }
+                }
+                
                 if ($formId && $existingForm) {
                     $stmt = $pdo->prepare("UPDATE term_sheet_forms SET buyer_name = ?, seller_name = ?, asset_name = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
                     $stmt->execute([$firstBuyer, $firstSeller, $firstAsset, $dataJson, $formId, $_SESSION['user_id']]);
@@ -336,6 +345,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $applicableLaw = sanitizeInput($_POST['applicable_law'] ?? 'российское право');
                 $corporateGovernanceCeo = sanitizeInput($_POST['corporate_governance_ceo'] ?? '');
                 $corporateGovernanceCfo = sanitizeInput($_POST['corporate_governance_cfo'] ?? '');
+
+                // Сохраняем существующий generated_document, если он есть
+                if ($formId && $existingForm && !empty($existingForm['data_json'])) {
+                    $existingData = json_decode($existingForm['data_json'], true);
+                    if (is_array($existingData) && !empty($existingData['generated_document'])) {
+                        $draftPayload['generated_document'] = $existingData['generated_document'];
+                        $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                    }
+                }
 
                 if ($formId && $existingForm) {
                     $stmt = $pdo->prepare("UPDATE term_sheet_forms SET

@@ -205,6 +205,21 @@ require_once 'config.php';
                         Следуем лучшим практикам комплаенса и используем корпоративный уровень защиты, чтобы вся информация о сделке оставалась конфиденциальной.
                     </p>
                 </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M14 4H8C7.46957 4 6.96086 4.21071 6.58579 4.58579C6.21071 4.96086 6 5.46957 6 6V26C6 26.5304 6.21071 27.0391 6.58579 27.4142C6.96086 27.7893 7.46957 28 8 28H24C24.5304 28 25.0391 27.7893 25.4142 27.4142C25.7893 27.0391 26 26.5304 26 26V12L18 4H14Z" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M18 4V12H26" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M20 18H12" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M20 22H12" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 10H12" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Создание Term Sheet</h3>
+                    <p class="feature-description">
+                        Автоматически формируем инвестиционный меморандум с ключевыми условиями сделки. Term Sheet помогает закрепить параметры сделки и ускорить переговоры с инвесторами.
+                    </p>
+                </div>
             </div>
         </div>
     </section>
@@ -240,7 +255,7 @@ require_once 'config.php';
                     <div class="step-content">
                         <h3 class="step-title">Готовим материалы</h3>
                         <p class="step-description">
-                            Создаём тизер и финансовую модель по стандартам инвестбанкинга: ИИ ускоряет расчёты, а мы обеспечиваем точность, аргументацию и прозрачность цифр.
+                            Создаём тизер, финансовую модель и Term Sheet по стандартам инвестбанкинга: ИИ ускоряет расчёты, а мы обеспечиваем точность, аргументацию и прозрачность цифр. Term Sheet помогает закрепить ключевые условия сделки и ускорить согласование с инвесторами.
                         </p>
                     </div>
                 </div>

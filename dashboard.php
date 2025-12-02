@@ -4051,6 +4051,58 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <p>Создайте инвестиционный меморандум с ключевыми условиями сделки для согласования с инвестором.</p>
                 </div>
                 
+                <?php 
+                // Проверяем, есть ли отправленная анкета Term Sheet для генерации через ИИ
+                $hasSubmittedTermSheet = false;
+                foreach ($termSheets as $ts) {
+                    if (in_array($ts['status'] ?? '', ['submitted', 'review', 'approved'], true)) {
+                        $hasSubmittedTermSheet = true;
+                        break;
+                    }
+                }
+                ?>
+                
+                <?php if ($hasSubmittedTermSheet): ?>
+                    <div class="term-sheet-controls" style="margin-top: 24px; margin-bottom: 24px;">
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            id="generate-term-sheet-btn"
+                            style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); padding: 14px 32px; font-size: 16px; font-weight: 600;"
+                        >
+                            🤖 Создать Term Sheet через ИИ
+                        </button>
+                        <div class="term-sheet-progress" id="term-sheet-progress" aria-hidden="true" style="display: none; margin-top: 16px;">
+                            <div class="term-sheet-progress__bar" id="term-sheet-progress-bar" style="height: 4px; background: #e9ecef; border-radius: 2px; overflow: hidden;">
+                                <div style="height: 100%; background: linear-gradient(90deg, #10B981 0%, #059669 100%); width: 0%; transition: width 0.3s ease;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="term-sheet-result" id="term-sheet-result">
+                        <?php
+                        // Проверяем, есть ли уже сгенерированный Term Sheet через ИИ
+                        $stmt = $pdo->prepare("
+                            SELECT data_json 
+                            FROM term_sheet_forms 
+                            WHERE user_id = ? 
+                              AND status IN ('submitted','review','approved')
+                              AND data_json IS NOT NULL
+                              AND JSON_EXTRACT(data_json, '$.generated_document.html') IS NOT NULL
+                            ORDER BY submitted_at DESC, updated_at DESC 
+                            LIMIT 1
+                        ");
+                        $stmt->execute([$user['id']]);
+                        $aiTermSheet = $stmt->fetch();
+                        if ($aiTermSheet && !empty($aiTermSheet['data_json'])) {
+                            $termSheetData = json_decode($aiTermSheet['data_json'], true);
+                            if (!empty($termSheetData['generated_document']['html'])) {
+                                echo $termSheetData['generated_document']['html'];
+                            }
+                        }
+                        ?>
+                    </div>
+                <?php endif; ?>
+                
                 <?php if (empty($termSheets)): ?>
                     <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.03) 100%); border: 2px solid rgba(16, 185, 129, 0.15); border-radius: 20px; padding: 32px; margin-top: 24px;">
                         <div style="max-width: 800px; margin: 0 auto;">
@@ -4441,6 +4493,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         (() => {
             let teaserProgressTimer = null;
             let investorProgressTimer = null;
+            let termSheetProgressTimer = null;
             let investorCtaBound = false;
 
             const getTeaserElements = () => ({
@@ -4457,6 +4510,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 investorControls: document.getElementById('investor-controls'),
                 investorProgress: document.getElementById('investor-progress'),
                 investorProgressBar: document.getElementById('investor-progress-bar'),
+                termSheetBtn: document.getElementById('generate-term-sheet-btn'),
+                termSheetResult: document.getElementById('term-sheet-result'),
+                termSheetProgress: document.getElementById('term-sheet-progress'),
+                termSheetProgressBar: document.getElementById('term-sheet-progress-bar'),
             });
 
             /**
@@ -4716,6 +4773,118 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     completeInvestorProgress(elements, false);
                 }
             };
+
+            /**
+             * Показывает прогресс-бар генерации Term Sheet с анимацией.
+             */
+            const showTermSheetProgress = (elements) => {
+                const { termSheetProgress, termSheetProgressBar } = elements;
+                if (!termSheetProgress || !termSheetProgressBar) {
+                    return;
+                }
+                termSheetProgress.setAttribute('aria-hidden', 'false');
+                termSheetProgress.style.display = 'block';
+                const bar = termSheetProgressBar.querySelector('div');
+                if (bar) {
+                    bar.style.width = '0%';
+                }
+                
+                clearInterval(termSheetProgressTimer);
+                let current = 0;
+                termSheetProgressTimer = setInterval(() => {
+                    current += Math.random() * 15;
+                    if (current > 85) {
+                        current = 85;
+                    }
+                    if (bar) {
+                        bar.style.width = current.toFixed(1) + '%';
+                    }
+                }, 200);
+            };
+
+            /**
+             * Завершает прогресс-бар генерации Term Sheet.
+             */
+            const completeTermSheetProgress = (elements, success = true) => {
+                const { termSheetProgress, termSheetProgressBar } = elements;
+                if (!termSheetProgress || !termSheetProgressBar) {
+                    return;
+                }
+                clearInterval(termSheetProgressTimer);
+                const bar = termSheetProgressBar.querySelector('div');
+                if (bar) {
+                    bar.style.width = success ? '100%' : '0%';
+                }
+                setTimeout(() => {
+                    termSheetProgress.classList.remove('is-visible');
+                    termSheetProgress.setAttribute('aria-hidden', 'true');
+                    termSheetProgress.style.display = 'none';
+                    if (bar) {
+                        bar.style.width = '0%';
+                    }
+                }, 500);
+            };
+
+            /**
+             * Обработчик генерации Term Sheet через ИИ.
+             */
+            const handleTermSheetGenerate = async () => {
+                const elements = getTeaserElements();
+                const { termSheetBtn, termSheetResult } = elements;
+                if (!termSheetBtn || !termSheetResult) {
+                    return;
+                }
+                
+                termSheetBtn.disabled = true;
+                termSheetBtn.textContent = 'Генерируем...';
+                showTermSheetProgress(elements);
+                
+                try {
+                    const response = await fetch('generate_term_sheet.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                    });
+
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        let errorMessage = payload.message || 'Не удалось создать Term Sheet.';
+                        
+                        // Если есть информация о недостающих полях, добавляем ссылку на редактирование
+                        if (payload.missing_fields && payload.missing_fields.length > 0) {
+                            errorMessage += '\n\nПожалуйста, заполните недостающие поля в анкете Term Sheet.';
+                            // Показываем сообщение с возможностью перейти к редактированию
+                            if (confirm(errorMessage + '\n\nПерейти к редактированию анкеты?')) {
+                                window.location.href = 'term_sheet_form.php';
+                            }
+                        } else {
+                            alert(errorMessage);
+                        }
+                        throw new Error(errorMessage);
+                    }
+
+                    termSheetResult.innerHTML = payload.html;
+                    termSheetBtn.textContent = 'Обновить Term Sheet';
+                    completeTermSheetProgress(elements, true);
+                } catch (error) {
+                    console.error('Term Sheet generation failed', error);
+                    if (!error.message.includes('Перейти к редактированию')) {
+                        alert(error.message || 'Ошибка генерации Term Sheet.');
+                    }
+                    completeTermSheetProgress(elements, false);
+                } finally {
+                    termSheetBtn.disabled = false;
+                    if (termSheetBtn.textContent === 'Генерируем...') {
+                        termSheetBtn.textContent = '🤖 Создать Term Sheet через ИИ';
+                    }
+                }
+            };
+
+            // Обработчик кнопки генерации Term Sheet
+            const termSheetBtn = document.getElementById('generate-term-sheet-btn');
+            if (termSheetBtn) {
+                termSheetBtn.addEventListener('click', handleTermSheetGenerate);
+            }
 
             /**
              * Обработчик подбора инвесторов.
