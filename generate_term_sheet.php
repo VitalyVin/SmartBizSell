@@ -40,7 +40,9 @@ if (empty($apiKey)) {
 try {
     $pdo = getDBConnection();
     
-    // Получаем последнюю отправленную анкету Term Sheet
+    // Получаем последнюю отправленную анкету Term Sheet для текущего пользователя
+    // Ищем только анкеты со статусом 'submitted', 'review' или 'approved'
+    // Сортируем по дате отправки и обновления (самые свежие первыми)
     $stmt = $pdo->prepare("
         SELECT *
         FROM term_sheet_forms
@@ -57,10 +59,12 @@ try {
         exit;
     }
 
-    // Собираем данные анкеты
+    // Собираем данные анкеты в единый массив для дальнейшей обработки
+    // Функция buildTermSheetPayload извлекает данные из data_json и отдельных полей таблицы
     $formData = buildTermSheetPayload($form);
     
-    // Проверяем полноту данных
+    // Проверяем полноту данных перед генерацией документа
+    // Если отсутствуют обязательные поля, возвращаем ошибку с перечнем недостающих полей
     $missingFields = checkTermSheetCompleteness($formData);
     if (!empty($missingFields)) {
         echo json_encode([
@@ -71,37 +75,45 @@ try {
         exit;
     }
     
-    // Формируем промпт для ИИ
+    // Формируем детальный промпт для ИИ на основе данных анкеты
+    // Промпт включает все необходимые разделы Term Sheet с конкретными данными
     $prompt = buildTermSheetPrompt($formData);
     
-    // Вызываем ИИ
+    // Вызываем ИИ-модель через Together.ai API для генерации Term Sheet
+    // Используется модель, указанная в конфигурации (например, Qwen2.5)
     $rawResponse = callTogetherCompletions($prompt, $apiKey);
     
-    // Очищаем и форматируем ответ
+    // Очищаем ответ ИИ от технической информации (markdown, служебные фразы)
+    // и форматируем для использования в документе
     $termSheetContent = cleanAndFormatTermSheet($rawResponse);
     
     // Проверяем полноту документа и добавляем недостающие элементы
+    // Например, если ИИ не добавил раздел с подписями, добавляем его программно
     $termSheetContent = ensureDocumentCompleteness($termSheetContent, $formData);
     
-    // Генерируем HTML
+    // Генерируем HTML для отображения Term Sheet в браузере
+    // Документ форматируется как таблица с двумя колонками (25%/75%)
     $html = renderTermSheetHtml($termSheetContent, $formData);
     
-    // Сохраняем сгенерированный документ в data_json исходной анкеты, не перезаписывая данные формы
+    // Сохраняем сгенерированный документ в data_json исходной анкеты
+    // Важно: не перезаписываем исходные данные формы, только добавляем generated_document
     $originalDataJson = !empty($form['data_json']) ? json_decode($form['data_json'], true) : [];
     if (!is_array($originalDataJson)) {
         $originalDataJson = [];
     }
     
-    // Сохраняем сгенерированный документ отдельно, не перезаписывая исходные данные
+    // Сохраняем сгенерированный документ отдельно в структуре generated_document
+    // Это позволяет хранить исходные данные анкеты и сгенерированный документ раздельно
     $originalDataJson['generated_document'] = [
-        'content' => $termSheetContent,
-        'html' => $html,
-        'generated_at' => date('c'),
+        'content' => $termSheetContent,  // Текстовый контент для DOCX
+        'html' => $html,                  // HTML для отображения в браузере
+        'generated_at' => date('c'),      // Время генерации в формате ISO 8601
     ];
     
     $updatedDataJson = json_encode($originalDataJson, JSON_UNESCAPED_UNICODE);
     
     // Обновляем только поле data_json, сохраняя все остальные данные анкеты
+    // Это гарантирует, что исходные данные формы не будут потеряны
     $stmt = $pdo->prepare("
         UPDATE term_sheet_forms 
         SET data_json = ?, 
@@ -110,6 +122,7 @@ try {
     ");
     $stmt->execute([$updatedDataJson, $form['id'], $user['id']]);
 
+    // Возвращаем успешный ответ с HTML для отображения в браузере
     echo json_encode([
         'success' => true,
         'html' => $html,
@@ -454,33 +467,42 @@ function buildTermSheetPrompt(array $formData): string
     }
     
     // Вопросы, требующие единогласного решения
-    // Извлекаем пороговые значения из анкеты
+    // Извлекаем пороговые значения из анкеты для включения конкретных цифр в описание пунктов
+    // Эти значения используются для формирования детальных формулировок в разделе корпоративного управления
     $majorTransactionThreshold = !empty($formData['major_transaction_threshold']) ? $formData['major_transaction_threshold'] : '10';
     $litigationThreshold = !empty($formData['litigation_threshold']) ? $formData['litigation_threshold'] : '5';
     $executiveCompensationThreshold = !empty($formData['executive_compensation_threshold']) ? $formData['executive_compensation_threshold'] : '3';
     
+    // Формируем список вопросов, требующих единогласного решения
+    // Пороговые значения подставляются в соответствующие формулировки для точности документа
     $unanimousDecisions = [];
     if (!empty($formData['unanimous_decisions_list']) && is_array($formData['unanimous_decisions_list'])) {
+        // Маппинг типов решений на их текстовые описания с включением пороговых значений
         $decisionMap = [
             'charter' => 'Изменение устава и уставного капитала',
             'budget' => 'Утверждение бюджета / бизнес-плана',
             'dividends' => 'Распределение чистой прибыли и дивидендная политика',
+            // Включаем конкретное пороговое значение для крупных сделок
             'major_transactions' => 'Совершение любых сделок на сумму свыше ' . $majorTransactionThreshold . ' млн руб., за исключением сделок, условия которых во всех существенных аспектах утверждены в рамках бюджета Общества',
             'real_estate' => 'Совершение любых сделок с недвижимостью',
             'ip' => 'Совершение любых сделок с интеллектуальной собственностью',
+            // Включаем конкретное пороговое значение для судебных процессов
             'litigation' => 'Вопросы, связанные с участием в судебных и арбитражных процессах (в случае если сумма требований превышает ' . $litigationThreshold . ' млн руб.)',
+            // Включаем конкретное пороговое значение для вознаграждения топ-менеджеров
             'executive_compensation' => 'Утверждение условий трудовых договоров с работниками, годовое вознаграждение которых до вычета налогов превышает или может превысить ' . $executiveCompensationThreshold . ' млн руб.',
             'subsidiaries' => 'Принятие решений об участии в уставных капиталах иных компаний',
             'debt' => 'Совершение сделок, влекущих возникновение финансовой задолженности',
             'guarantees' => 'Предоставление обеспечений по обязательствам третьих лиц',
             'financing' => 'Предоставление финансирования третьим лицам',
         ];
+        // Проходим по выбранным пунктам и добавляем их описания в список
         foreach ($formData['unanimous_decisions_list'] as $key => $value) {
             if (!empty($value) && isset($decisionMap[$key])) {
                 $unanimousDecisions[] = $decisionMap[$key];
             }
         }
     }
+    // Объединяем все вопросы в одну строку для включения в промпт
     $unanimousDecisionsText = !empty($unanimousDecisions) ? implode("; ", $unanimousDecisions) : "";
     
     // Преимущественное право
@@ -624,9 +646,10 @@ function buildTermSheetPrompt(array $formData): string
  */
 function callTogetherCompletions(string $prompt, string $apiKey): string
 {
+    // URL эндпоинта Together.ai API для генерации текста
     $url = 'https://api.together.xyz/v1/chat/completions';
     
-    // Формируем запрос к API
+    // Формируем запрос к API в формате chat completions
     // system message задает роль ИИ как профессионального M&A консультанта
     // user message содержит детальный промпт с данными анкеты
     $data = [
@@ -634,14 +657,17 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
         'messages' => [
             [
                 'role' => 'system',
+                // Системное сообщение определяет роль и стиль работы ИИ
+                // Важно: подчеркивается необходимость создания полного документа с подписями
                 'content' => 'Ты опытный M&A консультант и корпоративный юрист с глубоким знанием российского корпоративного права и практики инвестиционных сделок. Твоя специализация — создание Term Sheet для M&A и инвестиционных сделок. Твои документы всегда на русском языке, используют традиционную юридическую терминологию, точные формулировки и соответствуют лучшим практикам российского корпоративного права. КРИТИЧЕСКИ ВАЖНО: Всегда создавай ПОЛНЫЙ и ЗАВЕРШЕННЫЙ документ, включая обязательный раздел ПОДПИСИ СТОРОН в конце. Документ должен быть готов к использованию и подписанию.'
             ],
             [
                 'role' => 'user',
+                // Пользовательское сообщение содержит детальный промпт с данными анкеты
                 'content' => $prompt
             ]
         ],
-        'temperature' => 0.7, // Баланс между креативностью и точностью
+        'temperature' => 0.7, // Баланс между креативностью и точностью (0.0-1.0)
         'max_tokens' => 12000, // Максимальная длина ответа (увеличено для гарантии полного документа с подписями)
     ];
     
@@ -652,28 +678,31 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data)); // JSON тело запроса
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey, // API ключ в заголовке
+        'Authorization: Bearer ' . $apiKey, // API ключ в заголовке Authorization
     ]);
     curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Таймаут 120 секунд (генерация может занять время)
     
+    // Выполняем запрос и получаем ответ
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     
     // Проверяем HTTP статус код
+    // Код 200 означает успешный запрос
     if ($httpCode !== 200) {
         error_log("Together.ai API error: HTTP $httpCode, Response: $response");
         throw new Exception("Ошибка при обращении к API ИИ");
     }
     
     // Парсим JSON ответ и извлекаем сгенерированный текст
+    // Структура ответа: { "choices": [{ "message": { "content": "..." } }] }
     $result = json_decode($response, true);
     if (!isset($result['choices'][0]['message']['content'])) {
         error_log("Together.ai API unexpected response: " . $response);
         throw new Exception("Неожиданный формат ответа от API ИИ");
     }
     
-    // Возвращаем сгенерированный контент
+    // Возвращаем сгенерированный контент (текст Term Sheet)
     return $result['choices'][0]['message']['content'];
 }
 
@@ -691,11 +720,16 @@ function ensureDocumentCompleteness(string $content, array $formData): string
 {
     $content = trim($content);
     
-    // Проверяем, есть ли раздел с подписями
+    // Проверяем, есть ли раздел с подписями в документе
+    // Ищем различные варианты написания "ПОДПИСИ СТОРОН" (заглавными, строчными, смешанный регистр)
     $hasSignatures = preg_match('/ПОДПИСИ\s+СТОРОН|подписи\s+сторон|Подписи\s+сторон/ui', $content);
     
+    // Если раздел с подписями отсутствует, добавляем его программно
+    // Это гарантирует, что документ всегда будет полным и готовым к подписанию
     if (!$hasSignatures) {
         // Получаем имена сторон для раздела подписей
+        // Приоритет: массив buyers/sellers, затем одиночные поля buyer_name/seller_name
+        // Если ничего не найдено, используем общие названия "Покупатель" и "Продавец"
         $buyerName = 'Покупатель';
         if (!empty($formData['buyers']) && is_array($formData['buyers']) && !empty($formData['buyers'][0]['name'])) {
             $buyerName = $formData['buyers'][0]['name'];
@@ -710,7 +744,8 @@ function ensureDocumentCompleteness(string $content, array $formData): string
             $sellerName = $formData['seller_name'];
         }
         
-        // Добавляем раздел с подписями в конец документа
+        // Формируем раздел с подписями в стандартном формате
+        // Включает поля для подписей и ФИО обеих сторон, а также поле для даты
         $signaturesSection = "\n\nПОДПИСИ СТОРОН\n\n" .
             $buyerName . ":\n" .
             "_________________ / _________________\n" .
@@ -720,6 +755,7 @@ function ensureDocumentCompleteness(string $content, array $formData): string
             "(подпись)          (ФИО)\n\n" .
             "Дата: _______________";
         
+        // Добавляем раздел с подписями в конец документа
         $content .= $signaturesSection;
     }
     
@@ -743,19 +779,28 @@ function ensureDocumentCompleteness(string $content, array $formData): string
  */
 function cleanAndFormatTermSheet(string $rawResponse): string
 {
-    // Удаляем markdown разметку (блоки кода, жирный текст, заголовки, inline код)
+    // Удаляем markdown разметку, которая может присутствовать в ответе ИИ
+    // Блоки кода (```...```)
     $cleaned = preg_replace('/```[\s\S]*?```/', '', $rawResponse);
+    // Жирный текст (**текст**)
     $cleaned = preg_replace('/\*\*(.*?)\*\*/', '$1', $cleaned);
+    // Курсив (*текст*)
     $cleaned = preg_replace('/\*(.*?)\*/', '$1', $cleaned);
+    // Заголовки (# Заголовок)
     $cleaned = preg_replace('/#+\s*/', '', $cleaned);
+    // Inline код (`код`)
     $cleaned = preg_replace('/`(.*?)`/', '$1', $cleaned);
     
-    // Удаляем технические комментарии
+    // Удаляем технические комментарии, которые могут быть в ответе
+    // HTML комментарии (<!-- ... -->)
     $cleaned = preg_replace('/<!--[\s\S]*?-->/', '', $cleaned);
+    // Многострочные комментарии (/* ... */)
     $cleaned = preg_replace('/\/\*[\s\S]*?\*\//', '', $cleaned);
+    // Однострочные комментарии (// ...)
     $cleaned = preg_replace('/\/\/.*$/m', '', $cleaned);
     
-    // Удаляем служебные фразы ИИ
+    // Удаляем служебные фразы ИИ, которые не должны попадать в финальный документ
+    // Эти фразы часто появляются в начале или конце ответа ИИ
     $aiPhrases = [
         'Как ИИ-ассистент',
         'Как AI-ассистент',
@@ -765,7 +810,7 @@ function cleanAndFormatTermSheet(string $rawResponse): string
         'Созданный документ',
         'Документ включает',
     ];
-    
+    // Удаляем каждую фразу вместе с текстом до следующего раздела или конца документа
     foreach ($aiPhrases as $phrase) {
         $cleaned = preg_replace('/' . preg_quote($phrase, '/') . '[\s\S]*?(?=\n\n|\n[А-Я]|$)/i', '', $cleaned);
     }
@@ -794,6 +839,17 @@ function cleanAndFormatTermSheet(string $rawResponse): string
  * @param array $formData Данные анкеты (используются для метаданных)
  * @return string HTML код для отображения Term Sheet
  */
+/**
+ * Рендерит HTML для отображения Term Sheet в виде таблицы с двумя колонками.
+ * 
+ * Форматирует документ как таблицу:
+ * - Левая колонка (25% ширины) - название пункта
+ * - Правая колонка (75% ширины) - содержание пункта
+ * 
+ * @param string $content Текст Term Sheet
+ * @param array $formData Данные анкеты (для дополнительной информации)
+ * @return string HTML код для отображения Term Sheet
+ */
 function renderTermSheetHtml(string $content, array $formData): string
 {
     // Разбиваем контент на разделы по двойным переносам строк
@@ -808,9 +864,17 @@ function renderTermSheetHtml(string $content, array $formData): string
     $html .= '<p style="font-size: 18px; color: #666; margin: 0;">Лист условий сделки</p>';
     $html .= '</div>';
     
-    // Основной контент документа
-    $html .= '<div class="term-sheet-content" style="font-size: 16px;">';
+    // Начинаем таблицу с двумя колонками
+    // Формат: левая колонка (25%) - название пункта, правая колонка (75%) - содержание
+    $html .= '<table style="width: 100%; border-collapse: collapse; font-size: 16px; margin-bottom: 32px;">';
     
+    // Переменные для накопления данных текущего раздела
+    // $currentSectionTitle - название раздела (будет в левой колонке)
+    // $currentSectionContent - массив HTML-элементов с содержимым раздела (будет в правой колонке)
+    $currentSectionTitle = '';
+    $currentSectionContent = [];
+    
+    // Обрабатываем каждый раздел контента
     foreach ($sections as $section) {
         $section = trim($section);
         if (empty($section)) {
@@ -818,28 +882,64 @@ function renderTermSheetHtml(string $content, array $formData): string
         }
         
         // Проверяем, является ли раздел заголовком первого уровня (H2)
-        // Паттерн: строка из заглавных русских букв, цифр, пробелов и точек
+        // Паттерн: строка из заглавных русских букв, цифр, пробелов и точек (до 100 символов)
+        // Такие заголовки становятся названиями пунктов в левой колонке таблицы
         if (preg_match('/^[А-ЯЁ][А-ЯЁ\s\d\.]+$/u', $section) && mb_strlen($section) < 100) {
-            $html .= '<h2 style="font-size: 24px; font-weight: 700; margin-top: 40px; margin-bottom: 20px; color: #1a1a1a; padding-bottom: 12px; border-bottom: 2px solid #e9ecef;">' . htmlspecialchars($section, ENT_QUOTES, 'UTF-8') . '</h2>';
+            // Если у нас уже есть накопленное содержимое предыдущего раздела, выводим его в таблицу
+            // Это происходит при встрече нового заголовка - значит предыдущий раздел завершен
+            if (!empty($currentSectionTitle) && !empty($currentSectionContent)) {
+                $html .= '<tr>';
+                // Левая колонка: название пункта (25% ширины, жирный шрифт)
+                $html .= '<td style="width: 25%; vertical-align: top; padding: 16px 20px 16px 0; font-weight: 700; color: #1a1a1a; border-bottom: 1px solid #e9ecef;">';
+                $html .= htmlspecialchars($currentSectionTitle, ENT_QUOTES, 'UTF-8');
+                $html .= '</td>';
+                // Правая колонка: содержание пункта (75% ширины)
+                $html .= '<td style="width: 75%; vertical-align: top; padding: 16px 0; border-bottom: 1px solid #e9ecef;">';
+                $html .= implode('', $currentSectionContent);
+                $html .= '</td>';
+                $html .= '</tr>';
+            }
+            
+            // Начинаем новый раздел: сохраняем заголовок и очищаем содержимое
+            $currentSectionTitle = $section;
+            $currentSectionContent = [];
         } else {
-            // Обычный текст - разбиваем на параграфы по одинарным переносам строк
+            // Обычный текст - это содержимое текущего раздела
+            // Разбиваем на параграфы по одинарным переносам строк для обработки
             $paragraphs = explode("\n", $section);
             foreach ($paragraphs as $para) {
                 $para = trim($para);
                 if (!empty($para)) {
                     // Проверяем, является ли это подзаголовком второго уровня (H3)
-                    // Паттерн: строка, начинающаяся с заглавной буквы и заканчивающаяся на ":"
+                    // Паттерн: строка, начинающаяся с заглавной буквы и заканчивающаяся на ":" (до 80 символов)
                     if (preg_match('/^[А-ЯЁ][а-яё\s\d\.]+:$/u', $para) && mb_strlen($para) < 80) {
-                        $html .= '<h3 style="font-size: 18px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; color: #333;">' . htmlspecialchars($para, ENT_QUOTES, 'UTF-8') . '</h3>';
+                        // Подзаголовок - форматируем как H3
+                        $currentSectionContent[] = '<h3 style="font-size: 18px; font-weight: 600; margin-top: 16px; margin-bottom: 8px; color: #333;">' . htmlspecialchars($para, ENT_QUOTES, 'UTF-8') . '</h3>';
                     } else {
-                        $html .= '<p style="margin-bottom: 16px; line-height: 1.8;">' . nl2br(htmlspecialchars($para, ENT_QUOTES, 'UTF-8')) . '</p>';
+                        // Обычный параграф - добавляем в содержимое раздела
+                        $currentSectionContent[] = '<p style="margin-bottom: 12px; line-height: 1.8;">' . nl2br(htmlspecialchars($para, ENT_QUOTES, 'UTF-8')) . '</p>';
                     }
                 }
             }
         }
     }
     
-    $html .= '</div>'; // Закрываем контент
+    // Выводим последний раздел, если он есть
+    // Это необходимо, так как последний раздел не будет обработан циклом (нет следующего заголовка)
+    if (!empty($currentSectionTitle) && !empty($currentSectionContent)) {
+        $html .= '<tr>';
+        // Левая колонка: название пункта
+        $html .= '<td style="width: 25%; vertical-align: top; padding: 16px 20px 16px 0; font-weight: 700; color: #1a1a1a; border-bottom: 1px solid #e9ecef;">';
+        $html .= htmlspecialchars($currentSectionTitle, ENT_QUOTES, 'UTF-8');
+        $html .= '</td>';
+        // Правая колонка: содержание пункта
+        $html .= '<td style="width: 75%; vertical-align: top; padding: 16px 0; border-bottom: 1px solid #e9ecef;">';
+        $html .= implode('', $currentSectionContent);
+        $html .= '</td>';
+        $html .= '</tr>';
+    }
+    
+    $html .= '</table>'; // Закрываем таблицу
     
     // Футер с информацией о документе
     $html .= '<div style="margin-top: 48px; padding-top: 32px; border-top: 2px solid #e9ecef; text-align: center; color: #666; font-size: 14px;">';
@@ -851,4 +951,5 @@ function renderTermSheetHtml(string $content, array $formData): string
     
     return $html;
 }
+
 

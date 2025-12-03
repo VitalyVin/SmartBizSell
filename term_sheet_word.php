@@ -146,8 +146,10 @@ function generateDocx(string $content): string
 function addDocxStructure(ZipArchive $zip, array $paragraphs): void
 {
     // [Content_Types].xml - обязательный файл, описывающий типы содержимого
+    // Этот файл определяет MIME-типы всех файлов в DOCX архиве
     // Указывает, что document.xml - это основной документ Word,
     // styles.xml - стили, numbering.xml - нумерация
+    // Без этого файла Word не сможет правильно открыть документ
     $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -158,14 +160,19 @@ function addDocxStructure(ZipArchive $zip, array $paragraphs): void
 </Types>';
     $zip->addFromString('[Content_Types].xml', $contentTypes);
     
-    // _rels/.rels
+    // _rels/.rels - корневые связи документа
+    // Определяет связь между корнем архива и основным документом Word
+    // Указывает, что word/document.xml является основным документом
     $rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>';
     $zip->addFromString('_rels/.rels', $rels);
     
-    // word/_rels/document.xml.rels
+    // word/_rels/document.xml.rels - связи документа Word
+    // Определяет связи между document.xml и другими частями документа:
+    // - styles.xml (стили форматирования)
+    // - numbering.xml (определения нумерации для списков)
     $wordRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
@@ -173,7 +180,9 @@ function addDocxStructure(ZipArchive $zip, array $paragraphs): void
 </Relationships>';
     $zip->addFromString('word/_rels/document.xml.rels', $wordRels);
     
-    // word/document.xml
+    // word/document.xml - основной контент документа
+    // Содержит весь текст, параграфы, заголовки, таблицы в формате WordprocessingML
+    // Генерируется функцией generateDocumentXml на основе массива параграфов
     $document = generateDocumentXml($paragraphs);
     $zip->addFromString('word/document.xml', $document);
     
@@ -181,6 +190,7 @@ function addDocxStructure(ZipArchive $zip, array $paragraphs): void
     // abstractNumId="0" - абстрактное определение нумерации (шаблон)
     // numId="1" - конкретная нумерация, использующая шаблон 0
     // Используется для маркированных списков (bullet) с символом "•"
+    // Связано с document.xml через word/_rels/document.xml.rels
     $numbering = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
     <w:abstractNum w:abstractNumId="0">
@@ -283,17 +293,21 @@ function addDocxStructure(ZipArchive $zip, array $paragraphs): void
 }
 
 /**
- * Генерирует XML содержимое основного документа Word (document.xml).
+ * Генерирует XML содержимое основного документа Word (document.xml) в виде таблицы.
+ * 
+ * Форматирует документ как таблицу с двумя колонками:
+ * - Левая колонка (25% ширины) - название пункта
+ * - Правая колонка (75% ширины) - содержание пункта
  * 
  * Преобразует массив параграфов в XML структуру Word с:
  * - Заголовком документа (Term Sheet)
- * - Разделами (H1, H2) и параграфами
+ * - Таблицей с разделами и их содержанием
  * - Элементами списков с правильной нумерацией
  * - Футером с датой создания
  * 
  * Автоматически определяет тип контента:
- * - H1: строки из заглавных букв длиной до 100 символов
- * - H2: строки, заканчивающиеся на ":" длиной до 80 символов
+ * - H1: строки из заглавных букв длиной до 100 символов (название пункта)
+ * - H2: строки, заканчивающиеся на ":" длиной до 80 символов (подзаголовок)
  * - Списки: строки, начинающиеся с "•", "-" или "*"
  * 
  * @param array $paragraphs Массив параграфов текста
@@ -333,7 +347,36 @@ function generateDocumentXml(array $paragraphs): string
             </w:pPr>
         </w:p>';
     
-    // Добавляем параграфы из контента
+    // Начинаем таблицу с двумя колонками для форматирования Term Sheet
+    // Ширина таблицы оптимизирована для A4: 10000 twips (около 17.6 см) с отступом справа
+    // Левая колонка: 2500 twips (25%) - название пункта
+    // Правая колонка: 7500 twips (75%) - содержание пункта
+    // Twips - единица измерения в Word (1 twip = 1/20 точки = 1/1440 дюйма)
+    $xml .= '
+        <w:tbl>
+            <w:tblPr>
+                <w:tblW w:w="10000" w:type="dxa"/>
+                <w:tblBorders>
+                    <w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                </w:tblBorders>
+            </w:tblPr>
+            <w:tblGrid>
+                <w:gridCol w:w="2500"/>
+                <w:gridCol w:w="7500"/>
+            </w:tblGrid>';
+    
+    // Переменные для накопления данных текущего раздела
+    // $currentSectionTitle - название раздела (будет в левой колонке таблицы)
+    // $currentSectionContent - массив XML-элементов с содержимым раздела (будет в правой колонке)
+    $currentSectionTitle = '';
+    $currentSectionContent = [];
+    
+    // Обрабатываем параграфы из контента и группируем их по разделам
     foreach ($paragraphs as $para) {
         $para = trim($para);
         if (empty($para)) {
@@ -342,34 +385,24 @@ function generateDocumentXml(array $paragraphs): string
         
         // Определяем тип параграфа по паттернам:
         // H1: строка из заглавных русских букв, цифр, пробелов и точек (до 100 символов)
-        // H2: строка, начинающаяся с заглавной буквы и заканчивающаяся на ":" (до 80 символов)
+        // Такие заголовки становятся названиями пунктов в левой колонке таблицы
         $isHeading1 = preg_match('/^[А-ЯЁ][А-ЯЁ\s\d\.]+$/u', $para) && mb_strlen($para) < 100;
-        $isHeading2 = preg_match('/^[А-ЯЁ][а-яё\s\d\.]+:$/u', $para) && mb_strlen($para) < 80;
         
         if ($isHeading1) {
-            $xml .= '
-        <w:p>
-            <w:pPr>
-                <w:pStyle w:val="Heading1"/>
-            </w:pPr>
-            <w:r>
-                <w:t xml:space="preserve">' . escapeXml($para) . '</w:t>
-            </w:r>
-        </w:p>';
-        } elseif ($isHeading2) {
-            $xml .= '
-        <w:p>
-            <w:pPr>
-                <w:pStyle w:val="Heading2"/>
-            </w:pPr>
-            <w:r>
-                <w:t xml:space="preserve">' . escapeXml($para) . '</w:t>
-            </w:r>
-        </w:p>';
+            // Встретили новый заголовок раздела
+            // Если у нас уже есть накопленное содержимое предыдущего раздела, выводим его в таблицу
+            if (!empty($currentSectionTitle) && !empty($currentSectionContent)) {
+                $xml .= generateTableRow($currentSectionTitle, implode('', $currentSectionContent));
+            }
+            
+            // Начинаем новый раздел: сохраняем заголовок и очищаем содержимое
+            $currentSectionTitle = $para;
+            $currentSectionContent = [];
         } else {
-            // Обычный параграф - разбиваем на строки для обработки списков
+            // Обычный параграф или подзаголовок - это содержимое текущего раздела
+            // Разбиваем на строки для обработки различных типов контента (подзаголовки, списки, обычный текст)
             $lines = explode("\n", $para);
-            $inList = false; // Флаг для отслеживания состояния списка
+            $inList = false; // Флаг для отслеживания состояния списка (для правильного форматирования)
             
             foreach ($lines as $line) {
                 $line = trim($line);
@@ -381,40 +414,39 @@ function generateDocumentXml(array $paragraphs): string
                     continue;
                 }
                 
-                // Проверяем, является ли строка элементом списка
-                // Паттерн: строка начинается с "•", "-" или "*", за которым следует пробел и текст
-                if (preg_match('/^[•\-\*]\s*(.+)$/u', $line, $matches)) {
-                    $xml .= '
-        <w:p>
-            <w:pPr>
-                <w:numPr>
-                    <w:ilvl w:val="0"/>
-                    <w:numId w:val="1"/>
-                </w:numPr>
-            </w:pPr>
-            <w:r>
-                <w:t xml:space="preserve">' . escapeXml($matches[1]) . '</w:t>
-            </w:r>
-        </w:p>';
+                // Проверяем, является ли это подзаголовком второго уровня (H2)
+                // Паттерн: строка, начинающаяся с заглавной буквы и заканчивающаяся на ":" (до 80 символов)
+                $isHeading2 = preg_match('/^[А-ЯЁ][а-яё\s\d\.]+:$/u', $line) && mb_strlen($line) < 80;
+                
+                if ($isHeading2) {
+                    // Подзаголовок второго уровня - форматируем как Heading2
+                    $currentSectionContent[] = '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t xml:space="preserve">' . escapeXml($line) . '</w:t></w:r></w:p>';
+                } elseif (preg_match('/^[•\-\*]\s*(.+)$/u', $line, $matches)) {
+                    // Элемент списка - форматируем с использованием нумерации Word
+                    // Используем стиль ListParagraph с нумерацией (numId="1" из numbering.xml)
+                    $currentSectionContent[] = '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">' . escapeXml($matches[1]) . '</w:t></w:r></w:p>';
                     $inList = true;
                 } else {
                     if ($inList) {
                         // Завершаем список перед обычным параграфом
                         $inList = false;
                     }
-                    $xml .= '
-        <w:p>
-            <w:pPr>
-                <w:pStyle w:val="Normal"/>
-            </w:pPr>
-            <w:r>
-                <w:t xml:space="preserve">' . escapeXml($line) . '</w:t>
-            </w:r>
-        </w:p>';
+                    // Обычный параграф - форматируем как Normal
+                    $currentSectionContent[] = '<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t xml:space="preserve">' . escapeXml($line) . '</w:t></w:r></w:p>';
                 }
             }
         }
     }
+    
+    // Выводим последний раздел, если он есть
+    // Это необходимо, так как последний раздел не будет обработан циклом (нет следующего заголовка)
+    if (!empty($currentSectionTitle) && !empty($currentSectionContent)) {
+        $xml .= generateTableRow($currentSectionTitle, implode('', $currentSectionContent));
+    }
+    
+    // Закрываем таблицу
+    $xml .= '
+        </w:tbl>';
     
     // Футер
     $xml .= '
@@ -447,6 +479,45 @@ function generateDocumentXml(array $paragraphs): string
 </w:document>';
     
     return $xml;
+}
+
+/**
+ * Генерирует строку таблицы Word с двумя колонками.
+ * 
+ * @param string $title Название пункта (левая колонка, 25%)
+ * @param string $content Содержание пункта (правая колонка, 75%)
+ * @return string XML код строки таблицы
+ */
+function generateTableRow(string $title, string $content): string
+{
+    // Ширина колонок соответствует tblGrid: левая 2500 twips (25%), правая 7500 twips (75%)
+    return '
+            <w:tr>
+                <w:tc>
+                    <w:tcPr>
+                        <w:tcW w:w="2500" w:type="dxa"/>
+                        <w:vAlign w:val="top"/>
+                    </w:tcPr>
+                    <w:p>
+                        <w:pPr>
+                            <w:pStyle w:val="Normal"/>
+                        </w:pPr>
+                        <w:r>
+                            <w:rPr>
+                                <w:b/>
+                            </w:rPr>
+                            <w:t xml:space="preserve">' . escapeXml($title) . '</w:t>
+                        </w:r>
+                    </w:p>
+                </w:tc>
+                <w:tc>
+                    <w:tcPr>
+                        <w:tcW w:w="7500" w:type="dxa"/>
+                        <w:vAlign w:val="top"/>
+                    </w:tcPr>
+                    ' . $content . '
+                </w:tc>
+            </w:tr>';
 }
 
 /**
@@ -543,4 +614,5 @@ function sanitizeFilename(string $filename): string
     }
     return $filename;
 }
+
 
