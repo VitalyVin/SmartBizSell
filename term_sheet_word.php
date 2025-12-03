@@ -101,9 +101,10 @@ try {
 function generateDocx(string $content): string
 {
     // Конвертируем HTML в чистый текст с сохранением структуры
+    // (заголовки, параграфы, списки)
     $text = convertHtmlToText($content);
     
-    // Разбиваем на параграфы
+    // Разбиваем на параграфы по двойным переносам строк
     $paragraphs = explode("\n\n", $text);
     
     // Создаем временный файл для ZIP архива
@@ -129,14 +130,24 @@ function generateDocx(string $content): string
 }
 
 /**
- * Добавляет структуру DOCX файла в ZIP архив
+ * Добавляет структуру DOCX файла в ZIP архив.
  * 
- * @param ZipArchive $zip ZIP архив
- * @param array $paragraphs Массив параграфов
+ * DOCX файл состоит из нескольких XML файлов, упакованных в ZIP:
+ * 1. [Content_Types].xml - описывает типы всех файлов в архиве
+ * 2. _rels/.rels - связи между основными частями документа
+ * 3. word/document.xml - основной контент документа (текст, параграфы, заголовки)
+ * 4. word/styles.xml - стили документа (заголовки, обычный текст, списки)
+ * 5. word/numbering.xml - определение нумерации для списков
+ * 6. word/_rels/document.xml.rels - связи документа (со стилями и нумерацией)
+ * 
+ * @param ZipArchive $zip ZIP архив, в который добавляются файлы
+ * @param array $paragraphs Массив параграфов текста для включения в document.xml
  */
 function addDocxStructure(ZipArchive $zip, array $paragraphs): void
 {
-    // [Content_Types].xml
+    // [Content_Types].xml - обязательный файл, описывающий типы содержимого
+    // Указывает, что document.xml - это основной документ Word,
+    // styles.xml - стили, numbering.xml - нумерация
     $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -166,7 +177,10 @@ function addDocxStructure(ZipArchive $zip, array $paragraphs): void
     $document = generateDocumentXml($paragraphs);
     $zip->addFromString('word/document.xml', $document);
     
-    // word/numbering.xml
+    // word/numbering.xml - определение нумерации для списков
+    // abstractNumId="0" - абстрактное определение нумерации (шаблон)
+    // numId="1" - конкретная нумерация, использующая шаблон 0
+    // Используется для маркированных списков (bullet) с символом "•"
     $numbering = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
     <w:abstractNum w:abstractNumId="0">
@@ -269,19 +283,31 @@ function addDocxStructure(ZipArchive $zip, array $paragraphs): void
 }
 
 /**
- * Генерирует XML содержимое документа Word
+ * Генерирует XML содержимое основного документа Word (document.xml).
  * 
- * @param array $paragraphs Массив параграфов
- * @return string XML содержимое
+ * Преобразует массив параграфов в XML структуру Word с:
+ * - Заголовком документа (Term Sheet)
+ * - Разделами (H1, H2) и параграфами
+ * - Элементами списков с правильной нумерацией
+ * - Футером с датой создания
+ * 
+ * Автоматически определяет тип контента:
+ * - H1: строки из заглавных букв длиной до 100 символов
+ * - H2: строки, заканчивающиеся на ":" длиной до 80 символов
+ * - Списки: строки, начинающиеся с "•", "-" или "*"
+ * 
+ * @param array $paragraphs Массив параграфов текста
+ * @return string XML содержимое для word/document.xml
  */
 function generateDocumentXml(array $paragraphs): string
 {
+    // Начало XML документа с пространствами имен Word
     $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
     <w:body>';
     
-    // Заголовок документа
+    // Заголовок документа (Term Sheet) с центрированием
     $xml .= '
         <w:p>
             <w:pPr>
@@ -307,14 +333,16 @@ function generateDocumentXml(array $paragraphs): string
             </w:pPr>
         </w:p>';
     
-    // Добавляем параграфы
+    // Добавляем параграфы из контента
     foreach ($paragraphs as $para) {
         $para = trim($para);
         if (empty($para)) {
-            continue;
+            continue; // Пропускаем пустые параграфы
         }
         
-        // Определяем, является ли параграф заголовком
+        // Определяем тип параграфа по паттернам:
+        // H1: строка из заглавных русских букв, цифр, пробелов и точек (до 100 символов)
+        // H2: строка, начинающаяся с заглавной буквы и заканчивающаяся на ":" (до 80 символов)
         $isHeading1 = preg_match('/^[А-ЯЁ][А-ЯЁ\s\d\.]+$/u', $para) && mb_strlen($para) < 100;
         $isHeading2 = preg_match('/^[А-ЯЁ][а-яё\s\d\.]+:$/u', $para) && mb_strlen($para) < 80;
         
@@ -339,21 +367,22 @@ function generateDocumentXml(array $paragraphs): string
             </w:r>
         </w:p>';
         } else {
-            // Обычный параграф
+            // Обычный параграф - разбиваем на строки для обработки списков
             $lines = explode("\n", $para);
-            $inList = false;
+            $inList = false; // Флаг для отслеживания состояния списка
             
             foreach ($lines as $line) {
                 $line = trim($line);
                 if (empty($line)) {
                     if ($inList) {
-                        // Завершаем список пустой строкой
+                        // Завершаем список при пустой строке
                         $inList = false;
                     }
                     continue;
                 }
                 
                 // Проверяем, является ли строка элементом списка
+                // Паттерн: строка начинается с "•", "-" или "*", за которым следует пробел и текст
                 if (preg_match('/^[•\-\*]\s*(.+)$/u', $line, $matches)) {
                     $xml .= '
         <w:p>
@@ -421,10 +450,16 @@ function generateDocumentXml(array $paragraphs): string
 }
 
 /**
- * Конвертирует HTML в текст с сохранением структуры
+ * Конвертирует HTML в текст с сохранением структуры.
+ * 
+ * Преобразует HTML теги в текстовые эквиваленты:
+ * - <h1>, <h2>, <h3> -> двойные переносы строк
+ * - <p> -> двойные переносы строк
+ * - <br> -> одинарные переносы строк
+ * - <li> -> маркеры списка "•"
  * 
  * @param string $html HTML контент или чистый текст
- * @return string Текстовый контент
+ * @return string Текстовый контент с сохраненной структурой
  */
 function convertHtmlToText(string $html): string
 {
@@ -434,7 +469,7 @@ function convertHtmlToText(string $html): string
         return $html;
     }
     
-    // Удаляем HTML теги, но сохраняем структуру
+    // Удаляем HTML теги, но сохраняем структуру через замену тегов на переносы строк
     $text = $html;
     
     // Заменяем заголовки
@@ -470,10 +505,13 @@ function convertHtmlToText(string $html): string
 }
 
 /**
- * Экранирует XML специальные символы
+ * Экранирует XML специальные символы для безопасной вставки в XML.
+ * 
+ * Заменяет специальные символы XML (&, <, >, ", ') на их XML-сущности,
+ * чтобы избежать ошибок парсинга XML.
  * 
  * @param string $text Текст для экранирования
- * @return string Экранированный текст
+ * @return string Экранированный текст, безопасный для использования в XML
  */
 function escapeXml(string $text): string
 {
@@ -482,18 +520,24 @@ function escapeXml(string $text): string
 }
 
 /**
- * Очищает имя файла от недопустимых символов
+ * Очищает имя файла от недопустимых символов для безопасного использования.
  * 
- * @param string $filename Имя файла
- * @return string Очищенное имя файла
+ * Удаляет символы, которые могут вызвать проблемы в файловой системе:
+ * - Специальные символы (/, \, :, *, ?, ", <, >, |)
+ * - Оставляет только буквы, цифры, дефисы, подчеркивания и пробелы
+ * - Заменяет пробелы на подчеркивания
+ * - Ограничивает длину до 50 символов
+ * 
+ * @param string $filename Исходное имя файла
+ * @return string Очищенное имя файла, безопасное для использования
  */
 function sanitizeFilename(string $filename): string
 {
-    // Удаляем недопустимые символы
+    // Удаляем недопустимые символы, оставляя только буквы, цифры, дефисы, подчеркивания и пробелы
     $filename = preg_replace('/[^a-zA-Z0-9а-яА-ЯёЁ_\-\s]/u', '', $filename);
-    // Заменяем пробелы на подчеркивания
+    // Заменяем пробелы на подчеркивания для лучшей совместимости
     $filename = preg_replace('/\s+/', '_', $filename);
-    // Ограничиваем длину
+    // Ограничиваем длину до 50 символов для избежания проблем с длинными именами файлов
     if (mb_strlen($filename, 'UTF-8') > 50) {
         $filename = mb_substr($filename, 0, 50, 'UTF-8');
     }

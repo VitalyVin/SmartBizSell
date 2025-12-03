@@ -2663,6 +2663,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             background: linear-gradient(90deg, #6366f1, #a855f7);
             transition: width 0.3s ease;
         }
+        .term-sheet-result {
+            width: 100%;
+            max-width: 100%;
+        }
+        .term-sheet-result .term-sheet-document {
+            max-width: 1200px !important;
+            width: 100% !important;
+        }
         .teaser-result {
             background: rgba(255,255,255,0.85);
             border: 1px dashed rgba(99,102,241,0.35);
@@ -4106,7 +4114,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             </div>
                         </div>
                     </div>
-                    <div class="term-sheet-result" id="term-sheet-result">
+                    <div class="term-sheet-result" id="term-sheet-result" style="width: 100%; max-width: 100%;">
                         <?php
                         // Проверяем, есть ли уже сгенерированный Term Sheet через ИИ
                         $stmt = $pdo->prepare("
