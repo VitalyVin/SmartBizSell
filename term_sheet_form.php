@@ -92,6 +92,7 @@ function buildDraftPayload(array $source): array
         'agreement_duration', 'exclusivity', 'applicable_law',
         'corporate_governance_ceo', 'corporate_governance_cfo',
         'unanimous_decisions', 'preemptive_right',
+        'major_transaction_threshold', 'litigation_threshold', 'executive_compensation_threshold',
     ];
 
     $payload = [];

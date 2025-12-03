@@ -454,17 +454,22 @@ function buildTermSheetPrompt(array $formData): string
     }
     
     // Вопросы, требующие единогласного решения
+    // Извлекаем пороговые значения из анкеты
+    $majorTransactionThreshold = !empty($formData['major_transaction_threshold']) ? $formData['major_transaction_threshold'] : '10';
+    $litigationThreshold = !empty($formData['litigation_threshold']) ? $formData['litigation_threshold'] : '5';
+    $executiveCompensationThreshold = !empty($formData['executive_compensation_threshold']) ? $formData['executive_compensation_threshold'] : '3';
+    
     $unanimousDecisions = [];
     if (!empty($formData['unanimous_decisions_list']) && is_array($formData['unanimous_decisions_list'])) {
         $decisionMap = [
             'charter' => 'Изменение устава и уставного капитала',
             'budget' => 'Утверждение бюджета / бизнес-плана',
             'dividends' => 'Распределение чистой прибыли и дивидендная политика',
-            'major_transactions' => 'Совершение крупных сделок',
-            'real_estate' => 'Совершение сделок с недвижимостью',
-            'ip' => 'Совершение сделок с интеллектуальной собственностью',
-            'litigation' => 'Вопросы, связанные с участием в судебных процессах',
-            'executive_compensation' => 'Утверждение условий трудовых договоров с топ-менеджерами',
+            'major_transactions' => 'Совершение любых сделок на сумму свыше ' . $majorTransactionThreshold . ' млн руб., за исключением сделок, условия которых во всех существенных аспектах утверждены в рамках бюджета Общества',
+            'real_estate' => 'Совершение любых сделок с недвижимостью',
+            'ip' => 'Совершение любых сделок с интеллектуальной собственностью',
+            'litigation' => 'Вопросы, связанные с участием в судебных и арбитражных процессах (в случае если сумма требований превышает ' . $litigationThreshold . ' млн руб.)',
+            'executive_compensation' => 'Утверждение условий трудовых договоров с работниками, годовое вознаграждение которых до вычета налогов превышает или может превысить ' . $executiveCompensationThreshold . ' млн руб.',
             'subsidiaries' => 'Принятие решений об участии в уставных капиталах иных компаний',
             'debt' => 'Совершение сделок, влекущих возникновение финансовой задолженности',
             'guarantees' => 'Предоставление обеспечений по обязательствам третьих лиц',
@@ -504,7 +509,8 @@ function buildTermSheetPrompt(array $formData): string
 УСЛОВИЯ ЗАКРЫТИЯ СДЕЛКИ:
 {$closingConditionsText}";
 
-    if (!empty($ceoAppointment) || !empty($cfoAppointment)) {
+    // Корпоративное управление - добавляем раздел, если есть хотя бы одно поле
+    if (!empty($ceoAppointment) || !empty($cfoAppointment) || !empty($unanimousDecisionsText)) {
         $prompt .= "\n\nКОРПОРАТИВНОЕ УПРАВЛЕНИЕ ПОСЛЕ СДЕЛКИ:";
         if (!empty($ceoAppointment)) {
             $prompt .= "\nГенеральный директор назначается: {$ceoAppointment}";
