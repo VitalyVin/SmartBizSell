@@ -3499,6 +3499,16 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         <span class="dashboard-nav__text">DCF модель</span>
                     </a>
                 </li>
+                <li class="dashboard-nav__item" role="listitem">
+                    <a href="#price-determination" class="dashboard-nav__link" data-section="price-determination" aria-label="Перейти к определению цены">
+                        <span class="dashboard-nav__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2V22M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6312 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3687 16.9749 13.0251C17.6312 13.6815 18 14.5717 18 15.5C18 16.4283 17.6312 17.3185 16.9749 17.9749C16.3185 18.6312 15.4283 19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
+                        <span class="dashboard-nav__text">Определение цены</span>
+                    </a>
+                </li>
                 <?php endif; ?>
                 <?php if ($hasSubmittedForm): ?>
                 <li class="dashboard-nav__item" role="listitem">
@@ -3716,6 +3726,82 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         </div>
                     <?php endif; ?>
                 <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Блок "Определение цены" -->
+        <?php if ($latestForm && $dcfData && !isset($dcfData['error'])): ?>
+            <?php
+            // Получаем Equity Value из DCF для сравнения
+            $dcfEquityValue = null;
+            if (isset($dcfData['ev_breakdown']['equity'])) {
+                $dcfEquityValue = (float)$dcfData['ev_breakdown']['equity'];
+            }
+            ?>
+            <div class="dcf-card" id="price-determination" style="margin-top: 48px;" data-dcf-equity="<?php echo $dcfEquityValue !== null ? htmlspecialchars($dcfEquityValue, ENT_QUOTES, 'UTF-8') : ''; ?>">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom: 24px;">
+                    <div>
+                        <h2 style="margin-bottom:4px;">Определение цены</h2>
+                        <p style="color: var(--text-secondary); margin-top: 8px; font-size: 14px;">
+                            Оценка компании по методу мультипликаторов на основе сектора и финансовых показателей
+                        </p>
+                    </div>
+                    <button 
+                        type="button" 
+                        class="btn btn-primary" 
+                        id="calculate-multiplier-btn"
+                        style="padding: 12px 24px; font-size: 16px; font-weight: 600;"
+                    >
+                        Рассчитать оценку по мультипликаторам
+                    </button>
+                </div>
+                
+                <div id="price-determination-content">
+                    <div id="multiplier-valuation-progress" style="display: none; margin-top: 24px;">
+                        <div style="background: #f0f0f0; border-radius: 4px; height: 4px; overflow: hidden;">
+                            <div id="multiplier-progress-bar" style="height: 100%; background: linear-gradient(90deg, #667EEA 0%, #764BA2 100%); width: 0%; transition: width 0.3s ease;"></div>
+                        </div>
+                        <p style="text-align: center; margin-top: 12px; color: var(--text-secondary);">
+                            Определение сектора и расчет оценки...
+                        </p>
+                    </div>
+                    
+                    <div id="multiplier-valuation-result" style="display: none; margin-top: 24px;">
+                        <!-- Результаты расчета будут отображаться здесь -->
+                    </div>
+                    
+                    <div id="final-price-section" style="display: none; margin-top: 32px; padding-top: 32px; border-top: 2px solid var(--border-color);">
+                        <div style="margin-bottom: 24px;">
+                            <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary);">
+                                Финальная цена продажи
+                            </h3>
+                            <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;">
+                                Оценка компании разными методами может давать различные результаты. DCF-метод учитывает будущие денежные потоки и долгосрочные перспективы развития, в то время как метод мультипликаторов основан на текущих рыночных показателях и сравнении с аналогичными компаниями в отрасли.
+                            </p>
+                            <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.08) 100%); border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 16px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);">
+                                <p style="color: var(--text-primary); line-height: 1.7; margin: 0; font-size: 18px; font-weight: 700; text-align: center;">
+                                    Укажите финальную цену, по которой актив будет выставлен на продажу. Рекомендуем выбрать значение в пределах рассчитанного диапазона оценки.
+                                </p>
+                            </div>
+                        </div>
+                        <div style="max-width: 500px;">
+                            <label for="final-price-input" style="display: block; margin-bottom: 12px; font-weight: 700; color: var(--text-primary); font-size: 18px;">
+                                Финальная цена продажи (млн ₽)
+                            </label>
+                            <input 
+                                type="number" 
+                                id="final-price-input" 
+                                name="final_price" 
+                                step="0.1" 
+                                min="0"
+                                placeholder="Введите финальную цену"
+                                style="width: 100%; padding: 18px 24px; border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 12px; font-size: 20px; font-weight: 600; background: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); transition: all 0.3s ease;"
+                                onfocus="this.style.borderColor='rgba(102, 126, 234, 0.6)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.2)';"
+                                onblur="this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.1)';"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
         <?php endif; ?>
 
@@ -5329,7 +5415,250 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 } catch (error) {
                     console.error('Investor CTA init failed', error);
                 }
+
+                // Инициализация расчета оценки по мультипликаторам
+                try {
+                    initMultiplierValuation();
+                } catch (error) {
+                    console.error('Multiplier valuation init failed', error);
+                }
             });
+
+            /**
+             * Обработчик расчета оценки по мультипликаторам
+             * 
+             * Функциональность:
+             * - Отправляет AJAX запрос на calculate_multiplier_valuation.php
+             * - Показывает прогресс-бар во время расчета
+             * - Отображает результаты расчета (сектор, мультипликаторы, стоимость)
+             * - Обрабатывает ошибки
+             * 
+             * @async
+             */
+            const handleMultiplierValuation = async () => {
+                const calculateBtn = document.getElementById('calculate-multiplier-btn');
+                const resultDiv = document.getElementById('multiplier-valuation-result');
+                const progressDiv = document.getElementById('multiplier-valuation-progress');
+                const progressBar = document.getElementById('multiplier-progress-bar');
+                const sellerPriceInput = document.getElementById('seller-price-input');
+                
+                if (!calculateBtn || !resultDiv || !progressDiv || !progressBar) {
+                    return;
+                }
+                
+                // Блокируем кнопку и показываем прогресс
+                calculateBtn.disabled = true;
+                calculateBtn.textContent = 'Рассчитываем...';
+                resultDiv.style.display = 'none';
+                progressDiv.style.display = 'block';
+                progressBar.style.width = '0%';
+                
+                // Анимация прогресс-бара
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress > 90) progress = 90;
+                    progressBar.style.width = progress + '%';
+                }, 200);
+                
+                try {
+                    const response = await fetch('calculate_multiplier_valuation.php', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                    });
+                    
+                    const payload = await response.json();
+                    
+                    // Завершаем прогресс-бар
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    
+                    setTimeout(() => {
+                        progressDiv.style.display = 'none';
+                        
+                        if (!response.ok || !payload.success) {
+                            throw new Error(payload.message || 'Не удалось рассчитать оценку.');
+                        }
+                        
+                        // Отображаем результаты
+                        // Получаем DCF Equity Value из data-атрибута
+                        const priceDeterminationCard = document.getElementById('price-determination');
+                        let dcfEquityValue = null;
+                        if (priceDeterminationCard && priceDeterminationCard.dataset.dcfEquity) {
+                            const parsed = parseFloat(priceDeterminationCard.dataset.dcfEquity);
+                            if (!isNaN(parsed) && parsed > 0) {
+                                dcfEquityValue = parsed;
+                            }
+                        }
+                        
+                        displayMultiplierValuationResult(payload, dcfEquityValue);
+                        resultDiv.style.display = 'block';
+                        
+                        // Показываем секцию с финальной ценой
+                        const finalPriceSection = document.getElementById('final-price-section');
+                        if (finalPriceSection) {
+                            finalPriceSection.style.display = 'block';
+                        }
+                    }, 300);
+                    
+                } catch (error) {
+                    clearInterval(progressInterval);
+                    progressDiv.style.display = 'none';
+                    console.error('Multiplier valuation failed', error);
+                    resultDiv.innerHTML = `
+                        <div style="background: #FEF2F2; border: 1px solid #FEE2E2; border-radius: 8px; padding: 16px; color: #991B1B;">
+                            <strong>Ошибка:</strong> ${error.message || 'Не удалось рассчитать оценку по мультипликаторам.'}
+                        </div>
+                    `;
+                    resultDiv.style.display = 'block';
+                } finally {
+                    calculateBtn.disabled = false;
+                    calculateBtn.textContent = 'Рассчитать оценку по мультипликаторам';
+                }
+            };
+            
+            /**
+             * Отображает результаты расчета оценки по мультипликаторам
+             * 
+             * @param {Object} payload Данные от сервера с результатами расчета
+             * @param {number|null} dcfEquityValue Equity Value из DCF модели
+             */
+            const displayMultiplierValuationResult = (payload, dcfEquityValue) => {
+                const resultDiv = document.getElementById('multiplier-valuation-result');
+                if (!resultDiv) return;
+                
+                const { sector, financial_data, valuation } = payload;
+                const { equity_value, applied_multipliers, ev, ev1, ev2 } = valuation;
+                
+                // Определяем диапазон оценки (от меньшей до большей цены)
+                let minValue = equity_value;
+                let maxValue = equity_value;
+                
+                if (dcfEquityValue !== null && dcfEquityValue > 0) {
+                    if (dcfEquityValue < equity_value) {
+                        minValue = dcfEquityValue;
+                        maxValue = equity_value;
+                    } else {
+                        minValue = equity_value;
+                        maxValue = dcfEquityValue;
+                    }
+                }
+                
+                let html = '<div style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px;">';
+                
+                // Диапазон оценки
+                html += '<div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.08) 100%); border: 2px solid rgba(102, 126, 234, 0.2); border-radius: 12px; padding: 24px; margin-bottom: 24px;">';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Диапазон оценки актива</div>';
+                html += '<div style="font-size: 28px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">';
+                html += 'от ' + formatMoney(minValue) + ' до ' + formatMoney(maxValue) + ' млн ₽';
+                html += '</div>';
+                html += '<div style="font-size: 14px; color: var(--text-secondary); margin-top: 12px;">';
+                if (dcfEquityValue !== null && dcfEquityValue > 0) {
+                    html += '<div style="margin-bottom: 4px;">• Оценка по DCF: <strong>' + formatMoney(dcfEquityValue) + ' млн ₽</strong></div>';
+                    html += '<div>• Оценка по мультипликаторам: <strong>' + formatMoney(equity_value) + ' млн ₽</strong></div>';
+                } else {
+                    html += 'Оценка по мультипликаторам: <strong>' + formatMoney(equity_value) + ' млн ₽</strong>';
+                }
+                html += '</div>';
+                html += '</div>';
+                
+                // Сектор
+                html += '<div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Определенный сектор</div>';
+                html += '<div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">' + escapeHtml(sector) + '</div>';
+                html += '</div>';
+                
+                // Примененные мультипликаторы
+                html += '<div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Примененные мультипликаторы</div>';
+                html += '<div style="display: flex; gap: 16px; flex-wrap: wrap;">';
+                for (const [key, value] of Object.entries(applied_multipliers)) {
+                    html += '<div style="background: #F8F9FA; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 150px;">';
+                    html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">' + escapeHtml(key) + '</div>';
+                    html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + value.toFixed(1) + '×</div>';
+                    html += '</div>';
+                }
+                html += '</div>';
+                html += '</div>';
+                
+                // Детали расчета (для нефинансового сектора)
+                if (ev !== null && ev1 !== null && ev2 !== null) {
+                    html += '<div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">';
+                    html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Детали расчета</div>';
+                    html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">';
+                    html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV₁ (Выручка × мультипликатор)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev1) + ' млн ₽</div></div>';
+                    html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV₂ (EBITDA × мультипликатор)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev2) + ' млн ₽</div></div>';
+                    html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV (среднее)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev) + ' млн ₽</div></div>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+                
+                // Стоимость актива по методу мультипликаторов
+                html += '<div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.08) 100%); border: 2px solid rgba(102, 126, 234, 0.2); border-radius: 12px; padding: 20px; margin-bottom: 20px;">';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Стоимость актива по методу мультипликаторов</div>';
+                html += '<div style="font-size: 32px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">' + formatMoney(equity_value) + ' млн ₽</div>';
+                html += '<div style="font-size: 13px; color: var(--text-secondary);">Equity Value (стоимость собственного капитала)</div>';
+                html += '</div>';
+                
+                // Финансовые показатели
+                html += '<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Использованные финансовые показатели</div>';
+                html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; font-size: 14px;">';
+                html += '<div><span style="color: var(--text-secondary);">Выручка:</span> <strong>' + formatMoney(financial_data.revenue) + ' млн ₽</strong></div>';
+                if (financial_data.operating_profit !== null) {
+                    html += '<div><span style="color: var(--text-secondary);">Прибыль от продаж:</span> <strong>' + formatMoney(financial_data.operating_profit) + ' млн ₽</strong></div>';
+                }
+                html += '<div><span style="color: var(--text-secondary);">Амортизация:</span> <strong>' + formatMoney(financial_data.depreciation) + ' млн ₽</strong></div>';
+                html += '<div><span style="color: var(--text-secondary);">EBITDA:</span> <strong>' + formatMoney(financial_data.ebitda) + ' млн ₽</strong></div>';
+                if (financial_data.debt > 0 || financial_data.cash > 0) {
+                    html += '<div><span style="color: var(--text-secondary);">Долг:</span> <strong>' + formatMoney(financial_data.debt) + ' млн ₽</strong></div>';
+                    html += '<div><span style="color: var(--text-secondary);">Денежные средства:</span> <strong>' + formatMoney(financial_data.cash) + ' млн ₽</strong></div>';
+                }
+                if (financial_data.net_profit !== null && financial_data.net_profit > 0) {
+                    html += '<div><span style="color: var(--text-secondary);">Чистая прибыль:</span> <strong>' + formatMoney(financial_data.net_profit) + ' млн ₽</strong></div>';
+                }
+                html += '</div>';
+                html += '</div>';
+                
+                html += '</div>';
+                
+                resultDiv.innerHTML = html;
+            };
+            
+            /**
+             * Форматирует число как денежную сумму
+             * 
+             * @param {number} value Значение для форматирования
+             * @return {string} Отформатированная строка
+             */
+            const formatMoney = (value) => {
+                if (value === null || value === undefined) return '—';
+                return Math.round(value).toLocaleString('ru-RU');
+            };
+            
+            /**
+             * Экранирует HTML символы
+             * 
+             * @param {string} text Текст для экранирования
+             * @return {string} Экранированный текст
+             */
+            const escapeHtml = (text) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            };
+            
+            /**
+             * Инициализация расчета оценки по мультипликаторам
+             */
+            const initMultiplierValuation = () => {
+                const calculateBtn = document.getElementById('calculate-multiplier-btn');
+                if (!calculateBtn) {
+                    return;
+                }
+                calculateBtn.addEventListener('click', handleMultiplierValuation);
+            };
 
             window.handleTeaserGenerate = handleTeaserGenerate;
             window.handleTeaserPrint = handleTeaserPrint;
