@@ -3788,17 +3788,40 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             <label for="final-price-input" style="display: block; margin-bottom: 12px; font-weight: 700; color: var(--text-primary); font-size: 18px;">
                                 Финальная цена продажи (млн ₽)
                             </label>
-                            <input 
-                                type="number" 
-                                id="final-price-input" 
-                                name="final_price" 
-                                step="0.1" 
-                                min="0"
-                                placeholder="Введите финальную цену"
-                                style="width: 100%; padding: 18px 24px; border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 12px; font-size: 20px; font-weight: 600; background: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); transition: all 0.3s ease;"
-                                onfocus="this.style.borderColor='rgba(102, 126, 234, 0.6)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.2)';"
-                                onblur="this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.1)';"
-                            />
+                            <div style="display: flex; gap: 12px; align-items: flex-start;">
+                                <input 
+                                    type="number" 
+                                    id="final-price-input" 
+                                    name="final_price" 
+                                    step="0.1" 
+                                    min="0"
+                                    placeholder="Введите финальную цену"
+                                    style="flex: 1; padding: 18px 24px; border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 12px; font-size: 20px; font-weight: 600; background: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); transition: all 0.3s ease;"
+                                    onfocus="this.style.borderColor='rgba(102, 126, 234, 0.6)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.2)';"
+                                    onblur="this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.1)';"
+                                />
+                                <button
+                                    type="button"
+                                    id="confirm-price-btn"
+                                    class="btn btn-primary"
+                                    style="padding: 18px 32px; font-size: 16px; font-weight: 600; white-space: nowrap; border-radius: 12px;"
+                                >
+                                    Подтвердить
+                                </button>
+                            </div>
+                            <div id="final-price-updated-at" style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+                                <?php
+                                // Отображаем дату и время последнего изменения, если они есть
+                                if ($latestForm && !empty($latestForm['data_json'])) {
+                                    $formDataJson = json_decode($latestForm['data_json'], true);
+                                    if (is_array($formDataJson) && isset($formDataJson['final_price_updated_at'])) {
+                                        $updatedAt = $formDataJson['final_price_updated_at'];
+                                        $formattedDate = date('d.m.Y H:i', strtotime($updatedAt));
+                                        echo 'Последнее изменение: ' . htmlspecialchars($formattedDate, ENT_QUOTES, 'UTF-8');
+                                    }
+                                }
+                                ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4003,8 +4026,24 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         ];
                     }
                     
-                    // Добавляем цену из EV (Enterprise Value)
-                    if (!empty($dcfData['ev_breakdown']['ev'])) {
+                    // Добавляем цену: приоритет финальной цене продажи, если она указана
+                    $finalPrice = null;
+                    if (!empty($latestForm['data_json'])) {
+                        $formDataJson = json_decode($latestForm['data_json'], true);
+                        if (is_array($formDataJson) && isset($formDataJson['final_price']) && $formDataJson['final_price'] > 0) {
+                            $finalPrice = (float)$formDataJson['final_price'];
+                        }
+                    }
+                    
+                    if ($finalPrice !== null && $finalPrice > 0) {
+                        // Используем финальную цену продажи
+                        $heroStats[] = [
+                            'label' => 'Цена',
+                            'value' => number_format($finalPrice, 0, '.', ' ') . ' млн ₽',
+                            'caption' => 'Финальная цена продажи',
+                        ];
+                    } elseif (!empty($dcfData['ev_breakdown']['ev'])) {
+                        // Если финальная цена не указана, используем EV
                         $evValue = (float)$dcfData['ev_breakdown']['ev'];
                         $heroStats[] = [
                             'label' => 'Цена',
@@ -4075,11 +4114,11 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 <?php if (!empty($heroStats)): ?>
                     <div class="teaser-hero__stats">
                         <?php foreach ($heroStats as $stat): ?>
-                            <div class="teaser-stat">
+                            <div class="teaser-stat" <?php if ($stat['label'] === 'Цена'): ?>id="hero-price-stat"<?php endif; ?>>
                                 <span><?php echo htmlspecialchars($stat['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-                                <strong><?php echo htmlspecialchars($stat['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                                <strong id="<?php echo $stat['label'] === 'Цена' ? 'hero-price-value' : ''; ?>"><?php echo htmlspecialchars($stat['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
                                 <?php if (!empty($stat['caption'])): ?>
-                                    <small><?php echo htmlspecialchars($stat['caption'], ENT_QUOTES, 'UTF-8'); ?></small>
+                                    <small id="<?php echo $stat['label'] === 'Цена' ? 'hero-price-caption' : ''; ?>"><?php echo htmlspecialchars($stat['caption'], ENT_QUOTES, 'UTF-8'); ?></small>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
@@ -5495,6 +5534,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         displayMultiplierValuationResult(payload, dcfEquityValue);
                         resultDiv.style.display = 'block';
                         
+                        // Сохраняем результаты расчета мультипликатора в БД
+                        saveMultiplierValuation(payload);
+                        
                         // Показываем секцию с финальной ценой
                         const finalPriceSection = document.getElementById('final-price-section');
                         if (finalPriceSection) {
@@ -5694,6 +5736,242 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             };
             
             /**
+             * Сохраняет результаты расчета мультипликатора в БД
+             * 
+             * @param {Object} payload Данные расчета мультипликатора
+             */
+            const saveMultiplierValuation = async (payload) => {
+                try {
+                    const response = await fetch('save_price_data.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            multiplier_valuation: payload
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to save multiplier valuation:', result.message);
+                    }
+                } catch (error) {
+                    console.error('Error saving multiplier valuation:', error);
+                }
+            };
+            
+            /**
+             * Обновляет отображение даты и времени последнего изменения финальной цены
+             * 
+             * @param {string} timestamp ISO строка с датой и временем
+             */
+            const updateFinalPriceTimestamp = (timestamp) => {
+                const timestampDiv = document.getElementById('final-price-updated-at');
+                if (timestampDiv && timestamp) {
+                    try {
+                        const date = new Date(timestamp);
+                        const formattedDate = date.toLocaleDateString('ru-RU', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        timestampDiv.textContent = 'Последнее изменение: ' + formattedDate;
+                        timestampDiv.style.display = 'block';
+                    } catch (error) {
+                        console.error('Error formatting timestamp:', error);
+                    }
+                }
+            };
+            
+            /**
+             * Обновляет цену в hero block после сохранения финальной цены
+             * 
+             * @param {number} price Финальная цена продажи
+             */
+            const updateHeroPrice = (price) => {
+                const heroPriceValue = document.getElementById('hero-price-value');
+                const heroPriceCaption = document.getElementById('hero-price-caption');
+                const heroPriceStat = document.getElementById('hero-price-stat');
+                
+                if (price && price > 0) {
+                    const formattedPrice = Math.round(price).toLocaleString('ru-RU') + ' млн ₽';
+                    
+                    // Если элемент "Цена" уже существует, обновляем его
+                    if (heroPriceValue) {
+                        heroPriceValue.textContent = formattedPrice;
+                        if (heroPriceCaption) {
+                            heroPriceCaption.textContent = 'Финальная цена продажи';
+                        }
+                    } else {
+                        // Если элемента "Цена" нет, создаем его
+                        const heroStats = document.querySelector('.teaser-hero__stats');
+                        if (heroStats) {
+                            // Проверяем, не превышен ли лимит в 4 элемента
+                            const existingStats = heroStats.querySelectorAll('.teaser-stat');
+                            if (existingStats.length >= 4) {
+                                // Заменяем последний элемент или элемент с "Equity Value", если он есть
+                                let statToReplace = null;
+                                existingStats.forEach(stat => {
+                                    const label = stat.querySelector('span');
+                                    if (label && label.textContent.trim() === 'Equity Value') {
+                                        statToReplace = stat;
+                                    }
+                                });
+                                if (!statToReplace && existingStats.length > 0) {
+                                    statToReplace = existingStats[existingStats.length - 1];
+                                }
+                                
+                                if (statToReplace) {
+                                    statToReplace.id = 'hero-price-stat';
+                                    const strong = statToReplace.querySelector('strong');
+                                    const small = statToReplace.querySelector('small');
+                                    const span = statToReplace.querySelector('span');
+                                    
+                                    if (span) span.textContent = 'Цена';
+                                    if (strong) {
+                                        strong.id = 'hero-price-value';
+                                        strong.textContent = formattedPrice;
+                                    }
+                                    if (small) {
+                                        small.id = 'hero-price-caption';
+                                        small.textContent = 'Финальная цена продажи';
+                                    }
+                                }
+                            } else {
+                                // Добавляем новый элемент
+                                const newStat = document.createElement('div');
+                                newStat.className = 'teaser-stat';
+                                newStat.id = 'hero-price-stat';
+                                newStat.innerHTML = `
+                                    <span>Цена</span>
+                                    <strong id="hero-price-value">${formattedPrice}</strong>
+                                    <small id="hero-price-caption">Финальная цена продажи</small>
+                                `;
+                                heroStats.appendChild(newStat);
+                            }
+                        }
+                    }
+                }
+            };
+            
+            /**
+             * Сохраняет финальную цену продажи в БД
+             * 
+             * @param {number} price Финальная цена продажи
+             */
+            const saveFinalPrice = async (price) => {
+                try {
+                    const response = await fetch('save_price_data.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            final_price: parseFloat(price)
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to save final price:', result.message);
+                        throw new Error(result.message || 'Failed to save final price');
+                    }
+                    
+                    // Возвращаем дату обновления из ответа сервера, если она есть
+                    return result.final_price_updated_at || new Date().toISOString();
+                } catch (error) {
+                    console.error('Error saving final price:', error);
+                }
+            };
+            
+            /**
+             * Загружает сохраненные данные расчета мультипликатора и финальной цены
+             */
+            const loadSavedPriceData = () => {
+                <?php
+                // Загружаем сохраненные данные из БД
+                if ($latestForm && !empty($latestForm['data_json'])) {
+                    $formData = json_decode($latestForm['data_json'], true);
+                    if (is_array($formData)) {
+                        $savedMultiplierValuation = $formData['multiplier_valuation'] ?? null;
+                        $savedFinalPrice = $formData['final_price'] ?? null;
+                        
+                        if ($savedMultiplierValuation) {
+                            echo "const savedMultiplierValuation = " . json_encode($savedMultiplierValuation, JSON_UNESCAPED_UNICODE) . ";\n";
+                        } else {
+                            echo "const savedMultiplierValuation = null;\n";
+                        }
+                        
+                        if ($savedFinalPrice !== null) {
+                            echo "const savedFinalPrice = " . json_encode($savedFinalPrice, JSON_UNESCAPED_UNICODE) . ";\n";
+                        } else {
+                            echo "const savedFinalPrice = null;\n";
+                        }
+                        
+                        $savedFinalPriceUpdatedAt = $formData['final_price_updated_at'] ?? null;
+                        if ($savedFinalPriceUpdatedAt) {
+                            echo "const savedFinalPriceUpdatedAt = " . json_encode($savedFinalPriceUpdatedAt, JSON_UNESCAPED_UNICODE) . ";\n";
+                        } else {
+                            echo "const savedFinalPriceUpdatedAt = null;\n";
+                        }
+                    } else {
+                        echo "const savedMultiplierValuation = null;\n";
+                        echo "const savedFinalPrice = null;\n";
+                    }
+                } else {
+                    echo "const savedMultiplierValuation = null;\n";
+                    echo "const savedFinalPrice = null;\n";
+                    echo "const savedFinalPriceUpdatedAt = null;\n";
+                }
+                ?>
+                
+                // Восстанавливаем результаты расчета мультипликатора, если они есть
+                if (savedMultiplierValuation) {
+                    const resultDiv = document.getElementById('multiplier-valuation-result');
+                    const finalPriceSection = document.getElementById('final-price-section');
+                    const priceDeterminationCard = document.getElementById('price-determination');
+                    
+                    if (resultDiv && savedMultiplierValuation.sector && savedMultiplierValuation.valuation) {
+                        let dcfEquityValue = null;
+                        if (priceDeterminationCard && priceDeterminationCard.dataset.dcfEquity) {
+                            const parsed = parseFloat(priceDeterminationCard.dataset.dcfEquity);
+                            if (!isNaN(parsed) && parsed > 0) {
+                                dcfEquityValue = parsed;
+                            }
+                        }
+                        
+                        displayMultiplierValuationResult(savedMultiplierValuation, dcfEquityValue);
+                        resultDiv.style.display = 'block';
+                        
+                        if (finalPriceSection) {
+                            finalPriceSection.style.display = 'block';
+                        }
+                    }
+                }
+                
+                // Восстанавливаем финальную цену, если она есть
+                if (savedFinalPrice !== null) {
+                    const finalPriceInput = document.getElementById('final-price-input');
+                    if (finalPriceInput) {
+                        finalPriceInput.value = savedFinalPrice;
+                    }
+                    // Обновляем цену в hero block
+                    updateHeroPrice(savedFinalPrice);
+                }
+                
+                // Восстанавливаем дату и время последнего изменения, если они есть
+                if (savedFinalPriceUpdatedAt) {
+                    updateFinalPriceTimestamp(savedFinalPriceUpdatedAt);
+                }
+                
+                // Восстанавливаем дату и время последнего изменения, если они есть
+                if (savedFinalPriceUpdatedAt) {
+                    updateFinalPriceTimestamp(savedFinalPriceUpdatedAt);
+                }
+            };
+            
+            /**
              * Инициализация расчета оценки по мультипликаторам
              */
             const initMultiplierValuation = () => {
@@ -5702,6 +5980,69 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     return;
                 }
                 calculateBtn.addEventListener('click', handleMultiplierValuation);
+                
+                // Добавляем обработчик для сохранения финальной цены
+                const finalPriceInput = document.getElementById('final-price-input');
+                const confirmPriceBtn = document.getElementById('confirm-price-btn');
+                
+                if (finalPriceInput && confirmPriceBtn) {
+                    // Обработчик для кнопки "Подтвердить"
+                    confirmPriceBtn.addEventListener('click', async () => {
+                        const price = finalPriceInput.value;
+                        if (!price || parseFloat(price) <= 0) {
+                            alert('Пожалуйста, введите корректную цену');
+                            return;
+                        }
+                        
+                        // Сохраняем оригинальный текст кнопки до изменения
+                        const originalText = confirmPriceBtn.textContent;
+                        
+                        // Блокируем кнопку на время сохранения
+                        confirmPriceBtn.disabled = true;
+                        confirmPriceBtn.textContent = 'Сохранение...';
+                        
+                        try {
+                            const updatedAt = await saveFinalPrice(price);
+                            const priceValue = parseFloat(price);
+                            
+                            // Обновляем дату и время последнего изменения
+                            if (updatedAt) {
+                                updateFinalPriceTimestamp(updatedAt);
+                            } else {
+                                updateFinalPriceTimestamp(new Date().toISOString());
+                            }
+                            
+                            // Обновляем цену в hero block
+                            updateHeroPrice(priceValue);
+                            
+                            // Показываем успешное сообщение
+                            confirmPriceBtn.textContent = '✓ Сохранено';
+                            confirmPriceBtn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
+                            
+                            setTimeout(() => {
+                                confirmPriceBtn.textContent = originalText;
+                                confirmPriceBtn.style.background = '';
+                                confirmPriceBtn.disabled = false;
+                            }, 2000);
+                        } catch (error) {
+                            console.error('Error saving price:', error);
+                            alert('Ошибка при сохранении цены. Попробуйте снова.');
+                            confirmPriceBtn.disabled = false;
+                            confirmPriceBtn.textContent = originalText;
+                        }
+                    });
+                    
+                    // Также сохраняем при нажатии Enter
+                    finalPriceInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            confirmPriceBtn.click();
+                        }
+                    });
+                }
+                
+                // Загружаем сохраненные данные при инициализации
+                loadSavedPriceData();
             };
 
             window.handleTeaserGenerate = handleTeaserGenerate;

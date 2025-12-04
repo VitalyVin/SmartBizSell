@@ -83,13 +83,36 @@ try {
     // Используется модель, указанная в конфигурации (например, Qwen2.5)
     $rawResponse = callTogetherCompletions($prompt, $apiKey);
     
+    // Проверяем, что ответ от API не пустой
+    if (empty($rawResponse) || trim($rawResponse) === '') {
+        error_log("Term Sheet generation: Empty response from API");
+        throw new Exception("Получен пустой ответ от API ИИ. Попробуйте снова.");
+    }
+    
     // Очищаем ответ ИИ от технической информации (markdown, служебные фразы)
     // и форматируем для использования в документе
     $termSheetContent = cleanAndFormatTermSheet($rawResponse);
     
+    // Проверяем, что после очистки контент не пустой
+    if (empty($termSheetContent) || trim($termSheetContent) === '') {
+        error_log("Term Sheet generation: Empty content after cleaning. Raw response length: " . strlen($rawResponse));
+        // Если контент стал пустым после очистки, используем исходный ответ
+        $termSheetContent = trim($rawResponse);
+        // Если и исходный ответ пустой, выбрасываем исключение
+        if (empty($termSheetContent)) {
+            throw new Exception("После обработки ответа от ИИ получен пустой документ. Попробуйте снова.");
+        }
+    }
+    
     // Проверяем полноту документа и добавляем недостающие элементы
     // Например, если ИИ не добавил раздел с подписями, добавляем его программно
     $termSheetContent = ensureDocumentCompleteness($termSheetContent, $formData);
+    
+    // Финальная проверка: документ должен содержать хотя бы минимальный контент
+    if (empty($termSheetContent) || trim($termSheetContent) === '' || mb_strlen(trim($termSheetContent)) < 100) {
+        error_log("Term Sheet generation: Document too short after processing. Length: " . mb_strlen($termSheetContent));
+        throw new Exception("Сгенерированный документ слишком короткий или пустой. Попробуйте снова.");
+    }
     
     // Генерируем HTML для отображения Term Sheet в браузере
     // Документ форматируется как таблица с двумя колонками (25%/75%)
@@ -697,13 +720,36 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
     // Парсим JSON ответ и извлекаем сгенерированный текст
     // Структура ответа: { "choices": [{ "message": { "content": "..." } }] }
     $result = json_decode($response, true);
+    
+    // Проверяем наличие ошибок в ответе API
+    if (isset($result['error'])) {
+        $errorMessage = $result['error']['message'] ?? 'Неизвестная ошибка API';
+        error_log("Together.ai API error response: " . json_encode($result['error']));
+        throw new Exception("Ошибка API ИИ: " . $errorMessage);
+    }
+    
+    // Проверяем структуру ответа
+    if (!isset($result['choices']) || !is_array($result['choices']) || empty($result['choices'])) {
+        error_log("Together.ai API unexpected response structure: " . substr($response, 0, 500));
+        throw new Exception("Неожиданный формат ответа от API ИИ: отсутствуют choices");
+    }
+    
     if (!isset($result['choices'][0]['message']['content'])) {
-        error_log("Together.ai API unexpected response: " . $response);
-        throw new Exception("Неожиданный формат ответа от API ИИ");
+        error_log("Together.ai API unexpected response: " . substr($response, 0, 500));
+        throw new Exception("Неожиданный формат ответа от API ИИ: отсутствует content");
+    }
+    
+    // Извлекаем контент
+    $content = $result['choices'][0]['message']['content'];
+    
+    // Проверяем, что контент не пустой
+    if (empty($content) || trim($content) === '') {
+        error_log("Together.ai API returned empty content. Full response: " . substr($response, 0, 1000));
+        throw new Exception("API ИИ вернул пустой ответ. Попробуйте снова.");
     }
     
     // Возвращаем сгенерированный контент (текст Term Sheet)
-    return $result['choices'][0]['message']['content'];
+    return $content;
 }
 
 /**
@@ -779,6 +825,9 @@ function ensureDocumentCompleteness(string $content, array $formData): string
  */
 function cleanAndFormatTermSheet(string $rawResponse): string
 {
+    // Сохраняем исходный контент для возможного восстановления
+    $originalResponse = $rawResponse;
+    
     // Удаляем markdown разметку, которая может присутствовать в ответе ИИ
     // Блоки кода (```...```)
     $cleaned = preg_replace('/```[\s\S]*?```/', '', $rawResponse);
@@ -799,8 +848,12 @@ function cleanAndFormatTermSheet(string $rawResponse): string
     // Однострочные комментарии (// ...)
     $cleaned = preg_replace('/\/\/.*$/m', '', $cleaned);
     
+    // Сохраняем длину после удаления markdown для проверки
+    $afterMarkdownLength = mb_strlen($cleaned);
+    
     // Удаляем служебные фразы ИИ, которые не должны попадать в финальный документ
     // Эти фразы часто появляются в начале или конце ответа ИИ
+    // ВАЖНО: удаляем только в начале документа, чтобы не удалить весь контент
     $aiPhrases = [
         'Как ИИ-ассистент',
         'Как AI-ассистент',
@@ -810,9 +863,32 @@ function cleanAndFormatTermSheet(string $rawResponse): string
         'Созданный документ',
         'Документ включает',
     ];
-    // Удаляем каждую фразу вместе с текстом до следующего раздела или конца документа
+    
+    // Удаляем служебные фразы только в начале документа (первые 500 символов)
+    // Это предотвращает удаление всего контента, если фраза встречается в середине
+    $beginning = mb_substr($cleaned, 0, 500);
+    $rest = mb_substr($cleaned, 500);
+    
     foreach ($aiPhrases as $phrase) {
-        $cleaned = preg_replace('/' . preg_quote($phrase, '/') . '[\s\S]*?(?=\n\n|\n[А-Я]|$)/i', '', $cleaned);
+        // Удаляем фразу только если она в начале документа
+        $beginning = preg_replace('/^' . preg_quote($phrase, '/') . '[\s\S]*?(?=\n\n|\n[А-ЯЁ]|ЛИСТ|TERM|ПОКУПАТЕЛЬ|ПРОДАВЕЦ)/iu', '', $beginning);
+    }
+    
+    $cleaned = $beginning . $rest;
+    
+    // Проверка: если после удаления фраз контент стал слишком коротким (менее 50% от длины после markdown),
+    // значит мы удалили слишком много - используем версию только с удаленным markdown
+    if (mb_strlen($cleaned) < $afterMarkdownLength * 0.5 && $afterMarkdownLength > 200) {
+        error_log("Term Sheet cleaning removed too much content. Using version without AI phrases removal.");
+        // Используем версию после удаления markdown, но без удаления служебных фраз
+        $cleaned = preg_replace('/```[\s\S]*?```/', '', $originalResponse);
+        $cleaned = preg_replace('/\*\*(.*?)\*\*/', '$1', $cleaned);
+        $cleaned = preg_replace('/\*(.*?)\*/', '$1', $cleaned);
+        $cleaned = preg_replace('/#+\s*/', '', $cleaned);
+        $cleaned = preg_replace('/`(.*?)`/', '$1', $cleaned);
+        $cleaned = preg_replace('/<!--[\s\S]*?-->/', '', $cleaned);
+        $cleaned = preg_replace('/\/\*[\s\S]*?\*\//', '', $cleaned);
+        $cleaned = preg_replace('/\/\/.*$/m', '', $cleaned);
     }
     
     // Нормализуем пробелы
@@ -852,6 +928,13 @@ function cleanAndFormatTermSheet(string $rawResponse): string
  */
 function renderTermSheetHtml(string $content, array $formData): string
 {
+    // Проверяем, что контент не пустой
+    $content = trim($content);
+    if (empty($content)) {
+        error_log("renderTermSheetHtml: Empty content provided");
+        throw new Exception("Не удалось сгенерировать содержимое документа. Попробуйте снова.");
+    }
+    
     // Разбиваем контент на разделы по двойным переносам строк
     $sections = explode("\n\n", $content);
     
@@ -951,5 +1034,3 @@ function renderTermSheetHtml(string $content, array $formData): string
     
     return $html;
 }
-
-

@@ -82,6 +82,28 @@ try {
     // Рассчитываем оценку по мультипликаторам
     $valuation = calculateMultiplierValuation($sector, $financialData);
     
+    // Сохраняем результаты расчета в БД
+    $dataJson = !empty($form['data_json']) ? json_decode($form['data_json'], true) : [];
+    if (!is_array($dataJson)) {
+        $dataJson = [];
+    }
+    
+    $dataJson['multiplier_valuation'] = [
+        'sector' => $sector,
+        'financial_data' => $financialData,
+        'valuation' => $valuation,
+        'calculated_at' => date('c'),
+    ];
+    
+    $updatedDataJson = json_encode($dataJson, JSON_UNESCAPED_UNICODE);
+    $updateStmt = $pdo->prepare("
+        UPDATE seller_forms 
+        SET data_json = ?, 
+            updated_at = NOW()
+        WHERE id = ? AND user_id = ?
+    ");
+    $updateStmt->execute([$updatedDataJson, $form['id'], $user['id']]);
+    
     echo json_encode([
         'success' => true,
         'sector' => $sector,

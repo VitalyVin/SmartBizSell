@@ -152,6 +152,11 @@ function buildTeaserPayload(array $form): array
         }
     }
 
+    // Добавляем финальную цену продажи из data_json, если она есть
+    if (isset($data['final_price']) && $data['final_price'] > 0) {
+        $data['final_selling_price'] = $data['final_price'];
+    }
+    
     if (empty($data)) {
         $mapping = [
             'asset_name' => 'asset_name',
@@ -280,6 +285,7 @@ function buildTeaserPrompt(array $payload): string
       "structure": "...",
       "share_for_sale": "...",
       "valuation_expectation": "...",
+      "price": "...",
       "use_of_proceeds": "..."
   },
   "next_steps": {
@@ -292,6 +298,8 @@ function buildTeaserPrompt(array $payload): string
 Данные анкеты:
 {$json}
 {$siteNote}
+
+ВАЖНО: Если в данных анкеты указана финальная цена продажи (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если финальная цена не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
 PROMPT;
 }
 
@@ -525,7 +533,10 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         $bullets = array_filter([
             formatMetric('Структура сделки', $deal['structure'] ?? ''),
             formatMetric('Предлагаемая доля', $deal['share_for_sale'] ?? ''),
-            formatMetric('Ожидания по оценке', $deal['valuation_expectation'] ?? ''),
+            // Добавляем цену, если она указана
+            !empty($deal['price']) ? formatMetric('Цена', $deal['price']) : null,
+            // Если цена не указана, показываем ожидания по оценке
+            empty($deal['price']) ? formatMetric('Ожидания по оценке', $deal['valuation_expectation'] ?? '') : null,
             formatMetric('Использование средств', $deal['use_of_proceeds'] ?? ''),
         ]);
         if ($bullets) {
@@ -1245,10 +1256,21 @@ function normalizeTeaserData(array $data, array $payload): array
 
     $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
 
+    // Используем финальную цену продажи, если она указана
+    $finalPrice = null;
+    if (isset($payload['final_price']) && $payload['final_price'] > 0) {
+        $finalPrice = (float)$payload['final_price'];
+    } elseif (isset($payload['final_selling_price']) && $payload['final_selling_price'] > 0) {
+        $finalPrice = (float)$payload['final_selling_price'];
+    }
+    
     $data['deal_terms'] = [
         'structure' => $data['deal_terms']['structure'] ?? (($payload['deal_goal'] ?? '') ?: 'Гибкая структура сделки.'),
         'share_for_sale' => $data['deal_terms']['share_for_sale'] ?? ($payload['deal_share_range'] ?? 'Доля обсуждается.'),
         'valuation_expectation' => $data['deal_terms']['valuation_expectation'] ?? 'Ожидаемая оценка обсуждается с инвестором.',
+        'price' => $finalPrice !== null && $finalPrice > 0 
+            ? 'Цена актива: ' . number_format($finalPrice, 0, '.', ' ') . ' млн ₽'
+            : ($data['deal_terms']['price'] ?? null),
         'use_of_proceeds' => $data['deal_terms']['use_of_proceeds'] ?? 'Средства будут направлены на масштабирование бизнеса.',
     ];
 
