@@ -5531,16 +5531,20 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 const { sector, financial_data, valuation } = payload;
                 const { equity_value, applied_multipliers, ev, ev1, ev2 } = valuation;
                 
+                // Используем EV среднее для итоговой оценки по мультипликаторам
+                // Если EV нет (финансовый сектор), используем equity_value
+                const multiplierValue = (ev !== null && ev > 0) ? ev : equity_value;
+                
                 // Определяем диапазон оценки (от меньшей до большей цены)
-                let minValue = equity_value;
-                let maxValue = equity_value;
+                let minValue = multiplierValue;
+                let maxValue = multiplierValue;
                 
                 if (dcfEquityValue !== null && dcfEquityValue > 0) {
-                    if (dcfEquityValue < equity_value) {
+                    if (dcfEquityValue < multiplierValue) {
                         minValue = dcfEquityValue;
-                        maxValue = equity_value;
+                        maxValue = multiplierValue;
                     } else {
-                        minValue = equity_value;
+                        minValue = multiplierValue;
                         maxValue = dcfEquityValue;
                     }
                 }
@@ -5556,9 +5560,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 html += '<div style="font-size: 14px; color: var(--text-secondary); margin-top: 12px;">';
                 if (dcfEquityValue !== null && dcfEquityValue > 0) {
                     html += '<div style="margin-bottom: 4px;">• Оценка по DCF: <strong>' + formatMoney(dcfEquityValue) + ' млн ₽</strong></div>';
-                    html += '<div>• Оценка по мультипликаторам: <strong>' + formatMoney(equity_value) + ' млн ₽</strong></div>';
+                    html += '<div>• Оценка по мультипликаторам: <strong>' + formatMoney(multiplierValue) + ' млн ₽</strong></div>';
                 } else {
-                    html += 'Оценка по мультипликаторам: <strong>' + formatMoney(equity_value) + ' млн ₽</strong>';
+                    html += 'Оценка по мультипликаторам: <strong>' + formatMoney(multiplierValue) + ' млн ₽</strong>';
                 }
                 html += '</div>';
                 html += '</div>';
@@ -5597,27 +5601,67 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 // Стоимость актива по методу мультипликаторов
                 html += '<div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.08) 100%); border: 2px solid rgba(102, 126, 234, 0.2); border-radius: 12px; padding: 20px; margin-bottom: 20px;">';
                 html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Стоимость актива по методу мультипликаторов</div>';
-                html += '<div style="font-size: 32px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">' + formatMoney(equity_value) + ' млн ₽</div>';
-                html += '<div style="font-size: 13px; color: var(--text-secondary);">Equity Value (стоимость собственного капитала)</div>';
+                html += '<div style="font-size: 32px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">' + formatMoney(multiplierValue) + ' млн ₽</div>';
+                if (ev !== null && ev > 0) {
+                    html += '<div style="font-size: 13px; color: var(--text-secondary);">EV (Enterprise Value, среднее)</div>';
+                } else {
+                    html += '<div style="font-size: 13px; color: var(--text-secondary);">Equity Value (стоимость собственного капитала)</div>';
+                }
                 html += '</div>';
                 
                 // Финансовые показатели
-                html += '<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">';
-                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Использованные финансовые показатели</div>';
-                html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; font-size: 14px;">';
-                html += '<div><span style="color: var(--text-secondary);">Выручка:</span> <strong>' + formatMoney(financial_data.revenue) + ' млн ₽</strong></div>';
+                html += '<div style="margin-top: 24px; padding-top: 24px; border-top: 2px solid var(--border-color);">';
+                html += '<div style="font-weight: 700; color: var(--text-primary); margin-bottom: 20px; font-size: 16px; letter-spacing: 0.02em;">Использованные финансовые показатели</div>';
+                html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">';
+                
+                // Выручка
+                html += '<div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.05) 100%); border: 1px solid rgba(102, 126, 234, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Выручка</div>';
+                html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.revenue) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                html += '</div>';
+                
+                // Прибыль от продаж
                 if (financial_data.operating_profit !== null) {
-                    html += '<div><span style="color: var(--text-secondary);">Прибыль от продаж:</span> <strong>' + formatMoney(financial_data.operating_profit) + ' млн ₽</strong></div>';
+                    html += '<div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(22, 163, 74, 0.05) 100%); border: 1px solid rgba(34, 197, 94, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                    html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Прибыль от продаж</div>';
+                    html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.operating_profit) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                    html += '</div>';
                 }
-                html += '<div><span style="color: var(--text-secondary);">Амортизация:</span> <strong>' + formatMoney(financial_data.depreciation) + ' млн ₽</strong></div>';
-                html += '<div><span style="color: var(--text-secondary);">EBITDA:</span> <strong>' + formatMoney(financial_data.ebitda) + ' млн ₽</strong></div>';
+                
+                // Амортизация
+                html += '<div style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.05) 100%); border: 1px solid rgba(251, 191, 36, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Амортизация</div>';
+                html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.depreciation) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                html += '</div>';
+                
+                // EBITDA
+                html += '<div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.05) 100%); border: 1px solid rgba(59, 130, 246, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">EBITDA</div>';
+                html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.ebitda) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                html += '</div>';
+                
+                // Долг
                 if (financial_data.debt > 0 || financial_data.cash > 0) {
-                    html += '<div><span style="color: var(--text-secondary);">Долг:</span> <strong>' + formatMoney(financial_data.debt) + ' млн ₽</strong></div>';
-                    html += '<div><span style="color: var(--text-secondary);">Денежные средства:</span> <strong>' + formatMoney(financial_data.cash) + ' млн ₽</strong></div>';
+                    html += '<div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.05) 100%); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                    html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Долг</div>';
+                    html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.debt) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                    html += '</div>';
+                    
+                    // Денежные средства
+                    html += '<div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.05) 100%); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                    html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Денежные средства</div>';
+                    html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.cash) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                    html += '</div>';
                 }
+                
+                // Чистая прибыль
                 if (financial_data.net_profit !== null && financial_data.net_profit > 0) {
-                    html += '<div><span style="color: var(--text-secondary);">Чистая прибыль:</span> <strong>' + formatMoney(financial_data.net_profit) + ' млн ₽</strong></div>';
+                    html += '<div style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(147, 51, 234, 0.05) 100%); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: 12px; padding: 16px; transition: all 0.3s ease;">';
+                    html += '<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Чистая прибыль</div>';
+                    html += '<div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">' + formatMoney(financial_data.net_profit) + ' <span style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">млн ₽</span></div>';
+                    html += '</div>';
                 }
+                
                 html += '</div>';
                 html += '</div>';
                 
