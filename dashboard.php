@@ -2666,10 +2666,151 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         .term-sheet-result {
             width: 100%;
             max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+        }
+        .term-sheet-result::-webkit-scrollbar {
+            height: 8px;
+        }
+        .term-sheet-result::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .term-sheet-result::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+        .term-sheet-result::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.3);
         }
         .term-sheet-result .term-sheet-document {
             max-width: 1200px !important;
             width: 100% !important;
+        }
+        
+        /* Мобильная верстка для Term Sheet */
+        @media (max-width: 768px) {
+            .term-sheet-controls {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+            .term-sheet-controls .btn {
+                width: 100% !important;
+                padding: 12px 20px !important;
+                font-size: 14px !important;
+            }
+            .term-sheet-result {
+                margin: 0 -20px;
+                padding: 0 20px;
+            }
+            .term-sheet-result .term-sheet-document {
+                padding: 24px 16px !important;
+                border-radius: 16px !important;
+                font-size: 14px !important;
+                line-height: 1.6 !important;
+            }
+            .term-sheet-result .term-sheet-document > div:first-child {
+                margin-bottom: 32px !important;
+                padding-bottom: 24px !important;
+            }
+            .term-sheet-result .term-sheet-document h1 {
+                font-size: 24px !important;
+                margin-bottom: 8px !important;
+            }
+            .term-sheet-result .term-sheet-document > div:first-child p {
+                font-size: 14px !important;
+            }
+            .term-sheet-result .term-sheet-document table {
+                font-size: 13px !important;
+                width: 100% !important;
+                display: table !important;
+                table-layout: fixed !important;
+            }
+            .term-sheet-result .term-sheet-document table tr {
+                display: table-row !important;
+            }
+            .term-sheet-result .term-sheet-document table td {
+                padding: 12px 8px !important;
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+            }
+            .term-sheet-result .term-sheet-document table td:first-child {
+                width: 30% !important;
+                min-width: 80px;
+                padding-right: 12px !important;
+                font-size: 12px !important;
+                font-weight: 600 !important;
+            }
+            .term-sheet-result .term-sheet-document table td:last-child {
+                width: 70% !important;
+            }
+            .term-sheet-result .term-sheet-document h3 {
+                font-size: 15px !important;
+                margin-top: 12px !important;
+                margin-bottom: 6px !important;
+            }
+            .term-sheet-result .term-sheet-document p {
+                font-size: 13px !important;
+                line-height: 1.6 !important;
+                margin-bottom: 10px !important;
+            }
+            .term-sheet-result .term-sheet-document > div:last-child {
+                margin-top: 32px !important;
+                padding-top: 24px !important;
+                font-size: 12px !important;
+            }
+            .term-sheet-result .term-sheet-document > div:last-child p {
+                font-size: 12px !important;
+                margin-bottom: 6px !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .term-sheet-result {
+                margin: 0 -16px;
+                padding: 0 16px;
+            }
+            .term-sheet-result .term-sheet-document {
+                padding: 20px 12px !important;
+                border-radius: 12px !important;
+                font-size: 13px !important;
+            }
+            .term-sheet-result .term-sheet-document h1 {
+                font-size: 20px !important;
+            }
+            .term-sheet-result .term-sheet-document > div:first-child p {
+                font-size: 13px !important;
+            }
+            .term-sheet-result .term-sheet-document table {
+                font-size: 12px !important;
+                width: 100% !important;
+                display: table !important;
+                table-layout: fixed !important;
+            }
+            .term-sheet-result .term-sheet-document table td {
+                padding: 10px 6px !important;
+                font-size: 12px !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+            }
+            .term-sheet-result .term-sheet-document table td:first-child {
+                width: 35% !important;
+                font-size: 11px !important;
+                padding-right: 8px !important;
+                font-weight: 600 !important;
+            }
+            .term-sheet-result .term-sheet-document table td:last-child {
+                width: 65% !important;
+            }
+            .term-sheet-result .term-sheet-document h3 {
+                font-size: 14px !important;
+            }
+            .term-sheet-result .term-sheet-document p {
+                font-size: 12px !important;
+            }
         }
         .teaser-result {
             background: rgba(255,255,255,0.85);
