@@ -3587,7 +3587,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <?php foreach ($activeForms as $form): ?>
                         <div class="table-row">
                             <div>
-                                <strong><?php echo htmlspecialchars($form['asset_name'] ?: 'Без названия', ENT_QUOTES, 'UTF-8'); ?></strong>
+                                <strong><?php echo htmlspecialchars(html_entity_decode($form['asset_name'] ?: 'Без названия', ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES, 'UTF-8'); ?></strong>
                                 <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
                                     Создана: <?php echo date('d.m.Y H:i', strtotime($form['created_at'])); ?>
                                 </div>
@@ -3627,7 +3627,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 <?php foreach ($draftForms as $form): ?>
                     <div class="table-row">
                     <div>
-                        <strong><?php echo htmlspecialchars($form['asset_name'] ?: 'Черновик без названия', ENT_QUOTES, 'UTF-8'); ?></strong>
+                        <strong><?php echo htmlspecialchars(html_entity_decode($form['asset_name'] ?: 'Черновик без названия', ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES, 'UTF-8'); ?></strong>
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
                             Обновлён: <?php echo date('d.m.Y H:i', strtotime($form['updated_at'])); ?>
                         </div>
@@ -3736,13 +3736,13 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             <div class="dcf-card" id="dcf-model">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
                     <div>
-                        <h2 style="margin-bottom:4px;">DCF Model</h2>
+                        <h2 style="margin-bottom:4px;">DCF Model (Доходный подход)</h2>
                     </div>
                     <button
                         type="button"
                         class="btn btn-export-pdf"
                         id="export-dcf-pdf"
-                        data-asset-name="<?php echo htmlspecialchars($latestForm['asset_name'] ?? 'DCF', ENT_QUOTES, 'UTF-8'); ?>"
+                        data-asset-name="<?php echo htmlspecialchars(html_entity_decode($latestForm['asset_name'] ?? 'DCF', ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES, 'UTF-8'); ?>"
                         data-date-label="<?php echo isset($latestForm['submitted_at']) ? date('d.m.Y', strtotime($latestForm['submitted_at'])) : date('d.m.Y'); ?>"
                     >
                         Сохранить DCF в PDF
@@ -3750,7 +3750,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 </div>
                 <?php if ($latestForm): ?>
                     <?php
-                        $dcfAssetName = $latestForm['asset_name'] ?: 'Без названия';
+                        $dcfAssetName = html_entity_decode($latestForm['asset_name'] ?: 'Без названия', ENT_QUOTES | ENT_HTML5, 'UTF-8');
                         $dcfDate = null;
                         if (!empty($latestForm['submitted_at'])) {
                             $dcfDate = date('d.m.Y', strtotime($latestForm['submitted_at']));
@@ -3950,20 +3950,20 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <div id="final-price-section" style="display: none; margin-top: 32px; padding-top: 32px; border-top: 2px solid var(--border-color);">
                         <div style="margin-bottom: 24px;">
                             <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary);">
-                                Финальная цена продажи
+                                Цена предложения Продавца
                             </h3>
                             <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;">
                                 Оценка компании разными методами может давать различные результаты. DCF-метод учитывает будущие денежные потоки и долгосрочные перспективы развития, в то время как метод мультипликаторов основан на текущих рыночных показателях и сравнении с аналогичными компаниями в отрасли.
                             </p>
                             <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.08) 100%); border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 16px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);">
                                 <p style="color: var(--text-primary); line-height: 1.7; margin: 0; font-size: 18px; font-weight: 700; text-align: center;">
-                                    Укажите финальную цену, по которой актив будет выставлен на продажу. Рекомендуем выбрать значение в пределах рассчитанного диапазона оценки.
+                                    Укажите цену предложения Продавца, по которой актив будет выставлен на продажу. Рекомендуем выбрать значение в пределах рассчитанного диапазона оценки.
                                 </p>
                             </div>
                         </div>
                         <div style="max-width: 500px;">
                             <label for="final-price-input" style="display: block; margin-bottom: 12px; font-weight: 700; color: var(--text-primary); font-size: 18px;">
-                                Финальная цена продажи (млн ₽)
+                                Цена предложения Продавца (млн ₽)
                             </label>
                             <div style="display: flex; gap: 12px; align-items: flex-start;">
                                 <input 
@@ -3972,7 +3972,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                                     name="final_price" 
                                     step="0.1" 
                                     min="0"
-                                    placeholder="Введите финальную цену"
+                                    placeholder="Введите цену предложения Продавца"
                                     style="flex: 1; padding: 18px 24px; border: 2px solid rgba(102, 126, 234, 0.3); border-radius: 12px; font-size: 20px; font-weight: 600; background: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); transition: all 0.3s ease;"
                                     onfocus="this.style.borderColor='rgba(102, 126, 234, 0.6)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.2)';"
                                     onblur="this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.1)';"
@@ -4217,7 +4217,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         $heroStats[] = [
                             'label' => 'Цена',
                             'value' => number_format($finalPrice, 0, '.', ' ') . ' млн ₽',
-                            'caption' => 'Финальная цена продажи',
+                            'caption' => 'Цена предложения Продавца',
                         ];
                     } elseif (!empty($dcfData['ev_breakdown']['ev'])) {
                         // Если финальная цена не указана, используем EV
@@ -5728,15 +5728,16 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 html += '</div>';
                 html += '</div>';
                 
-                // Сектор
+                // Отрасль
                 html += '<div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">';
-                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Определенный сектор</div>';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Отрасль</div>';
                 html += '<div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">' + escapeHtml(sector) + '</div>';
                 html += '</div>';
                 
                 // Примененные мультипликаторы
                 html += '<div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">';
-                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Примененные мультипликаторы</div>';
+                html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Примененные мультипликаторы</div>';
+                html += '<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">Это текущие мультипликаторы по аналогичным сделкам M&A на российском рынке</div>';
                 html += '<div style="display: flex; gap: 16px; flex-wrap: wrap;">';
                 for (const [key, value] of Object.entries(applied_multipliers)) {
                     html += '<div style="background: #F8F9FA; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 150px;">';
@@ -5903,7 +5904,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             /**
              * Обновляет цену в hero block после сохранения финальной цены
              * 
-             * @param {number} price Финальная цена продажи
+             * @param {number} price Цена предложения Продавца
              */
             const updateHeroPrice = (price) => {
                 const heroPriceValue = document.getElementById('hero-price-value');
@@ -5917,7 +5918,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     if (heroPriceValue) {
                         heroPriceValue.textContent = formattedPrice;
                         if (heroPriceCaption) {
-                            heroPriceCaption.textContent = 'Финальная цена продажи';
+                            heroPriceCaption.textContent = 'Цена предложения Продавца';
                         }
                     } else {
                         // Если элемента "Цена" нет, создаем его
@@ -5951,7 +5952,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                                     }
                                     if (small) {
                                         small.id = 'hero-price-caption';
-                                        small.textContent = 'Финальная цена продажи';
+                                        small.textContent = 'Цена предложения Продавца';
                                     }
                                 }
                             } else {
@@ -5962,7 +5963,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                                 newStat.innerHTML = `
                                     <span>Цена</span>
                                     <strong id="hero-price-value">${formattedPrice}</strong>
-                                    <small id="hero-price-caption">Финальная цена продажи</small>
+                                    <small id="hero-price-caption">Цена предложения Продавца</small>
                                 `;
                                 heroStats.appendChild(newStat);
                             }
@@ -5972,9 +5973,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             };
             
             /**
-             * Сохраняет финальную цену продажи в БД
+             * Сохраняет цену предложения Продавца в БД
              * 
-             * @param {number} price Финальная цена продажи
+             * @param {number} price Цена предложения Продавца
              */
             const saveFinalPrice = async (price) => {
                 try {

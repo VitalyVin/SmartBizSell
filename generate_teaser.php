@@ -299,7 +299,7 @@ function buildTeaserPrompt(array $payload): string
 {$json}
 {$siteNote}
 
-ВАЖНО: Если в данных анкеты указана финальная цена продажи (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если финальная цена не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
+ВАЖНО: Если в данных анкеты указана цена предложения Продавца (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если цена предложения Продавца не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
 PROMPT;
 }
 
