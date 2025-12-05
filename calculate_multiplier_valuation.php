@@ -584,6 +584,16 @@ function extractFinancialData(array $form): array
 /**
  * Рассчитывает оценку компании по методу мультипликаторов.
  * 
+ * Алгоритм расчета:
+ * - Для нефинансовых секторов:
+ *   EV₁ = Выручка × EV/Выручка
+ *   EV₂ = (Прибыль от продаж + амортизация) × EV/Прибыль от продаж
+ *   Итоговая EV = среднее из EV₁ и EV₂
+ *   Equity Value = EV - Долг + Денежные средства
+ * 
+ * - Для финансового сектора:
+ *   Equity Value = Чистая прибыль × P/E
+ * 
  * @param string $sector Сектор компании
  * @param array $financialData Финансовые данные
  * @return array Результаты расчета оценки
@@ -591,7 +601,7 @@ function extractFinancialData(array $form): array
 function calculateMultiplierValuation(string $sector, array $financialData): array
 {
     // Мультипликаторы по секторам
-    // Формат: [EV/Выручка, EV/EBITDA]
+    // Формат: [EV/Выручка, EV/Прибыль от продаж]
     $multipliers = [
         'Средний по рынку' => [0.9, 4.8],
         'TMT' => [2.0, 6.1],
@@ -605,7 +615,8 @@ function calculateMultiplierValuation(string $sector, array $financialData): arr
     ];
     
     $revenue = $financialData['revenue'];
-    $ebitda = $financialData['ebitda'];
+    $operatingProfit = $financialData['operating_profit'];
+    $depreciation = $financialData['depreciation'];
     $debt = $financialData['debt'];
     $cash = $financialData['cash'];
     $netProfit = $financialData['net_profit'];
@@ -630,7 +641,7 @@ function calculateMultiplierValuation(string $sector, array $financialData): arr
             'P/E' => $peMultiplier,
         ];
     } else {
-        // Для остальных секторов используем EV/Выручка и EV/EBITDA
+        // Для остальных секторов используем EV/Выручка и EV/Прибыль от продаж
         $sectorMultipliers = $multipliers[$sector] ?? $multipliers['Средний по рынку'];
         
         if ($sectorMultipliers === null) {
@@ -638,13 +649,14 @@ function calculateMultiplierValuation(string $sector, array $financialData): arr
         }
         
         $evRevenueMultiplier = $sectorMultipliers[0];
-        $evEbitdaMultiplier = $sectorMultipliers[1];
+        $evOperatingProfitMultiplier = $sectorMultipliers[1];
         
         // EV₁ = Выручка × EV/Выручка
         $ev1 = $revenue * $evRevenueMultiplier;
         
-        // EV₂ = EBITDA × EV/EBITDA
-        $ev2 = $ebitda * $evEbitdaMultiplier;
+        // EV₂ = (Прибыль от продаж + амортизация) × EV/Прибыль от продаж
+        $operatingProfitPlusDepreciation = $operatingProfit + $depreciation;
+        $ev2 = $operatingProfitPlusDepreciation * $evOperatingProfitMultiplier;
         
         // Итоговая EV = среднее из EV₁ и EV₂
         $ev = ($ev1 + $ev2) / 2;
@@ -654,7 +666,7 @@ function calculateMultiplierValuation(string $sector, array $financialData): arr
         
         $appliedMultipliers = [
             'EV/Выручка' => $evRevenueMultiplier,
-            'EV/EBITDA' => $evEbitdaMultiplier,
+            'EV/Прибыль от продаж' => $evOperatingProfitMultiplier,
         ];
     }
     

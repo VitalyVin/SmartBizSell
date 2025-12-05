@@ -5691,9 +5691,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 const { sector, financial_data, valuation } = payload;
                 const { equity_value, applied_multipliers, ev, ev1, ev2 } = valuation;
                 
-                // Используем EV среднее для итоговой оценки по мультипликаторам
-                // Если EV нет (финансовый сектор), используем equity_value
-                const multiplierValue = (ev !== null && ev > 0) ? ev : equity_value;
+                // Используем equity_value для итоговой оценки по мультипликаторам
+                // Для нефинансовых секторов: equity_value = EV + денежные средства - долг
+                // Для финансового сектора: equity_value = Чистая прибыль × P/E
+                const multiplierValue = equity_value;
                 
                 // Определяем диапазон оценки (от меньшей до большей цены)
                 let minValue = multiplierValue;
@@ -5752,7 +5753,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Детали расчета</div>';
                     html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">';
                     html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV₁ (Выручка × мультипликатор)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev1) + ' млн ₽</div></div>';
-                    html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV₂ (EBITDA × мультипликатор)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev2) + ' млн ₽</div></div>';
+                    html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV₂ ((Прибыль от продаж + амортизация) × мультипликатор)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev2) + ' млн ₽</div></div>';
                     html += '<div><div style="font-size: 11px; color: var(--text-secondary);">EV (среднее)</div><div style="font-size: 16px; font-weight: 600;">' + formatMoney(ev) + ' млн ₽</div></div>';
                     html += '</div>';
                     html += '</div>';
@@ -5762,11 +5763,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 html += '<div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.08) 100%); border: 2px solid rgba(102, 126, 234, 0.2); border-radius: 12px; padding: 20px; margin-bottom: 20px;">';
                 html += '<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Стоимость актива по методу мультипликаторов</div>';
                 html += '<div style="font-size: 32px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">' + formatMoney(multiplierValue) + ' млн ₽</div>';
-                if (ev !== null && ev > 0) {
-                    html += '<div style="font-size: 13px; color: var(--text-secondary);">EV (Enterprise Value, среднее)</div>';
-                } else {
-                    html += '<div style="font-size: 13px; color: var(--text-secondary);">Equity Value (стоимость собственного капитала)</div>';
-                }
+                html += '<div style="font-size: 13px; color: var(--text-secondary);">Оценочная стоимость актива</div>';
                 html += '</div>';
                 
                 // Финансовые показатели
