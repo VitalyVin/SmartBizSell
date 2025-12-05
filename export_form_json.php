@@ -3,11 +3,17 @@
  * Экспорт данных анкеты в формате JSON
  * 
  * Функциональность:
- * - Загрузка данных анкеты пользователя
+ * - Загрузка данных анкеты пользователя по ID
  * - Приоритетное использование data_json (новый формат)
- * - Fallback на отдельные поля БД (старый формат)
- * - Формирование имени файла на основе названия актива и даты
+ * - Fallback на отдельные поля БД (старый формат) для обратной совместимости
+ * - Формирование безопасного имени файла на основе названия актива и даты
  * - Отдача файла для скачивания с правильными HTTP-заголовками
+ * - Добавление метаданных (ID, статус, даты) в экспортируемый JSON
+ * 
+ * Безопасность:
+ * - Проверка авторизации пользователя
+ * - Проверка принадлежности анкеты текущему пользователю
+ * - Санитизация имени файла для предотвращения path traversal атак
  * 
  * @package SmartBizSell
  * @version 1.0
@@ -15,10 +21,12 @@
 
 require_once 'config.php';
 
+// Проверка авторизации - доступ только для авторизованных пользователей
 if (!isLoggedIn()) {
     redirectToLogin();
 }
 
+// Получение данных текущего пользователя
 $user = getCurrentUser();
 if (!$user) {
     session_destroy();
@@ -26,28 +34,31 @@ if (!$user) {
 }
 
 // Получение ID анкеты из GET-параметра
+// Приведение к int для защиты от SQL-инъекций
 $formId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($formId <= 0) {
-    http_response_code(400);
+    http_response_code(400);  // Bad Request
     die(json_encode(['error' => 'Не указан ID анкеты']));
 }
 
 // Загрузка анкеты из базы данных
+// Проверяем, что анкета принадлежит текущему пользователю (защита от несанкционированного доступа)
 $pdo = getDBConnection();
 $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
 $stmt->execute([$formId, $user['id']]);
 $form = $stmt->fetch();
 
 if (!$form) {
-    http_response_code(404);
+    http_response_code(404);  // Not Found
     die(json_encode(['error' => 'Анкета не найдена']));
 }
 
-// Собираем полные данные анкеты
+// Инициализация массива для данных анкеты
 $formData = [];
 
 // Приоритет: если есть data_json (новый формат), используем его как основу
-// data_json содержит полную структуру формы в едином формате
+// data_json содержит полную структуру формы в едином формате JSON
+// Это наиболее полный и актуальный источник данных
 if (!empty($form['data_json'])) {
     $decoded = json_decode($form['data_json'], true);
     if (is_array($decoded)) {
@@ -55,7 +66,9 @@ if (!empty($form['data_json'])) {
     }
 }
 
-// Добавляем метаданные из базы (ID, статус, даты создания/обновления)
+// Добавляем метаданные из базы данных
+// Метаданные содержат служебную информацию об анкете (ID, статус, даты)
+// Это полезно для отслеживания и управления анкетами
 $formData['_metadata'] = [
     'id' => $form['id'],
     'user_id' => $form['user_id'],
@@ -67,12 +80,14 @@ $formData['_metadata'] = [
 
 // Fallback: если data_json пустой или содержит только метаданные,
 // собираем данные из отдельных полей БД (старый формат)
-// Это обеспечивает совместимость со старыми анкетами
+// Это обеспечивает совместимость со старыми анкетами, созданными до внедрения data_json
 if (empty($formData) || (count($formData) === 1 && isset($formData['_metadata']))) {
+    // Маппинг старых названий колонок БД на новые названия полей
+    // Обеспечивает единообразие экспортируемых данных
     $formData = [
         'asset_name' => $form['asset_name'] ?? '',
-        'deal_share_range' => $form['deal_subject'] ?? '',
-        'deal_goal' => $form['deal_purpose'] ?? '',
+        'deal_share_range' => $form['deal_subject'] ?? '',      // Старое название: deal_subject
+        'deal_goal' => $form['deal_purpose'] ?? '',             // Старое название: deal_purpose
         'asset_disclosure' => $form['asset_disclosure'] ?? '',
         'company_description' => $form['company_description'] ?? '',
         'presence_regions' => $form['presence_regions'] ?? '',
@@ -116,6 +131,7 @@ if (empty($formData) || (count($formData) === 1 && isset($formData['_metadata'])
     ];
 
     // Добавляем динамические таблицы из JSON-полей БД
+    // Эти поля хранят структурированные данные (массивы) в формате JSON
     if (!empty($form['production_volumes'])) {
         $formData['production'] = json_decode($form['production_volumes'], true) ?: [];
     }
@@ -130,17 +146,30 @@ if (empty($formData) || (count($formData) === 1 && isset($formData['_metadata'])
 // Формируем безопасное имя файла для скачивания
 // Формат: anketa_{название_актива}_{дата}.json
 $assetName = $form['asset_name'] ?: 'form';
-$assetName = preg_replace('/[^a-zA-Z0-9а-яА-ЯёЁ_-]/u', '_', $assetName); // Удаляем недопустимые символы
-$assetName = mb_substr($assetName, 0, 50); // Ограничиваем длину
+
+// Санитизация имени файла:
+// 1. Удаляем все символы, кроме букв, цифр, дефисов и подчеркиваний
+// 2. Ограничиваем длину до 50 символов для удобства
+// Это предотвращает проблемы с файловой системой и path traversal атаки
+$assetName = preg_replace('/[^a-zA-Z0-9а-яА-ЯёЁ_-]/u', '_', $assetName);
+$assetName = mb_substr($assetName, 0, 50);
+
+// Формируем дату из даты обновления (или создания, если обновление отсутствует)
 $dateLabel = date('Y-m-d', strtotime($form['updated_at'] ?: $form['created_at']));
 $fileName = "anketa_{$assetName}_{$dateLabel}.json";
 
 // Устанавливаем HTTP-заголовки для скачивания файла
+// Content-Type: application/json - указывает браузеру тип содержимого
+// Content-Disposition: attachment - заставляет браузер скачать файл, а не открыть его
+// Cache-Control и Pragma - предотвращают кеширование файла
 header('Content-Type: application/json; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $fileName . '"');
 header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
 header('Pragma: public');
 
-// Выводим JSON с красивым форматированием (отступы, Unicode, слэши)
+// Выводим JSON с красивым форматированием
+// JSON_UNESCAPED_UNICODE - сохраняет кириллицу без экранирования (\uXXXX)
+// JSON_PRETTY_PRINT - добавляет отступы и переносы строк для читаемости
+// JSON_UNESCAPED_SLASHES - не экранирует слэши (/) в URL
 echo json_encode($formData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 exit;

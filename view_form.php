@@ -1,20 +1,32 @@
 <?php
 /**
  * Страница просмотра анкеты продавца
+ * 
+ * Функциональность:
+ * - Отображение полной информации об анкете продавца
+ * - Поддержка как нового формата (data_json), так и старого (отдельные поля БД)
+ * - Отображение всех секций анкеты: детали сделки, описание бизнеса, производство, финансы, баланс
+ * - Возможность редактирования и экспорта анкеты
+ * 
+ * @package SmartBizSell
+ * @version 1.0
  */
 
 require_once 'config.php';
 
+// Проверка авторизации - доступ только для авторизованных пользователей
 if (!isLoggedIn()) {
     redirectToLogin();
 }
 
+// Получение данных текущего пользователя
 $user = getCurrentUser();
 if (!$user) {
     session_destroy();
     redirectToLogin();
 }
 
+// Получение ID анкеты из GET-параметра
 $formId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($formId <= 0) {
     header('Location: dashboard.php');
@@ -22,10 +34,11 @@ if ($formId <= 0) {
 }
 
 /**
- * Загружаем анкету пользователя
+ * Загружаем анкету пользователя из базы данных
+ * Проверяем, что анкета принадлежит текущему пользователю (защита от несанкционированного доступа)
  */
 $pdo = getDBConnection();
- $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+$stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
 $stmt->execute([$formId, $user['id']]);
 $form = $stmt->fetch();
 
@@ -37,10 +50,12 @@ if (!$form) {
 /**
  * Приводит данные формы к единому виду для отображения
  * 
- * Приоритет источников:
+ * Приоритет источников данных:
  * 1. data_json (новый формат) - если есть, используется полностью
  * 2. Отдельные поля БД (старый формат) - маппинг старых названий колонок на новые
  * 3. JSON-поля для таблиц (production_volumes, financial_results, balance_indicators)
+ * 
+ * Обеспечивает обратную совместимость со старыми формами, сохраненными до внедрения data_json
  * 
  * @param array $form Данные формы из базы данных
  * @return array Унифицированные данные формы для отображения
@@ -48,6 +63,7 @@ if (!$form) {
 function buildViewData(array $form): array
 {
     // Приоритет: data_json содержит полную структуру в новом формате
+    // Это основной источник данных для новых форм
     if (!empty($form['data_json'])) {
         $decoded = json_decode($form['data_json'], true);
         if (is_array($decoded)) {
@@ -56,11 +72,11 @@ function buildViewData(array $form): array
     }
 
     // Fallback: маппинг старых названий колонок БД на новые названия полей
-    // Обеспечивает совместимость со старыми формами
+    // Обеспечивает совместимость со старыми формами, сохраненными до внедрения data_json
     $mapping = [
         'asset_name' => 'asset_name',
-        'deal_share_range' => 'deal_subject',
-        'deal_goal' => 'deal_purpose',
+        'deal_share_range' => 'deal_subject',  // Старое название колонки: deal_subject
+        'deal_goal' => 'deal_purpose',          // Старое название колонки: deal_purpose
         'asset_disclosure' => 'asset_disclosure',
         'company_description' => 'company_description',
         'presence_regions' => 'presence_regions',
@@ -95,11 +111,14 @@ function buildViewData(array $form): array
         'financial_source' => 'financial_source',
     ];
 
+    // Собираем данные из отдельных полей БД
     $data = [];
     foreach ($mapping as $field => $column) {
         $data[$field] = $form[$column] ?? '';
     }
 
+    // Восстанавливаем таблицы из JSON-полей (для старых форм)
+    // production_volumes, financial_results, balance_indicators - старые названия JSON-колонок
     $data['production'] = !empty($form['production_volumes']) ? (json_decode($form['production_volumes'], true) ?: []) : [];
     $data['financial']  = !empty($form['financial_results']) ? (json_decode($form['financial_results'], true) ?: []) : [];
     $data['balance']    = !empty($form['balance_indicators']) ? (json_decode($form['balance_indicators'], true) ?: []) : [];
@@ -107,11 +126,18 @@ function buildViewData(array $form): array
     return $data;
 }
 
+// Строим унифицированные данные для отображения
 $formData = buildViewData($form);
+
+// Извлекаем таблицы для удобного отображения
 $productionRows = is_array($formData['production'] ?? null) ? $formData['production'] : [];
 $financialRows  = is_array($formData['financial'] ?? null) ? $formData['financial'] : [];
 $balanceRows    = is_array($formData['balance'] ?? null) ? $formData['balance'] : [];
 
+/**
+ * Маппинг статусов анкет для отображения
+ * Каждый статус имеет текстовое название для пользователя
+ */
 $statusLabels = [
     'draft' => 'Черновик',
     'submitted' => 'Отправлена',
@@ -120,14 +146,27 @@ $statusLabels = [
     'rejected' => 'Отклонена'
 ];
 
+/**
+ * Цвета статусов для визуального отображения
+ * Используются для создания цветных индикаторов статуса
+ */
 $statusColors = [
-    'draft' => '#86868B',
-    'submitted' => '#007AFF',
-    'review' => '#FF9500',
-    'approved' => '#34C759',
-    'rejected' => '#FF3B30'
+    'draft' => '#86868B',      // Серый
+    'submitted' => '#007AFF',  // Синий
+    'review' => '#FF9500',     // Оранжевый
+    'approved' => '#34C759',   // Зеленый
+    'rejected' => '#FF3B30'    // Красный
 ];
 
+/**
+ * Форматирует значение "да/нет" для отображения
+ * 
+ * Поддерживает как английские ('yes', 'no'), так и русские ('да', 'нет') значения
+ * Используется для отображения булевых полей в читаемом виде
+ * 
+ * @param string|null $value Значение из базы данных ('yes', 'no', 'да', 'нет')
+ * @return string Отформатированное значение для отображения ('Да', 'Нет', '—')
+ */
 function formatYesNo(?string $value): string
 {
     if ($value === 'yes' || $value === 'да') {
@@ -136,16 +175,35 @@ function formatYesNo(?string $value): string
     if ($value === 'no' || $value === 'нет') {
         return 'Нет';
     }
-    return '—';
+    return '—';  // Прочерк для пустых или неизвестных значений
 }
 
+/**
+ * Безопасно извлекает значение из массива с экранированием HTML
+ * 
+ * Защищает от XSS-атак путем экранирования HTML-сущностей
+ * Возвращает значение по умолчанию, если ключ не найден или значение пустое
+ * 
+ * @param array $data Массив данных
+ * @param string $key Ключ для поиска
+ * @param string $fallback Значение по умолчанию, если ключ не найден (по умолчанию '—')
+ * @return string Экранированное значение или значение по умолчанию
+ */
 function safeValue(array $data, string $key, string $fallback = '—'): string
 {
     $value = $data[$key] ?? '';
+    
+    // Если значение - массив, возвращаем значение по умолчанию
+    // (массивы не могут быть отображены как строка)
     if (is_array($value)) {
         return $fallback;
     }
+    
+    // Удаляем пробелы и проверяем, не пустое ли значение
     $value = trim((string)$value);
+    
+    // Если значение пустое, возвращаем значение по умолчанию
+    // Иначе экранируем HTML-сущности для защиты от XSS
     return $value === '' ? $fallback : htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
 
