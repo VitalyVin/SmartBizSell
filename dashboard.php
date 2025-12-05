@@ -4161,7 +4161,27 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 </div>
             </div>
             <?php
-                $heroCompanyName = trim((string)($latestForm['asset_name'] ?? ''));
+                // Создаем промежуточную переменную с маскированными данными для тизера
+                // Эта переменная НЕ сохраняется в анкету, используется только для отображения
+                $heroCompanyName = null;
+                if (!empty($latestForm['data_json'])) {
+                    // Подключаем функции для работы с маскированными данными
+                    if (!function_exists('buildTeaserPayload') || !function_exists('buildMaskedTeaserPayload')) {
+                        define('TEASER_FUNCTIONS_ONLY', true);
+                        require_once __DIR__ . '/generate_teaser.php';
+                    }
+                    
+                    // Создаем маскированные данные на лету (не сохраняем в анкету)
+                    $formPayload = buildTeaserPayload($latestForm);
+                    $maskedPayload = buildMaskedTeaserPayload($formPayload);
+                    $heroCompanyName = trim((string)($maskedPayload['asset_name'] ?? ''));
+                }
+                
+                // Если не удалось создать маскированные данные, используем исходное название
+                if ($heroCompanyName === null || $heroCompanyName === '') {
+                    $heroCompanyName = trim((string)($latestForm['asset_name'] ?? ''));
+                }
+                
                 $heroCompanyName = removeMaPlatformPhrase($heroCompanyName);
                 if ($heroCompanyName === '') {
                     $heroCompanyName = 'Ваш проект';

@@ -14,6 +14,10 @@
  */
 
 require_once 'config.php';
+// Подключаем функции для работы с маскированными данными тизера
+define('TEASER_FUNCTIONS_ONLY', true);
+require_once __DIR__ . '/generate_teaser.php';
+
 if (!isLoggedIn()) {
     redirectToLogin();
 }

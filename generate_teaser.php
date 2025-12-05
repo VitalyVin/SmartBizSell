@@ -77,12 +77,18 @@ try {
 
     $formPayload = buildTeaserPayload($form);
     
+    // Создаем маскированную версию payload для тизера
+    // Это промежуточная переменная, которая НЕ сохраняется в анкету
+    // Она используется только для генерации тизера и не изменяет исходные данные анкеты
+    $maskedPayload = buildMaskedTeaserPayload($formPayload);
+    
     // Получаем данные DCF модели для графика
     // Используем упрощенную функцию для извлечения данных напрямую из формы
     $dcfData = extractDCFDataForChart($form);
 
     if ($action === 'investors') {
-        $investorPool = buildInvestorPool($formPayload, $apiKey);
+        // Для инвесторов используем маскированные данные
+        $investorPool = buildInvestorPool($maskedPayload, $apiKey);
         if (empty($investorPool)) {
             echo json_encode(['success' => false, 'message' => 'Не найдены подходящие инвесторы.']);
             exit;
@@ -103,19 +109,25 @@ try {
         exit;
     }
 
-    $prompt = buildTeaserPrompt($formPayload);
+    // Используем маскированные данные для генерации тизера
+    $prompt = buildTeaserPrompt($maskedPayload);
     $rawResponse = callTogetherCompletions($prompt, $apiKey);
 
     $teaserData = parseTeaserResponse($rawResponse);
-    $teaserData = normalizeTeaserData($teaserData, $formPayload);
-    $teaserData = ensureOverviewWithAi($teaserData, $formPayload, $apiKey);
-    $teaserData = ensureProductsLocalized($teaserData, $formPayload, $apiKey);
+    $teaserData = normalizeTeaserData($teaserData, $maskedPayload);
+    $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey);
+    $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
     
     // Генерируем краткое описание для hero блока из overview summary
-    $heroDescription = buildHeroDescription($teaserData, $formPayload);
+    // Используем маскированные данные
+    $heroDescription = buildHeroDescription($teaserData, $maskedPayload);
     
-    $html = renderTeaserHtml($teaserData, $formPayload['asset_name'] ?? 'Актив', $formPayload, $dcfData);
+    // Используем маскированное название актива для рендеринга
+    $displayAssetName = $maskedPayload['asset_name'] ?? 'Актив';
+    $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData);
 
+    // Сохраняем snapshot с исходными данными (не маскированными)
+    // Маскированные данные используются только для генерации HTML тизера
     $snapshot = persistTeaserSnapshot($form, $formPayload, [
         'html' => $html,
         'hero_description' => $heroDescription,
@@ -217,6 +229,40 @@ function buildTeaserPayload(array $form): array
     }
 
     return $data;
+}
+
+/**
+ * Создает маскированную версию payload для тизера.
+ * 
+ * Если asset_disclosure = 'no', заменяет asset_name на "Актив" во всех местах,
+ * где оно используется в тизере. Исходные данные анкеты не изменяются.
+ * 
+ * @param array $payload Исходные данные анкеты
+ * @return array Маскированные данные для тизера
+ */
+function buildMaskedTeaserPayload(array $payload): array
+{
+    // Создаем копию payload, чтобы не изменять исходные данные
+    $maskedPayload = $payload;
+    
+    // Проверяем, нужно ли маскировать название актива
+    $assetDisclosure = $maskedPayload['asset_disclosure'] ?? '';
+    $shouldMask = ($assetDisclosure === 'no' || $assetDisclosure === 'нет');
+    
+    if ($shouldMask) {
+        // Заменяем название актива на "Актив" во всех местах
+        $maskedPayload['asset_name'] = 'Актив';
+        
+        // Также заменяем в company_brands, если там упоминается название актива
+        if (!empty($maskedPayload['company_brands'])) {
+            $originalName = $payload['asset_name'] ?? '';
+            if (!empty($originalName) && strpos($maskedPayload['company_brands'], $originalName) !== false) {
+                $maskedPayload['company_brands'] = str_ireplace($originalName, 'Актив', $maskedPayload['company_brands']);
+            }
+        }
+    }
+    
+    return $maskedPayload;
 }
 
 /**
@@ -2161,17 +2207,21 @@ function generateHeroDescription(array $form, string $apiKey): ?string
     try {
         $payload = buildTeaserPayload($form);
         
+        // Используем маскированные данные для генерации описания
+        $maskedPayload = buildMaskedTeaserPayload($payload);
+        
         // Создаем промпт для генерации краткого описания
-        $assetName = $payload['asset_name'] ?? 'Компания';
+        $assetName = $maskedPayload['asset_name'] ?? 'Компания';
+        // Используем маскированные данные для фактов
         $facts = [
             'Название' => $assetName,
-            'Отрасль' => $payload['products_services'] ?? '',
-            'Регионы' => $payload['presence_regions'] ?? '',
-            'Бренды' => $payload['company_brands'] ?? '',
-            'Клиенты' => $payload['main_clients'] ?? '',
-            'Персонал' => $payload['personnel_count'] ?? '',
-            'Цель сделки' => $payload['deal_goal'] ?? '',
-            'Описание' => $payload['company_description'] ?? '',
+            'Отрасль' => $maskedPayload['products_services'] ?? '',
+            'Регионы' => $maskedPayload['presence_regions'] ?? '',
+            'Бренды' => $maskedPayload['company_brands'] ?? '',
+            'Клиенты' => $maskedPayload['main_clients'] ?? '',
+            'Персонал' => $maskedPayload['personnel_count'] ?? '',
+            'Цель сделки' => $maskedPayload['deal_goal'] ?? '',
+            'Описание' => $maskedPayload['company_description'] ?? '',
         ];
         
         $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
