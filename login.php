@@ -197,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-container">
         <div class="auth-card">
             <div class="auth-header">
-                <div class="auth-logo">🚀</div>
+                <div class="auth-logo"><?php echo getLogoIcon(); ?></div>
                 <h1 class="auth-title">Вход в систему</h1>
                 <p class="auth-subtitle">Войдите в личный кабинет</p>
             </div>

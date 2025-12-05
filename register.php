@@ -215,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-container">
         <div class="auth-card">
             <div class="auth-header">
-                <div class="auth-logo">🚀</div>
+                <div class="auth-logo"><?php echo getLogoIcon(); ?></div>
                 <h1 class="auth-title">Регистрация</h1>
                 <p class="auth-subtitle">Создайте аккаунт для продажи бизнеса</p>
             </div>

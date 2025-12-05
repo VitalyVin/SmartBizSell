@@ -69,20 +69,67 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
+    gap: 10px;
+    font-size: 22px;
+    font-weight: 800;
     text-decoration: none;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+    backdrop-filter: blur(10px);
 }
 
 .logo:hover {
-    opacity: 0.7;
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
 }
 
 .logo-icon {
-    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 2px 4px rgba(102, 126, 234, 0.3));
+}
+
+.logo-icon .logo-svg-icon {
+    width: 28px;
+    height: 28px;
+    display: block;
+}
+
+.logo:hover .logo-icon {
+    transform: translateY(-2px) scale(1.05);
+}
+
+.logo-text {
+    background: linear-gradient(135deg, #667EEA 0%, #764BA2 50%, #F093FB 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    position: relative;
+    font-size: 22px;
+}
+
+.logo-text::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #667EEA 0%, #764BA2 100%);
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 2px;
+}
+
+.logo:hover .logo-text::after {
+    width: 100%;
 }
 
 .nav-menu {
@@ -1536,17 +1583,83 @@ section {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    font-size: 24px;
-    font-weight: 700;
+    gap: 10px;
+    font-size: 22px;
+    font-weight: 800;
     margin-bottom: 16px;
-    color: var(--text-primary);
     text-decoration: none;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+    backdrop-filter: blur(10px);
 }
 
 .footer-logo:hover {
-    opacity: 0.7;
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
+}
+
+.footer-logo .logo-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 2px 4px rgba(102, 126, 234, 0.3));
+}
+
+.footer-logo .logo-icon .logo-svg-icon {
+    width: 28px;
+    height: 28px;
+    display: block;
+}
+
+.footer-logo:hover .logo-icon {
+    transform: translateY(-2px) scale(1.05);
+}
+
+.footer-logo .logo-text {
+    background: linear-gradient(135deg, #667EEA 0%, #764BA2 50%, #F093FB 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    position: relative;
+    font-size: 22px;
+}
+
+.footer-logo .logo-text::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #667EEA 0%, #764BA2 100%);
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 2px;
+}
+
+.footer-logo:hover .logo-text::after {
+    width: 100%;
+}
+
+/* Auth Logo Styles */
+.auth-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    filter: drop-shadow(0 2px 4px rgba(102, 126, 234, 0.3));
+}
+
+.auth-logo .logo-svg-icon {
+    width: 48px;
+    height: 48px;
+    display: block;
 }
 
 .footer-text {

@@ -504,7 +504,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
         <div class="container">
             <div class="nav-content">
                 <a href="index.php" class="logo">
-                    <span class="logo-icon">🚀</span>
+                    <span class="logo-icon"><?php echo getLogoIcon(); ?></span>
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <ul class="nav-menu">

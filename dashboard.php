@@ -1445,13 +1445,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         
         @media (max-width: 768px) {
             .dashboard-nav {
-                position: fixed !important;
+                position: -webkit-sticky !important;
+                position: sticky !important;
                 top: 70px !important;
                 left: 0 !important;
                 right: 0 !important;
                 z-index: 1000 !important;
                 padding: 12px 8px !important;
-                margin-bottom: 0 !important;
+                margin-bottom: 24px !important;
                 margin-left: 0 !important;
                 margin-right: 0 !important;
                 border-radius: 0 !important;
@@ -1466,18 +1467,18 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 background: rgba(255, 255, 255, 0.3) !important;
                 backdrop-filter: blur(20px) !important;
                 border: 1px solid transparent !important;
-                /* Скрываем навигацию по умолчанию на мобильных */
-                opacity: 0;
-                visibility: hidden;
-                transform: translateY(-100%);
-                transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+                /* Навигация видна сразу на мобильных */
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: translateY(0) !important;
+                transition: none !important;
             }
             
-            /* Показываем навигацию при прокрутке */
+            /* Класс nav-visible больше не нужен, но оставляем для совместимости */
             .dashboard-nav.nav-visible {
-                opacity: 1;
-                visibility: visible;
-                transform: translateY(0);
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: translateY(0) !important;
             }
             
             /* Убираем отрицательные отступы у родительского контейнера, если они есть */
@@ -1485,34 +1486,33 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 overflow-x: visible;
             }
             
-            /* Вычисляем высоту навигации: top (70px) + padding (12px*2) + высота контента (~50px) = ~134px */
-            /* Добавляем отступ для всех элементов после навигации, чтобы они не перекрывались */
+            /* Навигация теперь sticky, поэтому не нужны большие отступы */
+            /* Отступы для элементов после навигации минимальны, так как навигация sticky */
             .dashboard-nav ~ .dcf-card,
-            .dashboard-nav ~ .teaser-section,
-            .dashboard-nav ~ .forms-table {
-                margin-top: 90px !important;
+            .dashboard-nav ~ .teaser-section {
+                margin-top: 0 !important;
                 padding-top: 0 !important;
             }
             
-            /* Если навигация идет сразу после dashboard-actions или dashboard-stats */
+            /* Убираем лишние отступы */
             .dashboard-actions + .dashboard-nav ~ *,
             .dashboard-stats + .dashboard-nav ~ * {
-                margin-top: 90px !important;
+                margin-top: 0 !important;
             }
             
             /* Специальный отступ для первого блока после навигации */
             .dashboard-nav + .dcf-card,
             .dashboard-nav + .teaser-section {
-                margin-top: 90px !important;
+                margin-top: 0 !important;
                 padding-top: 0 !important;
             }
             
             /* Универсальный отступ для любого элемента после навигации */
             .dashboard-nav + * {
-                margin-top: 90px !important;
+                margin-top: 0 !important;
             }
             
-            /* Дополнительный отступ для элементов, которые могут быть перекрыты */
+            /* Дополнительный отступ для элементов, которые могут быть перекрыты при прокрутке */
             .dashboard-container > .dashboard-nav ~ * {
                 scroll-margin-top: 90px;
             }
@@ -3325,6 +3325,183 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             .teaser-hero__stats {
                 grid-template-columns: 1fr !important;
             }
+            
+            /* Мобильная версия блока "Определение цены" */
+            #price-determination {
+                margin-top: 32px !important;
+            }
+            
+            #price-determination > div:first-child {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 16px !important;
+            }
+            
+            #price-determination h2 {
+                font-size: 22px !important;
+                margin-bottom: 8px !important;
+            }
+            
+            #price-determination > div:first-child > div:first-child > p {
+                font-size: 13px !important;
+                margin-top: 6px !important;
+            }
+            
+            #calculate-multiplier-btn {
+                width: 100% !important;
+                padding: 14px 20px !important;
+                font-size: 15px !important;
+            }
+            
+            #multiplier-valuation-result {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            #multiplier-valuation-result > div {
+                min-width: 0;
+            }
+            
+            #final-price-section {
+                margin-top: 24px !important;
+                padding-top: 24px !important;
+            }
+            
+            #final-price-section h3 {
+                font-size: 18px !important;
+                margin-bottom: 12px !important;
+            }
+            
+            #final-price-section > div:first-child > div:first-child {
+                padding: 16px !important;
+            }
+            
+            #final-price-section > div:first-child > div:first-child p {
+                font-size: 16px !important;
+                line-height: 1.5 !important;
+            }
+            
+            #final-price-section > div:last-child {
+                max-width: 100% !important;
+            }
+            
+            #final-price-section label {
+                font-size: 16px !important;
+                margin-bottom: 10px !important;
+            }
+            
+            #final-price-section > div:last-child > div:first-child {
+                flex-direction: row !important;
+                gap: 10px !important;
+                align-items: flex-start !important;
+            }
+            
+            #final-price-input {
+                flex: 3 !important;
+                min-width: 0 !important;
+                padding: 16px 20px !important;
+                font-size: 18px !important;
+            }
+            
+            #confirm-price-btn {
+                flex: 1 !important;
+                min-width: 0 !important;
+                padding: 16px 16px !important;
+                font-size: 15px !important;
+                white-space: nowrap !important;
+            }
+            
+            #final-price-updated-at {
+                font-size: 12px !important;
+                margin-top: 10px !important;
+            }
+            
+            /* Адаптивные стили для результатов расчета мультипликатора */
+            #multiplier-valuation-result {
+                overflow-x: visible;
+            }
+            
+            #multiplier-valuation-result > div {
+                padding: 16px !important;
+            }
+            
+            /* Диапазон оценки */
+            #multiplier-valuation-result > div > div:first-child {
+                padding: 16px !important;
+                margin-bottom: 20px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:first-child > div:nth-child(2) {
+                font-size: 20px !important;
+                line-height: 1.3 !important;
+                word-break: break-word;
+            }
+            
+            #multiplier-valuation-result > div > div:first-child > div:last-child {
+                font-size: 12px !important;
+                margin-top: 10px !important;
+            }
+            
+            /* Сектор */
+            #multiplier-valuation-result > div > div:nth-child(2) {
+                margin-bottom: 16px !important;
+                padding-bottom: 16px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:nth-child(2) > div:last-child {
+                font-size: 16px !important;
+            }
+            
+            /* Мультипликаторы */
+            #multiplier-valuation-result > div > div:nth-child(3) > div:last-child {
+                flex-direction: column !important;
+                gap: 10px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:nth-child(3) > div:last-child > div {
+                min-width: 100% !important;
+                flex: 1 1 100% !important;
+                padding: 12px 14px !important;
+            }
+            
+            /* Детали расчета */
+            #multiplier-valuation-result > div > div:nth-child(4) > div:last-child {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+            
+            /* Итоговая стоимость */
+            #multiplier-valuation-result > div > div:nth-child(5) {
+                padding: 16px !important;
+                margin-bottom: 16px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:nth-child(5) > div:nth-child(2) {
+                font-size: 22px !important;
+            }
+            
+            /* Финансовые показатели */
+            #multiplier-valuation-result > div > div:last-child {
+                margin-top: 20px !important;
+                padding-top: 20px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:last-child > div:last-child {
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:last-child > div:last-child > div {
+                padding: 14px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:last-child > div:last-child > div > div:last-child {
+                font-size: 18px !important;
+            }
+            
+            #multiplier-valuation-result > div > div:last-child > div:last-child > div > div:last-child > span {
+                font-size: 12px !important;
+            }
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
@@ -3335,7 +3512,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         <div class="container">
             <div class="nav-content">
                 <a href="index.php" class="logo">
-                    <span class="logo-icon">🚀</span>
+                    <span class="logo-icon"><?php echo getLogoIcon(); ?></span>
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <ul class="nav-menu">
@@ -4574,81 +4751,22 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             updateActiveNav();
             
             /**
-             * Показ навигации на мобильных устройствах после прокрутки анкеты
+             * Показ навигации на мобильных устройствах
              * 
              * Функциональность:
-             * - Навигация скрыта по умолчанию на мобильных
-             * - Появляется после того, как пользователь проскроллил блок с анкетами
+             * - Навигация видна сразу после анкеты на мобильных (sticky позиционирование)
+             * - Навигация всегда видна на десктопе
              * 
              * Создано: 2025-01-XX
+             * Обновлено: 2025-01-XX - навигация теперь всегда видна на мобильных
              */
             const showNavOnScroll = () => {
-                const checkScroll = () => {
-                    // Проверяем, что мы на мобильном устройстве
-                    const isMobile = window.innerWidth <= 768;
-                    
-                    if (!isMobile) {
-                        // На десктопе навигация всегда видна
-                        nav.classList.add('nav-visible');
-                        return;
-                    }
-                    
-                    // На мобильных: находим все блоки с анкетами
-                    const formsTables = document.querySelectorAll('.forms-table');
-                    if (!formsTables || formsTables.length === 0) {
-                        // Если блоков с анкетами нет, показываем навигацию сразу
-                        nav.classList.add('nav-visible');
-                        return;
-                    }
-                    
-                    // Находим последний блок с анкетами (самый нижний)
-                    let lastTableBottom = 0;
-                    formsTables.forEach(table => {
-                        const tableBottom = table.offsetTop + table.offsetHeight;
-                        if (tableBottom > lastTableBottom) {
-                            lastTableBottom = tableBottom;
-                        }
-                    });
-                    
-                    // Вычисляем точку, после которой нужно показать навигацию
-                    // Это конец последнего блока с анкетами + небольшой отступ
-                    const triggerPoint = lastTableBottom + 50; // 50px после конца анкет
-                    const scrollY = window.scrollY || window.pageYOffset;
-                    
-                    if (scrollY >= triggerPoint) {
-                        nav.classList.add('nav-visible');
-                    } else {
-                        nav.classList.remove('nav-visible');
-                    }
-                };
-                
-                // Проверяем при загрузке
-                checkScroll();
-                
-                // Проверяем при прокрутке (используем существующий throttling)
-                // Добавляем проверку в существующий обработчик scroll
-                const originalScrollHandler = window.addEventListener;
-                
-                // Также проверяем при изменении размера окна
-                window.addEventListener('resize', () => {
-                    checkScroll();
-                });
-                
-                // Добавляем проверку в существующий обработчик прокрутки
-                // (используем тот же throttling механизм)
-                let scrollTicking = false;
-                window.addEventListener('scroll', () => {
-                    if (!scrollTicking) {
-                        window.requestAnimationFrame(() => {
-                            checkScroll();
-                            scrollTicking = false;
-                        });
-                        scrollTicking = true;
-                    }
-                });
+                // Навигация теперь всегда видна (sticky позиционирование на мобильных)
+                // Просто добавляем класс nav-visible для совместимости
+                nav.classList.add('nav-visible');
             };
             
-            // Инициализируем показ навигации при прокрутке
+            // Инициализируем показ навигации
             showNavOnScroll();
         })();
         (() => {

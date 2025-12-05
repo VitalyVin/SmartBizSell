@@ -38,7 +38,7 @@ require_once 'config.php';
         <div class="container">
             <div class="nav-content">
                 <a href="#" class="logo">
-                    <span class="logo-icon">🚀</span>
+                    <span class="logo-icon"><?php echo getLogoIcon(); ?></span>
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <ul class="nav-menu">
@@ -838,7 +838,7 @@ require_once 'config.php';
         <div class="container">
             <div class="footer-content">
                 <a href="#" class="footer-logo">
-                    <span class="logo-icon">🚀</span>
+                    <span class="logo-icon"><?php echo getLogoIcon(); ?></span>
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <p class="footer-text">

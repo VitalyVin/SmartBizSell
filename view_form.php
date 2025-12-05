@@ -269,7 +269,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
         <div class="container">
             <div class="nav-content">
                 <a href="index.php" class="logo">
-                    <span class="logo-icon">🚀</span>
+                    <span class="logo-icon"><?php echo getLogoIcon(); ?></span>
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <ul class="nav-menu">
