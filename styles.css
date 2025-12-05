@@ -202,6 +202,9 @@ body {
     bottom: 0;
     overflow: hidden;
     z-index: -1;
+    transform: translateZ(0); /* Создаем новый слой для GPU ускорения */
+    backface-visibility: hidden; /* Предотвращаем искажения при трансформациях */
+    perspective: 1000px; /* Создаем контекст перспективы для 3D трансформаций */
 }
 
 .gradient-orb {
@@ -210,6 +213,12 @@ body {
     filter: blur(80px);
     opacity: 0.6;
     animation: float 20s infinite ease-in-out;
+    will-change: transform; /* Оптимизация для GPU ускорения */
+}
+
+/* Отключаем CSS анимацию когда используется GSAP параллакс */
+.gradient-orb.gsap-parallax {
+    animation: none;
 }
 
 .orb-1 {

@@ -155,17 +155,35 @@ if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
     });
     
     // Параллакс эффект для hero background
-    gsap.to('.gradient-orb', {
-        y: (i, el) => {
-            return ScrollTrigger.maxScroll(window) * 0.3;
-        },
-        ease: 'none',
-        scrollTrigger: {
-            trigger: '.hero',
-            start: 'top top',
-            end: 'bottom top',
-            scrub: true
+    // Используем отдельную анимацию для каждого орба с разной скоростью
+    // Отключаем CSS анимацию и используем только GSAP для плавности
+    gsap.utils.toArray('.gradient-orb').forEach((orb, index) => {
+        const speed = 0.2 + (index * 0.1); // Разная скорость для каждого орба (0.2, 0.3, 0.4)
+        const isOrb3 = orb.classList.contains('orb-3');
+        
+        // Добавляем класс для отключения CSS анимации
+        orb.classList.add('gsap-parallax');
+        
+        // Для orb-3 сохраняем начальное позиционирование (translate(-50%, -50%))
+        if (isOrb3) {
+            gsap.set(orb, { xPercent: -50, yPercent: -50 });
         }
+        
+        // Применяем параллакс через y
+        gsap.to(orb, {
+            y: () => {
+                return ScrollTrigger.maxScroll(window) * speed;
+            },
+            ease: 'none',
+            force3D: true, // Используем GPU ускорение для плавности
+            scrollTrigger: {
+                trigger: '.hero',
+                start: 'top top',
+                end: 'bottom top',
+                scrub: 1, // Плавная синхронизация со скроллом
+                invalidateOnRefresh: true // Пересчитывать при изменении размера окна
+            }
+        });
     });
     
     // Анимация заголовков секций
@@ -434,20 +452,34 @@ style.textContent = `
 document.head.appendChild(style);
 
 /**
- * Параллакс эффект для hero секции
+ * Параллакс эффект для hero секции (fallback без GSAP)
  * Градиентные орбы двигаются с разной скоростью при прокрутке
- * Используется GSAP ScrollTrigger если доступен, иначе fallback
+ * Используется только если GSAP недоступен
  */
 if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') {
+    let ticking = false; // Флаг для оптимизации через requestAnimationFrame
+    
     window.addEventListener('scroll', () => {
-        const scrolled = window.pageYOffset;
-        const hero = document.querySelector('.hero-background');
-        if (hero) {
-            const orbs = hero.querySelectorAll('.gradient-orb');
-            orbs.forEach((orb, index) => {
-                const speed = 0.5 + (index * 0.2);
-                orb.style.transform = `translateY(${scrolled * speed}px)`;
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                const scrolled = window.pageYOffset;
+                const hero = document.querySelector('.hero-background');
+                if (hero) {
+                    const orbs = hero.querySelectorAll('.gradient-orb');
+                    orbs.forEach((orb, index) => {
+                        const speed = 0.3 + (index * 0.1);
+                        // Сохраняем исходный transform для orb-3 (translate(-50%, -50%))
+                        const isOrb3 = orb.classList.contains('orb-3');
+                        if (isOrb3) {
+                            orb.style.transform = `translate(-50%, calc(-50% + ${scrolled * speed}px))`;
+                        } else {
+                            orb.style.transform = `translateY(${scrolled * speed}px)`;
+                        }
+                    });
+                }
+                ticking = false;
             });
+            ticking = true;
         }
     });
 }
