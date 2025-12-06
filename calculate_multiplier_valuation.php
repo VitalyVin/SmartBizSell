@@ -41,21 +41,41 @@ if (empty($apiKey)) {
 try {
     $pdo = getDBConnection();
     
-    // Получаем последнюю отправленную анкету продавца
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM seller_forms
-        WHERE user_id = ?
-          AND status IN ('submitted','review','approved')
-        ORDER BY submitted_at DESC, updated_at DESC
-        LIMIT 1
-    ");
-    $stmt->execute([$user['id']]);
-    $form = $stmt->fetch();
+    // Получаем form_id из запроса, если он передан
+    $requestData = json_decode(file_get_contents('php://input'), true);
+    $requestedFormId = isset($requestData['form_id']) ? (int)$requestData['form_id'] : null;
 
-    if (!$form) {
-        echo json_encode(['success' => false, 'message' => 'Нет отправленных анкет для расчета оценки. Заполните и отправьте анкету продавца.']);
-        exit;
+    if ($requestedFormId) {
+        // Загружаем конкретную анкету по ID, если она принадлежит пользователю
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM seller_forms
+            WHERE id = ? AND user_id = ?
+        ");
+        $stmt->execute([$requestedFormId, $user['id']]);
+        $form = $stmt->fetch();
+        
+        if (!$form) {
+            echo json_encode(['success' => false, 'message' => 'Анкета не найдена или не принадлежит вам.']);
+            exit;
+        }
+    } else {
+        // Если form_id не указан, используем последнюю отправленную анкету
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM seller_forms
+            WHERE user_id = ?
+              AND status IN ('submitted','review','approved')
+            ORDER BY submitted_at DESC, updated_at DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$user['id']]);
+        $form = $stmt->fetch();
+
+        if (!$form) {
+            echo json_encode(['success' => false, 'message' => 'Нет отправленных анкет для расчета оценки. Заполните и отправьте анкету продавца.']);
+            exit;
+        }
     }
 
     // Извлекаем данные из анкеты

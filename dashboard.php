@@ -51,6 +51,31 @@ $activeForms = array_values(array_filter($forms, fn($f) => $f['status'] !== 'dra
 $draftForms = array_values(array_filter($forms, fn($f) => $f['status'] === 'draft'));
 
 /**
+ * Определение активной анкеты для отображения инструментов
+ * Приоритет:
+ * 1. form_id из URL параметра (если указан и принадлежит пользователю)
+ * 2. Последняя отправленная анкета (submitted/review/approved)
+ * 3. Последняя анкета по дате обновления
+ */
+$selectedFormId = isset($_GET['form_id']) ? (int)$_GET['form_id'] : null;
+$selectedForm = null;
+
+if ($selectedFormId) {
+    // Проверяем, что анкета принадлежит пользователю
+    foreach ($forms as $form) {
+        if ($form['id'] == $selectedFormId) {
+            $selectedForm = $form;
+            break;
+        }
+    }
+}
+
+// Если анкета не выбрана или не найдена, выбираем последнюю отправленную
+if (!$selectedForm) {
+    $selectedForm = !empty($activeForms) ? $activeForms[0] : (!empty($forms) ? $forms[0] : null);
+}
+
+/**
  * Получение всех Term Sheet текущего пользователя из базы данных
  */
 try {
@@ -1211,16 +1236,17 @@ $savedTeaserTimestamp = null;
 $savedInvestorHtml = null;
 $savedInvestorTimestamp = null;
 
-$latestSubmittedStmt = $pdo->prepare("
-    SELECT *
-    FROM seller_forms
-    WHERE user_id = ?
-      AND status IN ('submitted','review','approved')
-    ORDER BY submitted_at DESC, updated_at DESC
-    LIMIT 1
-");
-$latestSubmittedStmt->execute([$user['id']]);
-$latestForm = $latestSubmittedStmt->fetch();
+// Загружаем полные данные выбранной анкеты для работы с инструментами
+$latestForm = null;
+if ($selectedForm) {
+    $latestFormStmt = $pdo->prepare("
+        SELECT *
+        FROM seller_forms
+        WHERE id = ? AND user_id = ?
+    ");
+    $latestFormStmt->execute([$selectedForm['id'], $user['id']]);
+    $latestForm = $latestFormStmt->fetch();
+}
 
 if ($latestForm) {
     $dcfSourceStatus = $latestForm['status'];
@@ -1289,23 +1315,8 @@ if ($latestForm) {
         }
     }
 } else {
-    $latestAnyStmt = $pdo->prepare("
-        SELECT *
-        FROM seller_forms
-        WHERE user_id = ?
-        ORDER BY updated_at DESC
-        LIMIT 1
-    ");
-    $latestAnyStmt->execute([$user['id']]);
-    $latestForm = $latestAnyStmt->fetch();
-    if ($latestForm) {
-        $dcfSourceStatus = $latestForm['status'] ?? null;
-        if (in_array($dcfSourceStatus, ['submitted','review','approved'], true)) {
-            $dcfData = calculateUserDCF($latestForm);
-        } else {
-            $dcfData = ['error' => 'DCF рассчитывается только по отправленным анкетам. Отправьте анкету, чтобы увидеть модель.'];
-        }
-    }
+    // Если анкета не выбрана, инициализируем пустые данные
+    $dcfData = ['error' => 'Выберите анкету для просмотра инструментов.'];
 }
 
 // Если мы в режиме API (для generate_teaser.php), не выводим HTML
@@ -1353,6 +1364,90 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             margin: 0 auto;
             padding: 0 20px 40px;
             position: relative;
+        }
+        
+        /* Табы для переключения между анкетами */
+        .forms-tabs {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        .forms-tabs__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .forms-tabs__list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+        .forms-tabs__tab {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+        .forms-tabs__tab:hover {
+            border-color: var(--primary-color);
+            background: rgba(0, 122, 255, 0.05);
+            transform: translateY(-2px);
+        }
+        .forms-tabs__tab.active {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .forms-tabs__tab-name {
+            font-weight: 600;
+        }
+        .forms-tabs__tab-status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .forms-tabs__tab.active .forms-tabs__tab-status {
+            background: rgba(255, 255, 255, 0.3) !important;
+        }
+        @media (max-width: 768px) {
+            .forms-tabs {
+                padding: 16px;
+            }
+            .forms-tabs__header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .forms-tabs__list {
+                width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .forms-tabs__tab {
+                padding: 10px 16px;
+                font-size: 13px;
+            }
         }
         
         /* Навигация между блоками */
@@ -3794,6 +3889,37 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         </div>
         <?php endif; ?>
 
+        <!-- Табы для переключения между анкетами -->
+        <?php if (!empty($forms)): ?>
+        <div class="forms-tabs" id="forms-tabs">
+            <div class="forms-tabs__header">
+                <h2 style="margin: 0; font-size: 20px; font-weight: 700;">Активы на продажу</h2>
+                <a href="seller_form.php" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">+ Создать новый актив</a>
+            </div>
+            <div class="forms-tabs__list" role="tablist">
+                <?php foreach ($forms as $form): ?>
+                    <?php
+                    $isActive = $selectedForm && $selectedForm['id'] == $form['id'];
+                    $formName = htmlspecialchars(html_entity_decode($form['asset_name'] ?: 'Без названия', ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES, 'UTF-8');
+                    $formStatus = $form['status'] ?? 'draft';
+                    ?>
+                    <button 
+                        class="forms-tabs__tab <?php echo $isActive ? 'active' : ''; ?>" 
+                        role="tab"
+                        aria-selected="<?php echo $isActive ? 'true' : 'false'; ?>"
+                        data-form-id="<?php echo $form['id']; ?>"
+                        onclick="switchForm(<?php echo $form['id']; ?>)"
+                    >
+                        <span class="forms-tabs__tab-name"><?php echo $formName; ?></span>
+                        <span class="forms-tabs__tab-status" style="background: <?php echo $statusColors[$formStatus]; ?>;">
+                            <?php echo $statusLabels[$formStatus]; ?>
+                        </span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Навигация между блоками - показывается если есть отправленная анкета или раздел Term Sheet -->
         <?php 
         // Навигация показывается если есть отправленная анкета или раздел Term Sheet
@@ -3801,7 +3927,14 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         // Term Sheet всегда доступен, поэтому навигация показывается всегда
         $showNavigation = true;
         ?>
-        <?php if ($showNavigation): ?>
+        <?php if (!$latestForm && !empty($forms)): ?>
+            <div class="teaser-section" style="text-align: center; padding: 60px 20px;">
+                <h2 style="margin-bottom: 16px;">Выберите анкету для просмотра инструментов</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 24px;">Используйте вкладки выше, чтобы выбрать актив и просмотреть его DCF модель, оценку, тизер и Term Sheet.</p>
+            </div>
+        <?php endif; ?>
+        
+        <?php if ($showNavigation && $latestForm): ?>
         <nav class="dashboard-nav" id="dashboard-nav" aria-label="Навигация по разделам">
             <ul class="dashboard-nav__list" role="list">
                 <?php if ($dcfData): ?>
@@ -4768,6 +4901,19 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
 
     <script>
         /**
+         * Переключение между анкетами
+         * Обновляет URL с параметром form_id и перезагружает страницу
+         */
+        function switchForm(formId) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('form_id', formId);
+            window.location.href = url.toString();
+        }
+        
+        // Сохраняем текущий form_id для использования в других функциях
+        const currentFormId = <?php echo $selectedForm ? $selectedForm['id'] : 'null'; ?>;
+        
+        /**
          * Навигация между блоками личного кабинета
          * 
          * Функциональность:
@@ -5148,7 +5294,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
-                        body: JSON.stringify({ action: 'teaser' }),
+                        body: JSON.stringify({ 
+                            action: 'teaser',
+                            form_id: currentFormId 
+                        }),
                     });
 
                     const payload = await response.json();
@@ -5373,7 +5522,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
-                        body: JSON.stringify({ action: 'investors' }),
+                        body: JSON.stringify({ 
+                            action: 'investors',
+                            form_id: currentFormId 
+                        }),
                     });
                     const payload = await response.json();
                     if (!response.ok || !payload.success) {
@@ -5781,9 +5933,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 
                 try {
                     const response = await fetch('calculate_multiplier_valuation.php', {
-                        method: 'GET',
+                        method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
+                        body: JSON.stringify({ 
+                            form_id: currentFormId 
+                        }),
                     });
                     
                     const payload = await response.json();
