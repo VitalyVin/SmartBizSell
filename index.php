@@ -182,19 +182,6 @@ require_once 'config.php';
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="6" y="10" width="20" height="16" rx="3" fill="#0EA5E9" opacity="0.2"/>
-                            <rect x="9" y="6" width="14" height="20" rx="3" stroke="#0EA5E9" stroke-width="2" fill="none"/>
-                            <rect x="13" y="14" width="6" height="8" rx="1" fill="#0EA5E9"/>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">Современный интерфейс</h3>
-                    <p class="feature-description">
-                        Управляйте ходом сделки в едином цифровом кабинете: согласовывайте материалы, отслеживайте статус и общайтесь с командой в режиме реального времени.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <circle cx="16" cy="16" r="11" stroke="#10B981" stroke-width="2" opacity="0.6"/>
                             <path d="M16 7V16L23 19" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M10 21C12 23 14 24 16 24C20 24 23 21 23 17" stroke="#34D399" stroke-width="2" stroke-linecap="round"/>

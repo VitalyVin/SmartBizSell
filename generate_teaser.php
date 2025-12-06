@@ -156,7 +156,7 @@ try {
                                 break 2;
                             }
                         }
-                    } elseif ($value !== null && $value !== '' && $value !== 0) {
+                    } elseif (!is_array($value) && $value !== null && $value !== '' && $value !== 0) {
                         $hasFinancialData = true;
                         break;
                     }

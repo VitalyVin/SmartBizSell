@@ -1308,7 +1308,7 @@ function validateFormForTeaser(array $form): array
                             break 2;
                         }
                     }
-                } elseif ($value !== null && $value !== '' && $value !== 0) {
+                } elseif (!is_array($value) && $value !== null && $value !== '' && $value !== 0) {
                     $hasFinancialData = true;
                     break;
                 }
@@ -5641,7 +5641,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             // Используем стили, совместимые с мобильными устройствами
                             newBtn.style.cssText = 'padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block; touch-action: manipulation; -webkit-tap-highlight-color: rgba(108, 117, 125, 0.3); cursor: pointer; position: relative; z-index: 1;';
                             newBtn.textContent = '📄 Скачать Word';
-                            newBtn.download = true;
+                            newBtn.download = '';
                             // Добавляем обработчик для мобильных устройств
                             newBtn.addEventListener('touchstart', function(e) {
                                 e.stopPropagation();
