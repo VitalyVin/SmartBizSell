@@ -96,6 +96,117 @@ try {
         }
     }
 
+    /**
+     * Проверяет, заполнены ли все обязательные поля анкеты
+     * 
+     * @param array $form Данные анкеты из БД
+     * @return array ['valid' => bool, 'missing_fields' => array] Результат проверки
+     */
+    function validateRequiredFields(array $form): array
+    {
+        $requiredFields = [
+            'company_inn',
+            'asset_name',
+            'deal_share_range',
+            'deal_goal',
+            'asset_disclosure',
+            'company_description',
+            'presence_regions',
+            'products_services',
+            'main_clients',
+            'sales_share',
+            'personnel_count',
+            'financial_results_vat',
+            'financial_source',
+        ];
+        
+        $missingFields = [];
+        
+        // Извлекаем данные из data_json или из отдельных полей
+        $formData = [];
+        if (!empty($form['data_json'])) {
+            $decoded = json_decode($form['data_json'], true);
+            if (is_array($decoded)) {
+                $formData = $decoded;
+            }
+        }
+        
+        // Проверяем каждое обязательное поле
+        foreach ($requiredFields as $field) {
+            $value = $formData[$field] ?? $form[$field] ?? null;
+            
+            // Проверяем, что значение не пустое
+            if ($value === null || $value === '' || (is_string($value) && trim($value) === '')) {
+                $missingFields[] = $field;
+            }
+        }
+        
+        // Проверяем наличие финансовых данных (хотя бы за один период)
+        $hasFinancialData = false;
+        if (!empty($form['financial_results'])) {
+            $financialData = json_decode($form['financial_results'], true);
+            if (is_array($financialData) && !empty($financialData)) {
+                // Проверяем, есть ли хотя бы один период с данными
+                foreach ($financialData as $key => $value) {
+                    if (is_array($value) && !empty($value)) {
+                        // Проверяем наличие хотя бы одного непустого значения
+                        foreach ($value as $v) {
+                            if ($v !== null && $v !== '' && $v !== 0) {
+                                $hasFinancialData = true;
+                                break 2;
+                            }
+                        }
+                    } elseif ($value !== null && $value !== '' && $value !== 0) {
+                        $hasFinancialData = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!$hasFinancialData) {
+            $missingFields[] = 'financial_results';
+        }
+        
+        return [
+            'valid' => empty($missingFields),
+            'missing_fields' => $missingFields
+        ];
+    }
+    
+    // Проверяем заполненность всех обязательных полей перед генерацией тизера
+    $validation = validateRequiredFields($form);
+    if (!$validation['valid']) {
+        $missingCount = count($validation['missing_fields']);
+        $message = "Анкета не полностью заполнена. Заполните все обязательные поля для генерации тизера.";
+        if ($missingCount <= 3) {
+            // Если пропущено немного полей, показываем какие именно
+            $fieldLabels = [
+                'company_inn' => 'ИНН компании',
+                'asset_name' => 'Название актива',
+                'deal_share_range' => 'Диапазон доли сделки',
+                'deal_goal' => 'Цель сделки',
+                'asset_disclosure' => 'Раскрытие названия',
+                'company_description' => 'Описание компании',
+                'presence_regions' => 'Регионы присутствия',
+                'products_services' => 'Продукты и услуги',
+                'main_clients' => 'Основные клиенты',
+                'sales_share' => 'Доля продаж',
+                'personnel_count' => 'Количество персонала',
+                'financial_results_vat' => 'НДС в финансовых результатах',
+                'financial_source' => 'Источник финансовых данных',
+                'financial_results' => 'Финансовые результаты',
+            ];
+            $missingLabels = [];
+            foreach ($validation['missing_fields'] as $field) {
+                $missingLabels[] = $fieldLabels[$field] ?? $field;
+            }
+            $message .= " Пропущены: " . implode(', ', $missingLabels) . ".";
+        }
+        echo json_encode(['success' => false, 'message' => $message]);
+        exit;
+    }
+
     $formPayload = buildTeaserPayload($form);
     
     // Создаем маскированную версию payload для тизера

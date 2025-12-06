@@ -1248,9 +1248,90 @@ if ($selectedForm) {
     $latestForm = $latestFormStmt->fetch();
 }
 
+/**
+ * Проверяет, заполнены ли все обязательные поля анкеты для генерации тизера
+ * 
+ * @param array $form Данные анкеты из БД
+ * @return array ['valid' => bool, 'missing_fields' => array] Результат проверки
+ */
+function validateFormForTeaser(array $form): array
+{
+    $requiredFields = [
+        'company_inn',
+        'asset_name',
+        'deal_share_range',
+        'deal_goal',
+        'asset_disclosure',
+        'company_description',
+        'presence_regions',
+        'products_services',
+        'main_clients',
+        'sales_share',
+        'personnel_count',
+        'financial_results_vat',
+        'financial_source',
+    ];
+    
+    $missingFields = [];
+    
+    // Извлекаем данные из data_json или из отдельных полей
+    $formData = [];
+    if (!empty($form['data_json'])) {
+        $decoded = json_decode($form['data_json'], true);
+        if (is_array($decoded)) {
+            $formData = $decoded;
+        }
+    }
+    
+    // Проверяем каждое обязательное поле
+    foreach ($requiredFields as $field) {
+        $value = $formData[$field] ?? $form[$field] ?? null;
+        
+        // Проверяем, что значение не пустое
+        if ($value === null || $value === '' || (is_string($value) && trim($value) === '')) {
+            $missingFields[] = $field;
+        }
+    }
+    
+    // Проверяем наличие финансовых данных (хотя бы за один период)
+    $hasFinancialData = false;
+    if (!empty($form['financial_results'])) {
+        $financialData = json_decode($form['financial_results'], true);
+        if (is_array($financialData) && !empty($financialData)) {
+            // Проверяем, есть ли хотя бы один период с данными
+            foreach ($financialData as $key => $value) {
+                if (is_array($value) && !empty($value)) {
+                    // Проверяем наличие хотя бы одного непустого значения
+                    foreach ($value as $v) {
+                        if ($v !== null && $v !== '' && $v !== 0) {
+                            $hasFinancialData = true;
+                            break 2;
+                        }
+                    }
+                } elseif ($value !== null && $value !== '' && $value !== 0) {
+                    $hasFinancialData = true;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (!$hasFinancialData) {
+        $missingFields[] = 'financial_results';
+    }
+    
+    return [
+        'valid' => empty($missingFields),
+        'missing_fields' => $missingFields
+    ];
+}
+
 if ($latestForm) {
     $dcfSourceStatus = $latestForm['status'];
     $dcfData = calculateUserDCF($latestForm);
+    
+    // Проверяем заполненность полей для генерации тизера
+    $teaserValidation = validateFormForTeaser($latestForm);
 
     $savedHeroDescription = null;
     if (!empty($latestForm['data_json'])) {
@@ -1317,6 +1398,7 @@ if ($latestForm) {
 } else {
     // Если анкета не выбрана, инициализируем пустые данные
     $dcfData = ['error' => 'Выберите анкету для просмотра инструментов.'];
+    $teaserValidation = ['valid' => false, 'missing_fields' => []];
 }
 
 // Если мы в режиме API (для generate_teaser.php), не выводим HTML
@@ -1368,53 +1450,96 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         
         /* Табы для переключения между анкетами */
         .forms-tabs {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 32px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 40px;
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        .forms-tabs::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667EEA 0%, #764BA2 50%, #667EEA 100%);
+            background-size: 200% 100%;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
         }
         .forms-tabs__header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
             gap: 16px;
+            position: relative;
+            z-index: 1;
+        }
+        .forms-tabs__header h2 {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 28px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.5px;
+            margin: 0 !important;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .forms-tabs__header h2::before {
+            content: '📊';
+            font-size: 32px;
+            -webkit-text-fill-color: initial;
+            background: none;
         }
         .forms-tabs__list {
             display: flex;
-            gap: 8px;
+            gap: 12px;
             flex-wrap: wrap;
             overflow-x: auto;
             padding-bottom: 4px;
+            position: relative;
+            z-index: 1;
         }
         .forms-tabs__tab {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 12px 20px;
-            border: 2px solid rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
+            gap: 10px;
+            padding: 14px 24px;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+            border-radius: 14px;
             background: white;
             cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 14px;
-            font-weight: 500;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 15px;
+            font-weight: 600;
             color: var(--text-primary);
             white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
         .forms-tabs__tab:hover {
-            border-color: var(--primary-color);
-            background: rgba(0, 122, 255, 0.05);
-            transform: translateY(-2px);
+            border-color: #667EEA;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.2);
         }
         .forms-tabs__tab.active {
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
             border-color: transparent;
             color: white;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4), 0 2px 8px rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
         }
         .forms-tabs__tab-name {
             font-weight: 600;
@@ -1433,11 +1558,18 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         }
         @media (max-width: 768px) {
             .forms-tabs {
-                padding: 16px;
+                padding: 24px 20px;
+                border-radius: 16px;
             }
             .forms-tabs__header {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+            .forms-tabs__header h2 {
+                font-size: 24px !important;
+            }
+            .forms-tabs__header h2::before {
+                font-size: 28px;
             }
             .forms-tabs__list {
                 width: 100%;
@@ -1445,8 +1577,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 -webkit-overflow-scrolling: touch;
             }
             .forms-tabs__tab {
-                padding: 10px 16px;
-                font-size: 13px;
+                padding: 12px 20px;
+                font-size: 14px;
             }
         }
         
@@ -1889,6 +2021,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             .dashboard-actions .btn {
                 width: 100%;
                 text-align: center;
+                touch-action: manipulation !important;
+                -webkit-tap-highlight-color: rgba(102, 126, 234, 0.3) !important;
+                min-height: 48px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
             .table-row {
                 grid-template-columns: 1fr;
@@ -2789,11 +2927,30 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             .term-sheet-controls {
                 flex-direction: column !important;
                 align-items: stretch !important;
+                position: relative !important;
+                z-index: 10 !important;
             }
-            .term-sheet-controls .btn {
+            .term-sheet-controls .btn,
+            .term-sheet-controls a.btn {
                 width: 100% !important;
-                padding: 12px 20px !important;
-                font-size: 14px !important;
+                padding: 14px 20px !important;
+                font-size: 15px !important;
+                touch-action: manipulation !important;
+                -webkit-tap-highlight-color: rgba(16, 185, 129, 0.3) !important;
+                position: relative !important;
+                z-index: 1 !important;
+                cursor: pointer !important;
+                user-select: none !important;
+                -webkit-user-select: none !important;
+            }
+            #generate-term-sheet-btn {
+                min-height: 48px !important;
+                display: block !important;
+            }
+            .term-sheet-controls a[href="term_sheet_word.php"] {
+                min-height: 48px !important;
+                display: block !important;
+                text-align: center !important;
             }
             .term-sheet-result {
                 margin: 0 -20px;
@@ -3802,7 +3959,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
 
         <div class="dashboard-actions">
             <a href="seller_form.php" class="btn btn-primary">+ Создать новую анкету</a>
-            <a href="#term-sheet-section" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+            <a href="#term-sheet-section" class="btn btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); touch-action: manipulation; -webkit-tap-highlight-color: rgba(16, 185, 129, 0.3); cursor: pointer; position: relative; z-index: 1;">
                 📄 Создать Term Sheet
             </a>
             <a href="profile.php" class="btn btn-secondary">Настройки профиля</a>
@@ -3893,8 +4050,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         <?php if (!empty($forms)): ?>
         <div class="forms-tabs" id="forms-tabs">
             <div class="forms-tabs__header">
-                <h2 style="margin: 0; font-size: 20px; font-weight: 700;">Активы на продажу</h2>
-                <a href="seller_form.php" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">+ Создать новый актив</a>
+                <h2>Активы на продажу</h2>
+                <a href="seller_form.php" class="btn btn-primary" style="padding: 12px 24px; font-size: 15px; font-weight: 600; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">+ Создать новый актив</a>
             </div>
             <div class="forms-tabs__list" role="tablist">
                 <?php foreach ($forms as $form): ?>
@@ -4285,7 +4442,21 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 <h2>AI-тизер компании</h2>
                 <p>Краткая презентация актива на основе данных анкеты и открытых источников.</p>
                 <div class="teaser-actions">
-                    <button type="button" class="btn btn-primary" id="generate-teaser-btn">
+                    <?php if (!$teaserValidation['valid']): ?>
+                        <div style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 152, 0, 0.1) 100%); border: 2px solid rgba(255, 193, 7, 0.4); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);">
+                            <div style="display: flex; align-items: flex-start; gap: 12px;">
+                                <span style="font-size: 24px; flex-shrink: 0;">⚠️</span>
+                                <div style="flex: 1;">
+                                    <strong style="display: block; margin-bottom: 8px; color: var(--text-primary); font-size: 16px;">Анкета не полностью заполнена</strong>
+                                    <p style="margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
+                                        Для генерации тизера необходимо заполнить все обязательные поля. 
+                                        <a href="seller_form.php?form_id=<?php echo $latestForm['id']; ?>" style="color: #667EEA; text-decoration: underline; font-weight: 600;">Заполните анкету</a>.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-primary" id="generate-teaser-btn" <?php echo !$teaserValidation['valid'] ? 'disabled style="opacity: 0.6; cursor: not-allowed;"' : ''; ?>>
                         <?php echo $savedTeaserHtml ? 'Обновить тизер' : 'Создать тизер'; ?>
                     </button>
                     <button type="button" class="btn btn-secondary" id="export-teaser-pdf" <?php echo $savedTeaserHtml ? '' : 'disabled'; ?>>
@@ -4698,7 +4869,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             <a
                                 href="term_sheet_word.php"
                                 class="btn btn-secondary"
-                                style="padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block;"
+                                style="padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block; touch-action: manipulation; -webkit-tap-highlight-color: rgba(108, 117, 125, 0.3); cursor: pointer; position: relative; z-index: 1; user-select: none; -webkit-user-select: none;"
                                 download
                             >
                                 📄 Скачать Word
@@ -5467,9 +5638,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             const newBtn = document.createElement('a');
                             newBtn.href = 'term_sheet_word.php';
                             newBtn.className = 'btn btn-secondary';
-                            newBtn.style.cssText = 'padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block;';
+                            // Используем стили, совместимые с мобильными устройствами
+                            newBtn.style.cssText = 'padding: 14px 32px; font-size: 16px; font-weight: 600; text-decoration: none; display: inline-block; touch-action: manipulation; -webkit-tap-highlight-color: rgba(108, 117, 125, 0.3); cursor: pointer; position: relative; z-index: 1;';
                             newBtn.textContent = '📄 Скачать Word';
                             newBtn.download = true;
+                            // Добавляем обработчик для мобильных устройств
+                            newBtn.addEventListener('touchstart', function(e) {
+                                e.stopPropagation();
+                            }, { passive: true });
+                            newBtn.addEventListener('click', function(e) {
+                                e.stopPropagation();
+                            });
                             termSheetBtn.parentNode.insertBefore(newBtn, termSheetBtn.nextSibling);
                         }
                     }
@@ -5490,7 +5669,21 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             // Обработчик кнопки генерации Term Sheet
             const termSheetBtn = document.getElementById('generate-term-sheet-btn');
             if (termSheetBtn) {
-                termSheetBtn.addEventListener('click', handleTermSheetGenerate);
+                // Улучшаем touch-обработку для мобильных устройств
+                termSheetBtn.style.touchAction = 'manipulation';
+                termSheetBtn.style.webkitTapHighlightColor = 'rgba(16, 185, 129, 0.3)';
+                termSheetBtn.style.cursor = 'pointer';
+                termSheetBtn.style.userSelect = 'none';
+                termSheetBtn.style.webkitUserSelect = 'none';
+                
+                // Используем один обработчик click, который работает и на мобильных
+                termSheetBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!termSheetBtn.disabled) {
+                        handleTermSheetGenerate(e);
+                    }
+                });
             }
 
             /**
