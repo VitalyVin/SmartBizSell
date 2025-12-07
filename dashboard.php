@@ -1240,8 +1240,8 @@ $savedInvestorTimestamp = null;
 $latestForm = null;
 if ($selectedForm) {
     $latestFormStmt = $pdo->prepare("
-        SELECT *
-        FROM seller_forms
+    SELECT *
+    FROM seller_forms
         WHERE id = ? AND user_id = ?
     ");
     $latestFormStmt->execute([$selectedForm['id'], $user['id']]);
@@ -2904,13 +2904,16 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             position: relative;
             overflow: hidden;
             margin-bottom: 18px;
+            margin-top: 18px;
             opacity: 0;
             transform: translateY(4px);
             transition: opacity 0.2s ease, transform 0.2s ease;
+            display: block;
         }
         .teaser-progress.is-visible {
             opacity: 1;
             transform: translateY(0);
+            display: block !important;
         }
         .teaser-progress__bar {
             position: absolute;
@@ -2918,6 +2921,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             width: 0%;
             background: linear-gradient(90deg, #6366f1, #a855f7);
             transition: width 0.3s ease;
+            height: 100%;
+            border-radius: 999px;
         }
         .term-sheet-result {
             width: 100%;
@@ -4482,7 +4487,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             </div>
                         </div>
                     <?php endif; ?>
-                    <button type="button" class="btn btn-primary" id="generate-teaser-btn" <?php echo !$teaserValidation['valid'] ? 'disabled style="opacity: 0.6; cursor: not-allowed;"' : ''; ?>>
+                    <button type="button" class="btn btn-primary" id="generate-teaser-btn" <?php echo (!$teaserValidation['valid'] && !$savedTeaserHtml) ? 'disabled style="opacity: 0.6; cursor: not-allowed;"' : ''; ?>>
                         <?php echo $savedTeaserHtml ? 'Обновить тизер' : 'Создать тизер'; ?>
                     </button>
                     <button type="button" class="btn btn-secondary" id="export-teaser-pdf" <?php echo $savedTeaserHtml ? '' : 'disabled'; ?>>
@@ -4568,7 +4573,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 
                 // Если не удалось создать маскированные данные, используем исходное название
                 if ($heroCompanyName === null || $heroCompanyName === '') {
-                    $heroCompanyName = trim((string)($latestForm['asset_name'] ?? ''));
+                $heroCompanyName = trim((string)($latestForm['asset_name'] ?? ''));
                 }
                 
                 $heroCompanyName = removeMaPlatformPhrase($heroCompanyName);
@@ -4856,12 +4861,24 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     </div>
                 <?php endif; ?>
                 <div class="teaser-hero__status">
-                    <div class="teaser-status" id="teaser-status">
+                    <div class="teaser-status">
                         <?php echo htmlspecialchars($teaserStatusText, ENT_QUOTES, 'UTF-8'); ?>
                     </div>
                 </div>
             </div>
             <?php endif; ?>
+                <!-- Статус тизера (всегда видимый, даже когда hero блок скрыт) -->
+                <div class="teaser-status" id="teaser-status" style="margin-top: 16px; margin-bottom: 16px; padding: 12px; background: rgba(99,102,241,0.05); border-radius: 8px; font-size: 14px; color: var(--text-secondary);">
+                    <?php 
+                    if ($savedTeaserHtml && $savedTeaserTimestamp) {
+                        echo 'Тизер обновлён: ' . date('d.m.Y H:i', strtotime($savedTeaserTimestamp));
+                    } elseif ($savedTeaserHtml) {
+                        echo 'Тизер создан';
+                    } else {
+                        echo 'Нажмите «Создать тизер», чтобы подготовить актуальную версию.';
+                    }
+                    ?>
+                </div>
                 <div class="teaser-progress" id="teaser-progress" aria-hidden="true">
                     <div class="teaser-progress__bar" id="teaser-progress-bar"></div>
                 </div>
@@ -5396,8 +5413,11 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             const showTeaserProgress = (elements) => {
                 const { teaserProgress, teaserProgressBar } = elements;
                 if (!teaserProgress || !teaserProgressBar) {
+                    console.warn('Teaser progress elements not found');
                     return;
                 }
+                // Убеждаемся, что прогресс-бар виден
+                teaserProgress.style.display = 'block';
                 teaserProgress.setAttribute('aria-hidden', 'false');
                 teaserProgress.classList.add('is-visible');
                 teaserProgressBar.style.width = '0%';
@@ -5432,6 +5452,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     teaserProgress.classList.remove('is-visible');
                     teaserProgress.setAttribute('aria-hidden', 'true');
                     teaserProgressBar.style.width = '0%';
+                    // Скрываем прогресс-бар только после анимации
+                    setTimeout(() => {
+                        teaserProgress.style.display = 'none';
+                    }, 300);
                 }, success ? 700 : 0);
             };
 
@@ -5527,8 +5551,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     investorControls,
                 } = elements;
                 if (!teaserBtn || !teaserStatus || !teaserResult) {
+                    console.error('Teaser elements not found');
                     return;
                 }
+                
+                // Проверяем, что form_id указан
+                if (!currentFormId) {
+                    console.error('Form ID is not set');
+                    teaserStatus.textContent = 'Ошибка: не выбран актив. Выберите актив из вкладок выше.';
+                    return;
+                }
+                
                 let teaserGenerated = false;
                 teaserBtn.disabled = true;
                 teaserStatus.innerHTML = '<span class="teaser-spinner">Генерируем тизер...</span>';
@@ -5600,6 +5633,11 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     }
                     teaserGenerated = true;
                     completeTeaserProgress(elements, true);
+                    
+                    // Перезагружаем страницу после успешной генерации, чтобы обновить PHP переменные
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
                 } catch (error) {
                     console.error('Teaser generation failed', error);
                     teaserStatus.textContent = error.message || 'Ошибка генерации тизера.';
@@ -6036,10 +6074,51 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             };
 
             const initTeaserGenerator = () => {
-                const { teaserBtn, teaserSubmitModerationBtn } = getTeaserElements();
-                if (teaserBtn) {
-                    teaserBtn.addEventListener('click', handleTeaserGenerate);
+                const elements = getTeaserElements();
+                const { teaserBtn, teaserStatus, teaserResult, teaserSubmitModerationBtn } = elements;
+                
+                // Проверяем, что все необходимые элементы найдены
+                if (!teaserBtn) {
+                    console.error('Teaser button not found in DOM');
+                    return;
                 }
+                if (!teaserStatus) {
+                    console.error('Teaser status element not found in DOM');
+                    return;
+                }
+                if (!teaserResult) {
+                    console.error('Teaser result element not found in DOM');
+                    return;
+                }
+                
+                // Убеждаемся, что кнопка не disabled (если тизер уже создан, кнопка должна работать)
+                const btnText = teaserBtn.textContent.trim();
+                if (btnText === 'Обновить тизер') {
+                    // Разблокируем кнопку, если тизер уже создан
+                    teaserBtn.disabled = false;
+                    teaserBtn.removeAttribute('disabled');
+                    // Убираем inline стили, которые могут блокировать кнопку
+                    teaserBtn.style.opacity = '1';
+                    teaserBtn.style.cursor = 'pointer';
+                    teaserBtn.style.pointerEvents = 'auto';
+                }
+                
+                // Удаляем все предыдущие обработчики, создавая новую кнопку
+                const newBtn = teaserBtn.cloneNode(true);
+                teaserBtn.parentNode.replaceChild(newBtn, teaserBtn);
+                
+                // Привязываем обработчик к новой кнопке
+                newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Teaser button clicked, form_id:', currentFormId);
+                    if (newBtn.disabled) {
+                        console.warn('Button is disabled, cannot generate teaser');
+                        return;
+                    }
+                    handleTeaserGenerate();
+                });
+                
                 if (teaserSubmitModerationBtn) {
                     teaserSubmitModerationBtn.addEventListener('click', handleTeaserSubmitModeration);
                 }
