@@ -267,6 +267,9 @@ try {
         'model' => TOGETHER_MODEL,
     ]);
 
+    // Создаем или обновляем запись в published_teasers для модерации
+    createPublishedTeaserRecord($form, $html);
+
     echo json_encode([
         'success' => true,
         'html' => $html,
@@ -569,6 +572,9 @@ function parseTeaserResponse(string $text): array
  */
 function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null): string
 {
+    // Рендерим hero блок в начале
+    $heroHtml = renderHeroBlock($assetName, $data, $payload, $dcfData);
+    
     $blocks = [];
 
     if (!empty($data['overview'])) {
@@ -742,7 +748,8 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         ], 'fallback');
     }
 
-    return '<div class="teaser-grid">' . implode('', $blocks) . '</div>';
+    // Возвращаем hero блок + основной контент
+    return $heroHtml . '<div class="teaser-grid">' . implode('', $blocks) . '</div>';
 }
 
 /**
@@ -2326,6 +2333,248 @@ function buildHeroDescription(array $teaserData, array $payload): string
 }
 
 /**
+ * Рендерит hero блок тизера с названием компании, описанием, чипами и статистикой
+ * 
+ * @param string $assetName Название актива
+ * @param array $teaserData Данные тизера
+ * @param array $payload Данные анкеты
+ * @param array|null $dcfData Данные DCF модели
+ * @return string HTML код hero блока
+ */
+function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?array $dcfData = null): string
+{
+    // Получаем описание из hero_description или из overview
+    $heroDescription = '';
+    if (!empty($teaserData['overview']['summary'])) {
+        $heroDescription = buildHeroDescription($teaserData, $payload);
+    } else {
+        $heroDescription = trim((string)($payload['company_description'] ?? ''));
+        if (mb_strlen($heroDescription) > 220) {
+            $heroDescription = mb_substr($heroDescription, 0, 220) . '…';
+        }
+    }
+    
+    // Формируем чипы (chips)
+    $heroChips = [];
+    
+    // 1. Сегмент рынка
+    $industry = trim((string)($payload['products_services'] ?? ''));
+    if ($industry !== '') {
+        $heroChips[] = [
+            'label' => 'СЕГМЕНТ',
+            'value' => $industry,
+            'icon' => 'segment'
+        ];
+    }
+    
+    // 2. География присутствия
+    $region = trim((string)($payload['presence_regions'] ?? ''));
+    if ($region !== '') {
+        $heroChips[] = [
+            'label' => 'РЫНКИ',
+            'value' => $region,
+            'icon' => 'location'
+        ];
+    }
+    
+    // 3. Персонал
+    $personnelCount = trim((string)($payload['personnel_count'] ?? ''));
+    if ($personnelCount !== '' && $personnelCount !== '0') {
+        $heroChips[] = [
+            'label' => 'ПЕРСОНАЛ',
+            'value' => $personnelCount . ' чел.',
+            'icon' => 'people'
+        ];
+    }
+    
+    // 4. Онлайн продажи
+    $onlineShare = trim((string)($payload['online_sales_share'] ?? ''));
+    if ($onlineShare !== '' && $onlineShare !== '0') {
+        $onlineShare = rtrim($onlineShare, '%');
+        $heroChips[] = [
+            'label' => 'ОНЛАЙН',
+            'value' => $onlineShare . '%',
+            'icon' => 'online'
+        ];
+    }
+    
+    // Ограничиваем до 4 элементов
+    $heroChips = array_slice($heroChips, 0, 4);
+    
+    // Формируем статистику
+    $heroStats = [];
+    
+    if (is_array($dcfData)) {
+        // Получаем выручку и прибыль P2 из DCF данных
+        $p2Revenue = null;
+        $p2Profit = null;
+        if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
+            foreach ($dcfData['rows'] as $row) {
+                if (!isset($row['label']) || !isset($row['values']) || !is_array($row['values'])) {
+                    continue;
+                }
+                if ($row['label'] === 'Выручка' && array_key_exists('P2', $row['values'])) {
+                    $val = $row['values']['P2'];
+                    if ($val !== null && $val !== '') {
+                        $p2Revenue = (float)$val;
+                    }
+                }
+                if ($row['label'] === 'Прибыль от продаж' && array_key_exists('P2', $row['values'])) {
+                    $val = $row['values']['P2'];
+                    if ($val !== null && $val !== '') {
+                        $p2Profit = (float)$val;
+                    }
+                }
+            }
+        }
+        
+        // Выручка 2026E
+        if ($p2Revenue !== null) {
+            $heroStats[] = [
+                'label' => 'ВЫРУЧКА 2026E',
+                'value' => number_format($p2Revenue, 0, '.', ' ') . ' млн Р',
+                'caption' => 'прогноз на 2026',
+            ];
+        }
+        
+        // Маржинальность
+        if ($p2Profit !== null && $p2Revenue !== null && $p2Revenue != 0) {
+            $marginPercent = ($p2Profit / $p2Revenue) * 100;
+            $heroStats[] = [
+                'label' => 'МАРЖИНАЛЬНОСТЬ',
+                'value' => number_format($marginPercent, 1, '.', ' ') . '%',
+                'caption' => '2026Е (Прибыль/Выручка)',
+            ];
+        }
+        
+        // Темп роста
+        $p1Revenue = null;
+        $p2RevenueForGrowth = null;
+        if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
+            foreach ($dcfData['rows'] as $row) {
+                if (isset($row['label']) && $row['label'] === 'Выручка') {
+                    if (isset($row['values']['P1']) && $row['values']['P1'] !== null) {
+                        $p1Revenue = (float)$row['values']['P1'];
+                    }
+                    if (isset($row['values']['P2']) && $row['values']['P2'] !== null) {
+                        $p2RevenueForGrowth = (float)$row['values']['P2'];
+                    }
+                    break;
+                }
+            }
+        }
+        if ($p1Revenue !== null && $p2RevenueForGrowth !== null && $p1Revenue != 0) {
+            $currentYearGrowth = (($p2RevenueForGrowth - $p1Revenue) / $p1Revenue) * 100;
+            $heroStats[] = [
+                'label' => 'ТЕМП РОСТА',
+                'value' => number_format($currentYearGrowth, 1, '.', ' ') . '%',
+                'caption' => '2026Е к 2025E',
+            ];
+        }
+        
+        // Цена - приоритет у цены предложения продавца
+        $finalPrice = null;
+        
+        // Проверяем все возможные источники цены предложения продавца
+        // 1. Прямо из payload
+        if (isset($payload['final_price']) && $payload['final_price'] > 0) {
+            $finalPrice = (float)$payload['final_price'];
+        } elseif (isset($payload['final_selling_price']) && $payload['final_selling_price'] > 0) {
+            $finalPrice = (float)$payload['final_selling_price'];
+        }
+        
+        // 2. Из data_json
+        if ($finalPrice === null && !empty($payload['data_json'])) {
+            $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+            if (is_array($formDataJson)) {
+                if (isset($formDataJson['final_price']) && $formDataJson['final_price'] > 0) {
+                    $finalPrice = (float)$formDataJson['final_price'];
+                } elseif (isset($formDataJson['final_selling_price']) && $formDataJson['final_selling_price'] > 0) {
+                    $finalPrice = (float)$formDataJson['final_selling_price'];
+                }
+            }
+        }
+        
+        // Показываем цену предложения продавца, если она есть
+        if ($finalPrice !== null && $finalPrice > 0) {
+            $heroStats[] = [
+                'label' => 'ЦЕНА',
+                'value' => number_format($finalPrice, 0, '.', ' ') . ' млн Р',
+                'caption' => 'Цена предложения Продавца',
+            ];
+        }
+        // Enterprise Value НЕ показываем, если есть цена предложения продавца
+        // (убрали elseif, чтобы не показывать EV, если нет цены предложения продавца)
+    }
+    
+    // Ограничиваем до 4 элементов
+    $heroStats = array_slice(array_filter($heroStats, function($item) {
+        return isset($item['value']) && $item['value'] !== '' && $item['value'] !== null;
+    }), 0, 4);
+    
+    // Дата обновления
+    $updateDate = date('d.m.Y H:i');
+    
+    // Рендерим HTML
+    $html = '<div class="teaser-hero">';
+    $html .= '<div class="teaser-hero__content">';
+    $html .= '<h3>' . escapeHtml($assetName) . '</h3>';
+    $html .= '<p class="teaser-hero__description">' . escapeHtml($heroDescription) . '</p>';
+    
+    if (!empty($heroChips)) {
+        $html .= '<div class="teaser-hero__tags">';
+        foreach ($heroChips as $chip) {
+            $html .= '<span class="teaser-chip" data-icon="' . escapeHtml($chip['icon'] ?? '') . '">';
+            $html .= '<span class="teaser-chip__icon">' . getTeaserChipIconSvg($chip['icon'] ?? 'default') . '</span>';
+            $html .= '<span class="teaser-chip__content">';
+            $html .= '<span class="teaser-chip__label">' . escapeHtml($chip['label']) . '</span>';
+            $html .= '<strong class="teaser-chip__value">' . escapeHtml($chip['value']) . '</strong>';
+            $html .= '</span></span>';
+        }
+        $html .= '</div>';
+    }
+    
+    $html .= '</div>';
+    
+    if (!empty($heroStats)) {
+        $html .= '<div class="teaser-hero__stats">';
+        foreach ($heroStats as $stat) {
+            $html .= '<div class="teaser-stat">';
+            $html .= '<span>' . escapeHtml($stat['label']) . '</span>';
+            $html .= '<strong>' . escapeHtml($stat['value']) . '</strong>';
+            if (!empty($stat['caption'])) {
+                $html .= '<small>' . escapeHtml($stat['caption']) . '</small>';
+            }
+            $html .= '</div>';
+        }
+        $html .= '</div>';
+    }
+    
+    $html .= '<div class="teaser-hero__status">';
+    $html .= '<div class="teaser-status">Тизер обновлён: ' . escapeHtml($updateDate) . '</div>';
+    $html .= '</div>';
+    $html .= '</div>';
+    
+    return $html;
+}
+
+/**
+ * Возвращает SVG иконку для чипа hero блока
+ */
+function getTeaserChipIconSvg(string $iconType): string
+{
+    $icons = [
+        'segment' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'location' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 13C13.6569 13 15 11.6569 15 10C15 8.34315 13.6569 7 12 7C10.3431 7 9 8.34315 9 10C9 11.6569 10.3431 13 12 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'people' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7C9 9.20914 7.20914 11 5 11C2.79086 11 1 9.20914 1 7C1 4.79086 2.79086 3 5 3C7.20914 3 9 4.79086 9 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'online' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'default' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    ];
+    
+    return $icons[$iconType] ?? $icons['default'];
+}
+
+/**
  * Генерирует краткое описание для hero блока через ИИ на основе данных анкеты
  * 
  * Эта функция вызывается сразу после расчета DCF, до генерации полного тизера
@@ -2989,6 +3238,56 @@ function persistTeaserSnapshot(array $form, array $payload, array $snapshot): ar
     }
 
     return $snapshot;
+}
+
+/**
+ * Создает или обновляет запись в published_teasers для модерации
+ * 
+ * @param array $form Данные анкеты из БД
+ * @param string $html HTML тизера для модерации
+ * @return bool true при успехе, false при ошибке
+ */
+function createPublishedTeaserRecord(array $form, string $html): bool
+{
+    try {
+        ensurePublishedTeasersTable();
+        $pdo = getDBConnection();
+        
+        // Проверяем, существует ли уже запись для этой анкеты
+        $stmt = $pdo->prepare("SELECT id FROM published_teasers WHERE seller_form_id = ?");
+        $stmt->execute([$form['id']]);
+        $existing = $stmt->fetch();
+        
+        if ($existing) {
+            // Обновляем существующую запись, сбрасывая статус на pending
+            // Это позволяет обновить тизер даже если он был опубликован
+            $stmt = $pdo->prepare("
+                UPDATE published_teasers 
+                SET 
+                    moderated_html = ?,
+                    moderation_status = 'pending',
+                    moderation_notes = NULL,
+                    moderated_at = NULL,
+                    published_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ");
+            $stmt->execute([$html, $existing['id']]);
+        } else {
+            // Создаем новую запись
+            $stmt = $pdo->prepare("
+                INSERT INTO published_teasers 
+                (seller_form_id, moderation_status, created_at, updated_at)
+                VALUES (?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ");
+            $stmt->execute([$form['id']]);
+        }
+        
+        return true;
+    } catch (PDOException $e) {
+        error_log("Error creating published_teaser record: " . $e->getMessage());
+        return false;
+    }
 }
 
 /**

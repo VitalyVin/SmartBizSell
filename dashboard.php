@@ -1332,6 +1332,29 @@ if ($latestForm) {
     
     // Проверяем заполненность полей для генерации тизера
     $teaserValidation = validateFormForTeaser($latestForm);
+    
+    // Получаем информацию о модерации тизера
+    $teaserModerationInfo = null;
+    try {
+        ensurePublishedTeasersTable();
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("
+            SELECT 
+                moderation_status,
+                created_at,
+                moderated_at,
+                published_at,
+                moderation_notes
+            FROM published_teasers
+            WHERE seller_form_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$latestForm['id']]);
+        $teaserModerationInfo = $stmt->fetch();
+    } catch (PDOException $e) {
+        error_log("Error fetching teaser moderation info: " . $e->getMessage());
+    }
 
     $savedHeroDescription = null;
     if (!empty($latestForm['data_json'])) {
@@ -3913,6 +3936,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <li><a href="index.php#buy-business">Купить бизнес</a></li>
                     <li><a href="seller_form.php">Продать бизнес</a></li>
                     <li><a href="dashboard.php">Личный кабинет</a></li>
+                    <?php if (isModerator()): ?>
+                        <li><a href="moderation.php">Модерация</a></li>
+                    <?php endif; ?>
                     <li><a href="logout.php">Выйти</a></li>
                 </ul>
                 <button class="nav-toggle" aria-label="Toggle menu">
@@ -4462,6 +4488,65 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <button type="button" class="btn btn-secondary" id="export-teaser-pdf" <?php echo $savedTeaserHtml ? '' : 'disabled'; ?>>
                         Сохранить тизер в PDF
                     </button>
+                    <?php if ($savedTeaserHtml && $teaserValidation['valid'] && !empty($latestForm)): ?>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <button type="button" class="btn btn-primary" id="submit-teaser-moderation" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">
+                                Отправить на модерацию
+                            </button>
+                            <?php if ($teaserModerationInfo): ?>
+                                <div id="teaser-moderation-info" style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+                                    <?php
+                                    $statusLabels = [
+                                        'pending' => 'На модерации',
+                                        'approved' => 'Утвержден',
+                                        'rejected' => 'Отклонен',
+                                        'published' => 'Опубликован'
+                                    ];
+                                    $statusColors = [
+                                        'pending' => '#FF9500',
+                                        'approved' => '#34C759',
+                                        'rejected' => '#FF3B30',
+                                        'published' => '#007AFF'
+                                    ];
+                                    $status = $teaserModerationInfo['moderation_status'];
+                                    $statusLabel = $statusLabels[$status] ?? $status;
+                                    $statusColor = $statusColors[$status] ?? '#86868B';
+                                    
+                                    // Определяем дату для отображения
+                                    $displayDate = null;
+                                    if ($status === 'published' && $teaserModerationInfo['published_at']) {
+                                        $displayDate = $teaserModerationInfo['published_at'];
+                                    } elseif ($status === 'approved' && $teaserModerationInfo['moderated_at']) {
+                                        $displayDate = $teaserModerationInfo['moderated_at'];
+                                    } elseif ($status === 'rejected' && $teaserModerationInfo['moderated_at']) {
+                                        $displayDate = $teaserModerationInfo['moderated_at'];
+                                    } elseif ($teaserModerationInfo['created_at']) {
+                                        $displayDate = $teaserModerationInfo['created_at'];
+                                    }
+                                    
+                                    if ($displayDate):
+                                        $dateTime = new DateTime($displayDate);
+                                        $formattedDate = $dateTime->format('d.m.Y H:i');
+                                    ?>
+                                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                            <span style="font-weight: 600;">Статус:</span>
+                                            <span style="color: <?php echo $statusColor; ?>; font-weight: 600;"><?php echo htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                            <span style="margin: 0 4px;">•</span>
+                                            <span>Отправлено: <?php echo htmlspecialchars($formattedDate, ENT_QUOTES, 'UTF-8'); ?></span>
+                                        </div>
+                                        <?php if ($status === 'rejected' && !empty($teaserModerationInfo['moderation_notes'])): ?>
+                                            <div style="margin-top: 4px; padding: 8px 12px; background: rgba(255, 59, 48, 0.1); border-radius: 8px; border-left: 3px solid #FF3B30;">
+                                                <strong style="color: #FF3B30; font-size: 12px;">Причина отклонения:</strong>
+                                                <div style="color: var(--text-primary); font-size: 12px; margin-top: 4px;"><?php echo htmlspecialchars($teaserModerationInfo['moderation_notes'], ENT_QUOTES, 'UTF-8'); ?></div>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                            <?php else: ?>
+                                <div id="teaser-moderation-info" style="font-size: 13px; color: var(--text-secondary); display: none;"></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php
@@ -4730,6 +4815,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     ? 'Тизер обновлён: ' . date('d.m.Y H:i', strtotime($savedTeaserTimestamp))
                     : 'Нажмите «Создать тизер», чтобы подготовить актуальную версию.';
             ?>
+            <?php
+            // Скрываем верхний hero блок, если есть сохраненный тизер (он уже содержит hero блок)
+            // Показываем только если тизер еще не создан
+            if (!$savedTeaserHtml): ?>
             <div class="teaser-hero">
                 <div class="teaser-hero__content">
                     <h3><?php echo htmlspecialchars($heroCompanyName, ENT_QUOTES, 'UTF-8'); ?></h3>
@@ -4772,6 +4861,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
                 <div class="teaser-progress" id="teaser-progress" aria-hidden="true">
                     <div class="teaser-progress__bar" id="teaser-progress-bar"></div>
                 </div>
@@ -5258,6 +5348,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 teaserStatus: document.getElementById('teaser-status'),
                 teaserResult: document.getElementById('teaser-result'),
                 teaserPrintBtn: document.getElementById('export-teaser-pdf'),
+                teaserSubmitModerationBtn: document.getElementById('submit-teaser-moderation'),
                 teaserSection: document.getElementById('teaser-section'),
                 teaserProgress: document.getElementById('teaser-progress'),
                 teaserProgressBar: document.getElementById('teaser-progress-bar'),
@@ -5846,12 +5937,112 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
              * 
              * Создано: 2025-01-XX
              */
-            const initTeaserGenerator = () => {
-                const { teaserBtn } = getTeaserElements();
-                if (!teaserBtn) {
+            /**
+             * Обработчик отправки тизера на модерацию
+             */
+            const handleTeaserSubmitModeration = async () => {
+                const { teaserSubmitModerationBtn } = getTeaserElements();
+                if (!teaserSubmitModerationBtn || teaserSubmitModerationBtn.disabled) {
                     return;
                 }
-                teaserBtn.addEventListener('click', handleTeaserGenerate);
+                
+                if (!confirm('Отправить тизер на модерацию? После проверки модератором тизер будет опубликован на главной странице.')) {
+                    return;
+                }
+                
+                const originalText = teaserSubmitModerationBtn.textContent;
+                teaserSubmitModerationBtn.disabled = true;
+                teaserSubmitModerationBtn.textContent = 'Отправка...';
+                
+                try {
+                    const response = await fetch('submit_teaser_moderation.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ 
+                            form_id: currentFormId 
+                        }),
+                    });
+                    
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || 'Не удалось отправить тизер на модерацию.');
+                    }
+                    
+                    // Показываем успешное сообщение
+                    teaserSubmitModerationBtn.textContent = '✓ Отправлено';
+                    teaserSubmitModerationBtn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
+                    
+                    // Обновляем информацию о модерации
+                    updateModerationInfo('pending', new Date().toISOString());
+                    
+                    setTimeout(() => {
+                        teaserSubmitModerationBtn.textContent = originalText;
+                        teaserSubmitModerationBtn.style.background = '';
+                        teaserSubmitModerationBtn.disabled = false;
+                        // Перезагружаем страницу для обновления данных
+                        window.location.reload();
+                    }, 2000);
+                    
+                } catch (error) {
+                    console.error('Error submitting teaser for moderation:', error);
+                    alert('Ошибка: ' + error.message);
+                    teaserSubmitModerationBtn.disabled = false;
+                    teaserSubmitModerationBtn.textContent = originalText;
+                }
+            };
+
+            /**
+             * Обновляет информацию о модерации тизера
+             */
+            const updateModerationInfo = (status, date) => {
+                const infoDiv = document.getElementById('teaser-moderation-info');
+                if (!infoDiv) return;
+                
+                const statusLabels = {
+                    'pending': 'На модерации',
+                    'approved': 'Утвержден',
+                    'rejected': 'Отклонен',
+                    'published': 'Опубликован'
+                };
+                const statusColors = {
+                    'pending': '#FF9500',
+                    'approved': '#34C759',
+                    'rejected': '#FF3B30',
+                    'published': '#007AFF'
+                };
+                
+                const statusLabel = statusLabels[status] || status;
+                const statusColor = statusColors[status] || '#86868B';
+                
+                const dateObj = new Date(date);
+                const formattedDate = dateObj.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-weight: 600;">Статус:</span>
+                        <span style="color: ${statusColor}; font-weight: 600;">${statusLabel}</span>
+                        <span style="margin: 0 4px;">•</span>
+                        <span>Отправлено: ${formattedDate}</span>
+                    </div>
+                `;
+            };
+
+            const initTeaserGenerator = () => {
+                const { teaserBtn, teaserSubmitModerationBtn } = getTeaserElements();
+                if (teaserBtn) {
+                    teaserBtn.addEventListener('click', handleTeaserGenerate);
+                }
+                if (teaserSubmitModerationBtn) {
+                    teaserSubmitModerationBtn.addEventListener('click', handleTeaserSubmitModeration);
+                }
             };
 
             /**

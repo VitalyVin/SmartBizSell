@@ -16,6 +16,327 @@
  */
 
 require_once 'config.php';
+
+// Загружаем опубликованные тизеры для отображения на главной странице
+$publishedTeasers = [];
+try {
+    ensurePublishedTeasersTable();
+    $pdo = getDBConnection();
+    
+    $stmt = $pdo->prepare("
+        SELECT 
+            pt.id,
+            pt.seller_form_id,
+            pt.moderated_html,
+            pt.published_at,
+            sf.asset_name,
+            sf.data_json,
+            sf.presence_regions,
+            sf.company_description,
+            sf.financial_results,
+            sf.status as form_status
+        FROM published_teasers pt
+        INNER JOIN seller_forms sf ON pt.seller_form_id = sf.id
+        INNER JOIN (
+            SELECT seller_form_id, MAX(published_at) as max_published_at
+            FROM published_teasers
+            WHERE moderation_status = 'published'
+            GROUP BY seller_form_id
+        ) latest ON pt.seller_form_id = latest.seller_form_id 
+            AND pt.published_at = latest.max_published_at
+        WHERE pt.moderation_status = 'published'
+        ORDER BY pt.published_at DESC
+        LIMIT 50
+    ");
+    $stmt->execute();
+    $publishedTeasers = $stmt->fetchAll();
+    
+    // Извлекаем данные для карточек из каждого тизера
+    foreach ($publishedTeasers as &$teaser) {
+        $formData = json_decode($teaser['data_json'], true);
+        $teaser['card_data'] = extractTeaserCardData($teaser, $formData);
+    }
+    unset($teaser);
+} catch (PDOException $e) {
+    error_log("Error loading published teasers: " . $e->getMessage());
+}
+
+/**
+ * Извлекает данные для карточки из тизера
+ * 
+ * @param array $teaser Данные из published_teasers
+ * @param array|null $formData Данные из data_json формы
+ * @return array Данные для карточки
+ */
+function extractTeaserCardData(array $teaser, ?array $formData): array
+{
+    $cardData = [
+        'id' => $teaser['id'],
+        'title' => $teaser['asset_name'] ?: 'Актив',
+        'price' => 0,
+        'revenue' => 0,
+        'revenue_2026e' => 0,
+        'profit' => 0,
+        'margin' => 0,
+        'growth' => 0,
+        'employees' => 0,
+        'years' => 0,
+        'description' => '',
+        'full_description' => '',
+        'advantages' => [],
+        'risks' => [],
+        'location' => 'other',
+        'industry' => 'services',
+        'contact' => '',
+        'html' => $teaser['moderated_html'] ?: '',
+        'chips' => [],
+        'stats' => []
+    ];
+    
+    // Парсим HTML тизера для извлечения данных из hero блока
+    $html = $teaser['moderated_html'] ?? '';
+    if (empty($html) && is_array($formData) && !empty($formData['teaser_snapshot']['html'])) {
+        $html = $formData['teaser_snapshot']['html'];
+    }
+    
+    if (!empty($html) && class_exists('DOMDocument')) {
+        // Извлекаем данные из hero блока через DOM парсинг
+        $dom = new DOMDocument();
+        libxml_use_internal_errors(true);
+        @$dom->loadHTML('<?xml encoding="UTF-8">' . $html);
+        libxml_clear_errors();
+        $xpath = new DOMXPath($dom);
+        
+        // Извлекаем чипы (chips) с дедупликацией
+        // Ищем все элементы teaser-chip внутри teaser-hero__tags
+        // Используем более точный XPath, чтобы избежать дубликатов из-за вложенности
+        $chips = $xpath->query("//div[contains(@class, 'teaser-hero__tags')]//span[contains(@class, 'teaser-chip') and not(ancestor::span[contains(@class, 'teaser-chip')])]");
+        $uniqueChips = []; // Массив для отслеживания уникальных чипов по ключу
+        $chipsList = []; // Список уникальных чипов для сохранения порядка
+        $processedNodes = []; // Массив для отслеживания уже обработанных DOM узлов
+        
+        foreach ($chips as $chip) {
+            // Проверяем, не обрабатывали ли мы уже этот узел
+            $nodeId = spl_object_hash($chip);
+            if (isset($processedNodes[$nodeId])) {
+                continue;
+            }
+            $processedNodes[$nodeId] = true;
+            
+            $labelNode = $xpath->query(".//span[contains(@class, 'teaser-chip__label')]", $chip)->item(0);
+            $valueNode = $xpath->query(".//strong[contains(@class, 'teaser-chip__value')]", $chip)->item(0);
+            if ($labelNode && $valueNode) {
+                $label = trim($labelNode->textContent);
+                $value = trim($valueNode->textContent);
+                
+                // Пропускаем пустые значения
+                if (empty($label) || empty($value)) {
+                    continue;
+                }
+                
+                // Нормализуем значения для сравнения (убираем лишние пробелы, приводим к верхнему регистру)
+                $normalizedLabel = mb_strtoupper(trim($label));
+                $normalizedValue = mb_strtoupper(trim($value));
+                
+                // Создаем уникальный ключ для проверки дубликатов
+                $chipKey = $normalizedLabel . '|' . $normalizedValue;
+                
+                // Добавляем только если такого чипа еще нет
+                if (!isset($uniqueChips[$chipKey])) {
+                    $uniqueChips[$chipKey] = true;
+                    $chipsList[] = ['label' => $label, 'value' => $value];
+                    
+                    // Извлекаем данные из чипов
+                    if ($normalizedLabel === 'ПЕРСОНАЛ') {
+                        $employees = (int)preg_replace('/[^0-9]/', '', $value);
+                        if ($employees > 0) {
+                            $cardData['employees'] = $employees;
+                        }
+                    }
+                }
+            }
+        }
+        // Сохраняем уникальные чипы
+        $cardData['chips'] = $chipsList;
+        
+        // Извлекаем статистику из hero блока
+        $stats = $xpath->query("//div[contains(@class, 'teaser-hero__stats')]//div[contains(@class, 'teaser-stat')]");
+        $sellerPriceValue = null; // Значение цены предложения продавца
+        $otherPriceValue = null; // Другая цена (если нет цены предложения продавца)
+        
+        // Сначала собираем все статистики
+        $allStats = [];
+        foreach ($stats as $stat) {
+            $labelNode = $xpath->query(".//span[1]", $stat)->item(0);
+            $valueNode = $xpath->query(".//strong", $stat)->item(0);
+            $captionNode = $xpath->query(".//small", $stat)->item(0);
+            
+            if ($labelNode && $valueNode) {
+                $label = trim($labelNode->textContent);
+                $value = trim($valueNode->textContent);
+                $caption = $captionNode ? trim($captionNode->textContent) : '';
+                
+                $statItem = [
+                    'label' => $label,
+                    'value' => $value,
+                    'caption' => $caption
+                ];
+                $allStats[] = $statItem;
+                
+                // Извлекаем конкретные значения
+                if (stripos($label, 'ВЫРУЧКА') !== false || stripos($label, 'Выручка') !== false) {
+                    $revenueValue = (float)preg_replace('/[^0-9.]/', '', $value);
+                    if ($revenueValue > 0) {
+                        if (stripos($label, '2026') !== false) {
+                            $cardData['revenue_2026e'] = $revenueValue;
+                        } else {
+                            $cardData['revenue'] = $revenueValue;
+                        }
+                    }
+                }
+                if (stripos($label, 'МАРЖИНАЛЬНОСТЬ') !== false || stripos($label, 'Маржинальность') !== false) {
+                    $marginValue = (float)preg_replace('/[^0-9.]/', '', $value);
+                    if ($marginValue > 0) {
+                        $cardData['margin'] = $marginValue;
+                    }
+                }
+                if (stripos($label, 'ТЕМП РОСТА') !== false || stripos($label, 'Темп роста') !== false) {
+                    $growthValue = (float)preg_replace('/[^0-9.]/', '', $value);
+                    if ($growthValue > 0) {
+                        $cardData['growth'] = $growthValue;
+                    }
+                }
+                // Извлекаем цену с приоритетом "Цена предложения Продавца"
+                if (stripos($label, 'ЦЕНА') !== false || stripos($label, 'Цена') !== false) {
+                    $priceValue = (float)preg_replace('/[^0-9.]/', '', $value);
+                    if ($priceValue > 0) {
+                        // Проверяем, является ли это ценой предложения продавца
+                        if (stripos($caption, 'Цена предложения Продавца') !== false || 
+                            stripos($caption, 'Цена предложения продавца') !== false ||
+                            stripos($caption, 'предложения Продавца') !== false ||
+                            stripos($caption, 'ПРЕДЛОЖЕНИЯ ПРОДАВЦА') !== false) {
+                            $sellerPriceValue = $priceValue;
+                        } elseif ($otherPriceValue === null) {
+                            // Сохраняем первую другую цену (если нет цены предложения продавца)
+                            $otherPriceValue = $priceValue;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Сохраняем статистики
+        $cardData['stats'] = $allStats;
+        
+        // Устанавливаем цену: приоритет у цены предложения продавца
+        if ($sellerPriceValue !== null) {
+            $cardData['price'] = $sellerPriceValue;
+        } elseif ($otherPriceValue !== null) {
+            $cardData['price'] = $otherPriceValue;
+        }
+        
+        // Извлекаем описание из hero блока
+        $descNode = $xpath->query("//div[contains(@class, 'teaser-hero__content')]//p[contains(@class, 'teaser-hero__description')]")->item(0);
+        if ($descNode) {
+            $description = trim($descNode->textContent);
+            $cardData['description'] = mb_substr($description, 0, 150) . (mb_strlen($description) > 150 ? '...' : '');
+            $cardData['full_description'] = $description;
+        }
+    }
+    
+    // Извлекаем цену из formData, приоритет у final_price (цена предложения продавца)
+    // Используем только если не нашли цену предложения продавца в HTML
+    if ($cardData['price'] == 0 && is_array($formData)) {
+        // Приоритет 1: final_price (цена предложения продавца)
+        if (isset($formData['final_price']) && $formData['final_price'] > 0) {
+            $cardData['price'] = (float)$formData['final_price'];
+        }
+        // Приоритет 2: dcf_equity_value (только если final_price не указана)
+        elseif (isset($formData['dcf_equity_value']) && $formData['dcf_equity_value'] > 0) {
+            $cardData['price'] = (float)$formData['dcf_equity_value'];
+        }
+    }
+    
+    // Извлекаем финансовые данные из formData, если не нашли в HTML
+    if ($cardData['revenue'] == 0 && is_array($formData)) {
+        if (isset($formData['financial_results']) && is_array($formData['financial_results'])) {
+            $financial = $formData['financial_results'];
+            if (isset($financial['revenue']['2024_fact'])) {
+                $cardData['revenue'] = (float)str_replace([' ', ','], '', (string)$financial['revenue']['2024_fact']);
+            }
+            if (isset($financial['profit_from_sales']['2024_fact'])) {
+                $cardData['profit'] = (float)str_replace([' ', ','], '', (string)$financial['profit_from_sales']['2024_fact']);
+            }
+        }
+    }
+    
+    // Извлекаем описание из formData, если не нашли в HTML
+    if (empty($cardData['description']) && is_array($formData)) {
+        if (isset($formData['teaser_snapshot']['hero_description'])) {
+            $cardData['description'] = mb_substr($formData['teaser_snapshot']['hero_description'], 0, 150) . '...';
+            $cardData['full_description'] = $formData['teaser_snapshot']['hero_description'];
+        } elseif (!empty($teaser['company_description'])) {
+            $cardData['description'] = mb_substr($teaser['company_description'], 0, 150) . '...';
+            $cardData['full_description'] = $teaser['company_description'];
+        }
+    }
+    
+    // Извлекаем преимущества и риски из тизера
+    if (is_array($formData) && isset($formData['teaser_snapshot']['data'])) {
+        $teaserData = $formData['teaser_snapshot']['data'];
+        if (isset($teaserData['advantages']) && is_array($teaserData['advantages'])) {
+            $cardData['advantages'] = $teaserData['advantages'];
+        }
+        if (isset($teaserData['risks']) && is_array($teaserData['risks'])) {
+            $cardData['risks'] = $teaserData['risks'];
+        }
+    }
+    
+    // Определяем регион
+    if (!empty($teaser['presence_regions'])) {
+        $regions = strtolower($teaser['presence_regions']);
+        if (strpos($regions, 'москва') !== false) {
+            $cardData['location'] = 'moscow';
+        } elseif (strpos($regions, 'санкт-петербург') !== false || strpos($regions, 'спб') !== false) {
+            $cardData['location'] = 'spb';
+        } elseif (strpos($regions, 'екатеринбург') !== false || strpos($regions, 'екб') !== false) {
+            $cardData['location'] = 'ekb';
+        }
+    }
+    
+    // Определяем отрасль из чипов или описания
+    foreach ($cardData['chips'] as $chip) {
+        if (stripos($chip['label'], 'СЕГМЕНТ') !== false || stripos($chip['label'], 'Сегмент') !== false) {
+            $segment = strtolower($chip['value']);
+            if (strpos($segment, 'it') !== false || strpos($segment, 'разработка') !== false || strpos($segment, 'saas') !== false) {
+                $cardData['industry'] = 'it';
+            } elseif (strpos($segment, 'ресторан') !== false || strpos($segment, 'кафе') !== false) {
+                $cardData['industry'] = 'restaurant';
+            } elseif (strpos($segment, 'интернет-магазин') !== false || strpos($segment, 'e-commerce') !== false) {
+                $cardData['industry'] = 'ecommerce';
+            } elseif (strpos($segment, 'магазин') !== false || strpos($segment, 'торговля') !== false) {
+                $cardData['industry'] = 'retail';
+            }
+            break;
+        }
+    }
+    
+    // Если не определили отрасль, используем старую логику
+    if ($cardData['industry'] === 'services' && !empty($teaser['company_description'])) {
+        $desc = strtolower($teaser['company_description']);
+        if (strpos($desc, 'it') !== false || strpos($desc, 'сайт') !== false || strpos($desc, 'разработка') !== false) {
+            $cardData['industry'] = 'it';
+        } elseif (strpos($desc, 'ресторан') !== false || strpos($desc, 'кафе') !== false) {
+            $cardData['industry'] = 'restaurant';
+        } elseif (strpos($desc, 'интернет-магазин') !== false || strpos($desc, 'e-commerce') !== false) {
+            $cardData['industry'] = 'ecommerce';
+        } elseif (strpos($desc, 'магазин') !== false || strpos($desc, 'торговля') !== false) {
+            $cardData['industry'] = 'retail';
+        }
+    }
+    
+    return $cardData;
+}
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -31,6 +352,8 @@ require_once 'config.php';
     <!-- GSAP для плавных анимаций в стиле Apple.com -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <!-- ApexCharts для финансовых графиков -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
 </head>
 <body>
     <!-- Navigation -->
@@ -47,6 +370,9 @@ require_once 'config.php';
                     <li><a href="#buy-business">Купить бизнес</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="dashboard.php">Продать бизнес</a></li>
+                        <?php if (isModerator()): ?>
+                            <li><a href="moderation.php">Модерация</a></li>
+                        <?php endif; ?>
                     <?php else: ?>
                         <li><a href="login.php">Продать бизнес</a></li>
                     <?php endif; ?>
@@ -305,6 +631,8 @@ require_once 'config.php';
             </div>
 
             <div class="businesses-grid" id="businesses-grid">
+                <?php if (empty($publishedTeasers)): ?>
+                    <!-- Статические карточки (fallback, если нет опубликованных тизеров) -->
                 <!-- Business Card 1 -->
                 <div class="business-card card-it"
                      data-industry="it"
@@ -655,6 +983,174 @@ require_once 'config.php';
 
                     <div class="card-glow"></div>
                 </div>
+                <?php else: ?>
+                    <!-- Динамические карточки из опубликованных тизеров -->
+                    <?php foreach ($publishedTeasers as $teaser): ?>
+                        <?php 
+                        $card = $teaser['card_data'];
+                        // Форматируем цену (уже в миллионах)
+                        $priceFormatted = $card['price'] > 0 ? number_format($card['price'], 0, '.', ' ') . ' млн ₽' : 'По запросу';
+                        // Форматируем выручку (уже в миллионах)
+                        $revenueFormatted = $card['revenue'] > 0 ? number_format($card['revenue'], 0, '.', ' ') . ' млн ₽' : ($card['revenue_2026e'] > 0 ? number_format($card['revenue_2026e'], 0, '.', ' ') . ' млн ₽' : '—');
+                        $locationLabels = [
+                            'moscow' => 'Москва',
+                            'spb' => 'Санкт-Петербург',
+                            'ekb' => 'Екатеринбург',
+                            'other' => 'Другие города'
+                        ];
+                        $locationLabel = $locationLabels[$card['location']] ?? 'Другие города';
+                        $industryIcons = [
+                            'it' => '💻',
+                            'restaurant' => '🍽️',
+                            'ecommerce' => '🛒',
+                            'retail' => '🏪',
+                            'services' => '💼',
+                            'manufacturing' => '🏭',
+                            'real_estate' => '🏢'
+                        ];
+                        $icon = $industryIcons[$card['industry']] ?? '💼';
+                        ?>
+                        <div class="business-card card-<?php echo htmlspecialchars($card['industry'], ENT_QUOTES, 'UTF-8'); ?> business-card-enhanced"
+                             data-industry="<?php echo htmlspecialchars($card['industry'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-price="<?php echo $card['price'] * 1000000; ?>"
+                             data-location="<?php echo htmlspecialchars($card['location'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-id="<?php echo $card['id']; ?>"
+                             data-teaser-id="<?php echo $teaser['id']; ?>"
+                             data-title="<?php echo htmlspecialchars($card['title'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-revenue="<?php echo ($card['revenue'] > 0 ? $card['revenue'] : $card['revenue_2026e']) * 1000000; ?>"
+                             data-employees="<?php echo $card['employees']; ?>"
+                             data-years="<?php echo $card['years']; ?>"
+                             data-profit="<?php echo $card['profit'] * 1000000; ?>"
+                             data-growth="<?php echo $card['growth']; ?>"
+                             data-description="<?php echo htmlspecialchars($card['description'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-full-description="<?php echo htmlspecialchars($card['full_description'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-advantages="<?php echo htmlspecialchars(implode('|', $card['advantages']), ENT_QUOTES, 'UTF-8'); ?>"
+                             data-risks="<?php echo htmlspecialchars(implode('|', $card['risks']), ENT_QUOTES, 'UTF-8'); ?>"
+                             data-contact="<?php echo htmlspecialchars($card['contact'], ENT_QUOTES, 'UTF-8'); ?>">
+                            <div class="card-header">
+                                <div class="card-icon-bg">
+                                    <div class="card-icon"><?php echo $icon; ?></div>
+                                </div>
+                                <?php if ($teaser['published_at'] && (time() - strtotime($teaser['published_at'])) < 86400 * 7): ?>
+                                    <div class="card-badge">Новое</div>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="card-content">
+                                <h3 class="card-title"><?php echo htmlspecialchars($card['title'], ENT_QUOTES, 'UTF-8'); ?></h3>
+                                <p class="card-description"><?php echo htmlspecialchars($card['description'], ENT_QUOTES, 'UTF-8'); ?></p>
+                                
+                                <?php if (!empty($card['chips'])): ?>
+                                    <?php
+                                    // Убираем дубликаты чипов перед отображением (дополнительная проверка)
+                                    $uniqueChipsDisplay = [];
+                                    $seenKeysDisplay = [];
+                                    foreach ($card['chips'] as $chip) {
+                                        // Нормализуем для сравнения
+                                        $normalizedLabel = mb_strtoupper(trim($chip['label'] ?? ''));
+                                        $normalizedValue = mb_strtoupper(trim($chip['value'] ?? ''));
+                                        
+                                        // Пропускаем пустые значения
+                                        if (empty($normalizedLabel) || empty($normalizedValue)) {
+                                            continue;
+                                        }
+                                        
+                                        $chipKey = $normalizedLabel . '|' . $normalizedValue;
+                                        if (!isset($seenKeysDisplay[$chipKey])) {
+                                            $seenKeysDisplay[$chipKey] = true;
+                                            $uniqueChipsDisplay[] = $chip;
+                                        }
+                                    }
+                                    ?>
+                                    <?php if (!empty($uniqueChipsDisplay)): ?>
+                                        <div class="card-chips" style="display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0;">
+                                            <?php foreach ($uniqueChipsDisplay as $chip): ?>
+                                                <span class="card-chip" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(99, 102, 241, 0.1); border-radius: 6px; font-size: 11px; color: #6366F1;">
+                                                    <strong style="font-weight: 600;"><?php echo htmlspecialchars($chip['label'], ENT_QUOTES, 'UTF-8'); ?>:</strong>
+                                                    <span><?php echo htmlspecialchars($chip['value'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                                </span>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($card['stats'])): ?>
+                                    <?php
+                                    // Фильтруем статистику: для цены показываем только "Цена предложения Продавца"
+                                    $filteredStats = [];
+                                    $sellerPriceStat = null;
+                                    foreach ($card['stats'] as $stat) {
+                                        $label = mb_strtoupper(trim($stat['label'] ?? ''));
+                                        $caption = mb_strtoupper(trim($stat['caption'] ?? ''));
+                                        
+                                        // Если это цена, проверяем caption
+                                        if (stripos($label, 'ЦЕНА') !== false || stripos($label, 'Цена') !== false) {
+                                            // Если это цена предложения продавца, сохраняем её
+                                            if (stripos($caption, 'ЦЕНА ПРЕДЛОЖЕНИЯ ПРОДАВЦА') !== false || 
+                                                stripos($caption, 'ПРЕДЛОЖЕНИЯ ПРОДАВЦА') !== false) {
+                                                $sellerPriceStat = $stat;
+                                            }
+                                            // Пропускаем другие цены, если есть цена предложения продавца
+                                            if ($sellerPriceStat === null) {
+                                                $filteredStats[] = $stat;
+                                            }
+                                        } else {
+                                            // Для не-цен добавляем все статистики
+                                            $filteredStats[] = $stat;
+                                        }
+                                    }
+                                    
+                                    // Если нашли цену предложения продавца, добавляем её в начало
+                                    if ($sellerPriceStat !== null) {
+                                        array_unshift($filteredStats, $sellerPriceStat);
+                                    }
+                                    
+                                    // Ограничиваем до 4 элементов
+                                    $filteredStats = array_slice($filteredStats, 0, 4);
+                                    ?>
+                                    <?php if (!empty($filteredStats)): ?>
+                                        <div class="card-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 16px 0; padding: 16px; background: rgba(0, 0, 0, 0.02); border-radius: 12px;">
+                                            <?php foreach ($filteredStats as $stat): ?>
+                                                <div class="card-stat" style="display: flex; flex-direction: column; gap: 4px;">
+                                                    <span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;"><?php echo htmlspecialchars($stat['label'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                                    <strong style="font-size: 18px; font-weight: 700; color: var(--text-primary);"><?php echo htmlspecialchars($stat['value'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                                                    <?php if (!empty($stat['caption'])): ?>
+                                                        <small style="font-size: 10px; color: var(--text-secondary);"><?php echo htmlspecialchars($stat['caption'], ENT_QUOTES, 'UTF-8'); ?></small>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <div class="card-metrics" style="display: flex; gap: 16px; margin: 12px 0;">
+                                        <?php if ($card['revenue'] > 0 || $card['revenue_2026e'] > 0): ?>
+                                        <div class="metric">
+                                            <div class="metric-value"><?php echo $revenueFormatted; ?></div>
+                                            <div class="metric-label">Выручка</div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if ($card['employees'] > 0): ?>
+                                        <div class="metric">
+                                            <div class="metric-value"><?php echo $card['employees']; ?></div>
+                                            <div class="metric-label">Сотрудников</div>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="card-footer">
+                                <div class="card-price">
+                                    <span class="price-amount"><?php echo $priceFormatted; ?></span>
+                                    <span class="price-label">Цена продажи</span>
+                                </div>
+                                <button class="card-button">Подробнее</button>
+                            </div>
+
+                            <div class="card-glow"></div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
 
             <div class="no-results" id="no-results" style="display: none;">
@@ -684,70 +1180,10 @@ require_once 'config.php';
                 </div>
 
                 <div class="modal-body">
-                    <div class="modal-section">
-                        <h3 class="section-title-modal">📊 Финансовые показатели</h3>
-                        <div class="financial-grid">
-                            <div class="financial-item">
-                                <span class="financial-label">Годовая выручка</span>
-                                <span class="financial-value" id="modal-revenue">0 ₽</span>
-                            </div>
-                            <div class="financial-item">
-                                <span class="financial-label">Прибыль в год</span>
-                                <span class="financial-value" id="modal-profit">0 ₽</span>
-                            </div>
-                            <div class="financial-item">
-                                <span class="financial-label">Рост выручки</span>
-                                <span class="financial-value growth" id="modal-growth">0%</span>
-                            </div>
-                            <div class="financial-item">
-                                <span class="financial-label">Цена продажи</span>
-                                <span class="financial-value price" id="modal-price">0 ₽</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal-section">
-                        <h3 class="section-title-modal">📋 Общая информация</h3>
-                        <div class="info-grid">
-                            <div class="info-item">
-                                <span class="info-icon">👥</span>
-                                <div class="info-content">
-                                    <span class="info-label">Количество сотрудников</span>
-                                    <span class="info-value" id="modal-employees">0</span>
-                                </div>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-icon">📅</span>
-                                <div class="info-content">
-                                    <span class="info-label">На рынке</span>
-                                    <span class="info-value" id="modal-years">0 лет</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal-section">
-                        <h3 class="section-title-modal">📖 Описание</h3>
-                        <p class="modal-description" id="modal-description"></p>
-                    </div>
-
-                    <div class="modal-section">
-                        <h3 class="section-title-modal">✅ Преимущества</h3>
-                        <ul class="advantages-list" id="modal-advantages"></ul>
-                    </div>
-
-                    <div class="modal-section">
-                        <h3 class="section-title-modal">⚠️ Риски</h3>
-                        <ul class="risks-list" id="modal-risks"></ul>
-                    </div>
-
-                    <div class="modal-section">
-                        <h3 class="section-title-modal">📞 Контакты</h3>
-                        <div class="contact-info">
-                            <a href="tel:" class="contact-link" id="modal-contact">
-                                <span class="contact-icon">📱</span>
-                                <span id="modal-contact-text">+7 (495) 123-45-67</span>
-                            </a>
+                    <!-- Полный тизер в формате личного кабинета -->
+                    <div class="teaser-section" id="modal-teaser-section">
+                        <div class="teaser-result" id="modal-teaser-content">
+                            <p style="text-align: center; color: var(--text-secondary); padding: 40px;">Загрузка тизера...</p>
                         </div>
                     </div>
                 </div>

@@ -885,23 +885,14 @@ function formatCurrency(num) {
  * Открытие модального окна с данными о бизнесе
  * @param {HTMLElement} card - Элемент карточки бизнеса
  */
-function openBusinessModal(card) {
+async function openBusinessModal(card) {
     const iconElement = card.querySelector('.card-icon');
     const icon = iconElement ? iconElement.textContent : '💼';
     const title = card.getAttribute('data-title');
     const locationElement = card.querySelector('.card-location');
     const location = locationElement ? locationElement.textContent : card.getAttribute('data-location');
-    const revenue = parseInt(card.getAttribute('data-revenue'));
-    const profit = parseInt(card.getAttribute('data-profit'));
-    const growth = card.getAttribute('data-growth');
-    const price = parseInt(card.getAttribute('data-price'));
-    const employees = card.getAttribute('data-employees');
-    const years = card.getAttribute('data-years');
-    const fullDescription = card.getAttribute('data-full-description');
-    const advantages = card.getAttribute('data-advantages').split('|');
-    const risks = card.getAttribute('data-risks').split('|');
-    const contact = card.getAttribute('data-contact');
     const badge = card.querySelector('.card-badge');
+    const teaserId = card.getAttribute('data-teaser-id');
     
     // Set icon
     const modalIcon = document.getElementById('modal-icon');
@@ -924,42 +915,38 @@ function openBusinessModal(card) {
         }
     }
     
-    // Set financial data
-    document.getElementById('modal-revenue').textContent = formatCurrency(revenue);
-    document.getElementById('modal-profit').textContent = formatCurrency(profit);
-    document.getElementById('modal-growth').textContent = growth + '%';
-    document.getElementById('modal-price').textContent = formatCurrency(price);
-    
-    // Set info
-    document.getElementById('modal-employees').textContent = employees;
-    document.getElementById('modal-years').textContent = years + ' лет';
-    
-    // Set description
-    document.getElementById('modal-description').textContent = fullDescription;
-    
-    // Set advantages
-    const advantagesList = document.getElementById('modal-advantages');
-    advantagesList.innerHTML = '';
-    advantages.forEach(advantage => {
-        const li = document.createElement('li');
-        li.textContent = advantage.trim();
-        advantagesList.appendChild(li);
-    });
-    
-    // Set risks
-    const risksList = document.getElementById('modal-risks');
-    risksList.innerHTML = '';
-    risks.forEach(risk => {
-        const li = document.createElement('li');
-        li.textContent = risk.trim();
-        risksList.appendChild(li);
-    });
-    
-    // Set contact
-    const contactLink = document.getElementById('modal-contact');
-    const contactText = document.getElementById('modal-contact-text');
-    contactLink.href = 'tel:' + contact.replace(/\s/g, '');
-    contactText.textContent = contact;
+    // Загружаем полный HTML тизера
+    const teaserSection = document.getElementById('modal-teaser-section');
+    const teaserContent = document.getElementById('modal-teaser-content');
+    if (teaserId && teaserSection && teaserContent) {
+        teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Загрузка тизера...</p>';
+        teaserSection.style.display = 'block';
+        
+        try {
+            const response = await fetch(`view_teaser.php?teaser_id=${teaserId}`);
+            if (response.ok) {
+                const html = await response.text();
+                teaserContent.innerHTML = html;
+                // Инициализируем графики после загрузки HTML
+                // Используем setTimeout, чтобы дать браузеру время на рендеринг HTML
+                setTimeout(() => {
+                    // Ищем графики только внутри модального окна
+                    const modalCharts = teaserContent.querySelectorAll('.teaser-chart[data-chart]');
+                    console.log('Found', modalCharts.length, 'charts in modal');
+                    if (modalCharts.length > 0) {
+                        initTeaserCharts();
+                    }
+                }, 200);
+            } else {
+                teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Не удалось загрузить тизер.</p>';
+            }
+        } catch (error) {
+            console.error('Error loading teaser:', error);
+            teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Ошибка загрузки тизера.</p>';
+        }
+    } else {
+        teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Тизер не найден.</p>';
+    }
     
     // Show modal
     businessModal.classList.add('active');
@@ -1067,6 +1054,150 @@ if (document.readyState === 'loading') {
             initProductionToggle();
         }
     }, 500);
+}
+
+/**
+ * Инициализация финансовых графиков в тизерах
+ * Использует ApexCharts для отображения графиков динамики финансов
+ */
+function initTeaserCharts() {
+    if (typeof ApexCharts === 'undefined') {
+        console.warn('ApexCharts is not available.');
+        return;
+    }
+    // Поиск всех контейнеров для графиков (включая модальное окно)
+    const containers = document.querySelectorAll('.teaser-chart[data-chart]');
+    if (!containers.length) {
+        console.log('No chart containers found');
+        return;
+    }
+    console.log('Found', containers.length, 'chart containers');
+    containers.forEach((container, index) => {
+        // Очистка контейнера от предыдущего содержимого
+        container.innerHTML = '';
+        
+        // Генерация уникального ID для графика, если его нет
+        if (!container.id) {
+            container.id = 'teaser-chart-' + Date.now() + '-' + index;
+        }
+        const chartId = container.id;
+        
+        // Проверка, не был ли график уже отрендерен
+        if (container.dataset.chartReady === '1') {
+            return;
+        }
+        
+        // Парсинг JSON данных графика из атрибута data-chart
+        let payload;
+        try {
+            payload = JSON.parse(container.getAttribute('data-chart') || '{}');
+        } catch (error) {
+            console.error('Chart payload parse error', error);
+            return;
+        }
+        if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
+            return;
+        }
+        
+        const options = {
+            chart: {
+                id: chartId,
+                type: 'line',
+                height: 300,
+                parentHeightOffset: 10,
+                toolbar: { show: false },
+                fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            },
+            colors: payload.colors || ['#6366F1', '#0EA5E9', '#F97316', '#10B981'],
+            series: payload.series,
+            stroke: {
+                width: 3,
+                curve: 'smooth',
+            },
+            markers: {
+                size: 4,
+                strokeWidth: 2,
+                hover: { size: 7 },
+            },
+            dataLabels: { enabled: false },
+            grid: {
+                strokeDashArray: 5,
+                borderColor: 'rgba(15,23,42,0.08)',
+            },
+            xaxis: {
+                categories: payload.categories || [],
+                labels: {
+                    style: {
+                        colors: 'rgba(71,85,105,0.9)',
+                        fontSize: '12px',
+                    },
+                },
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+            },
+            yaxis: {
+                labels: {
+                    style: {
+                        colors: 'rgba(71,85,105,0.9)',
+                        fontSize: '12px',
+                    },
+                    formatter: (value) => {
+                        if (value === null || value === undefined) {
+                            return '';
+                        }
+                        const unit = payload.unit || '';
+                        return `${Math.round(value).toLocaleString('ru-RU')} ${unit}`.trim();
+                    },
+                },
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px',
+                offsetY: -5,
+                offsetX: 0,
+                markers: { width: 8, height: 8, radius: 2 },
+                itemMargin: {
+                    horizontal: 12,
+                    vertical: 0,
+                },
+            },
+            tooltip: {
+                theme: 'light',
+                y: {
+                    formatter: (value) => {
+                        if (value === null || value === undefined) {
+                            return '—';
+                        }
+                        const unit = payload.unit || '';
+                        return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ${unit}`.trim();
+                    },
+                },
+            },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 0.3,
+                    opacityFrom: 0.8,
+                    opacityTo: 0.1,
+                    stops: [0, 90, 100],
+                },
+            },
+        };
+        
+        // Ensure container is empty and ready
+        container.innerHTML = '';
+        container.style.minHeight = '260px';
+        
+        const chart = new ApexCharts(container, options);
+        chart.render().then(() => {
+            container.dataset.chartReady = '1';
+            container.setAttribute('data-chart-id', chartId);
+        }).catch((error) => {
+            console.error('Chart render error:', error);
+            container.innerHTML = '<p style="font-size: 12px; color: #999; text-align: center; padding: 20px;">График временно недоступен</p>';
+        });
+    });
 }
 
 console.log('SmartBizSell.ru - Platform loaded successfully');
