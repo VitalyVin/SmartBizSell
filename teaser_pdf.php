@@ -121,8 +121,8 @@ try {
          */
         body {
             font-family: 'Arial', 'Helvetica', sans-serif;
-            font-size: 10px;
-            line-height: 1.35;
+            font-size: 9px; /* Чуть меньше базовый размер для экономии места */
+            line-height: 1.3;
             color: #1f2937;
             background: #fff;
             width: 210mm;
@@ -177,8 +177,8 @@ try {
          * Градиентный фон и радиальный градиент через ::before для визуального эффекта
          */
         .teaser-hero {
-            margin-bottom: 3mm;
-            padding: 3mm;
+            margin-bottom: 2.5mm;
+            padding: 2.5mm;
             background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
             border-radius: 4px;
             border: 0.5px solid #e2e8f0;
@@ -205,7 +205,7 @@ try {
         }
 
         .teaser-hero__title {
-            font-size: 16px;
+            font-size: 14px; /* Уменьшено, чтобы больше текста входило в строку */
             font-weight: 700;
             color: #0f172a;
             margin-bottom: 2mm;
@@ -220,11 +220,11 @@ try {
         }
 
         .teaser-chip {
-            padding: 1.5mm 2.5mm;
+            padding: 1.2mm 2mm;
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
             color: #fff;
             border-radius: 3px;
-            font-size: 8px;
+            font-size: 7px;
             font-weight: 500;
             box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
         }
@@ -232,12 +232,12 @@ try {
         .teaser-hero__stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 2mm;
-            margin-top: 2mm;
+            gap: 1.5mm;
+            margin-top: 1.5mm;
         }
 
         .teaser-stat {
-            padding: 2mm;
+            padding: 1.8mm;
             background: rgba(255, 255, 255, 0.9);
             border-radius: 3px;
             text-align: center;
@@ -247,15 +247,15 @@ try {
 
         .teaser-stat strong {
             display: block;
-            font-size: 13px;
+            font-size: 11px; /* Уменьшено для лучшего размещения */
             font-weight: 700;
             color: #0f172a;
-            margin-bottom: 0.5mm;
+            margin-bottom: 0.4mm;
             line-height: 1.2;
         }
 
         .teaser-stat span {
-            font-size: 8px;
+            font-size: 7px;
             color: #64748b;
         }
 
@@ -268,15 +268,15 @@ try {
         .teaser-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 2.5mm;
-            margin-top: 2.5mm;
+            gap: 2mm;
+            margin-top: 2mm;
             flex: 1;
             min-height: 0;
             overflow: hidden;
         }
 
         .teaser-card {
-            padding: 3mm;
+            padding: 2.5mm;
             background: #fff;
             border: 0.5px solid rgba(15, 23, 42, 0.08);
             border-radius: 4px;
@@ -343,16 +343,26 @@ try {
         /**
          * Блок финансового графика занимает две колонки из трех
          * Это обеспечивает больший размер графика для лучшей читаемости
+         * overflow: visible позволяет графику использовать все доступное пространство
          */
         .teaser-card[data-variant="chart"] {
             grid-column: span 2;
+            overflow: visible;
+        }
+
+        /**
+         * Скрываем иконку в финансовом блоке (график) для экономии места
+         * Это позволяет графику занять больше пространства
+         */
+        .teaser-card[data-variant="chart"] .teaser-card__icon {
+            display: none !important;
         }
 
         .teaser-card__icon {
-            font-size: 14px;
-            margin-bottom: 1.5mm;
-            width: 28px;
-            height: 28px;
+            font-size: 12px;
+            margin-bottom: 1.2mm;
+            width: 24px;
+            height: 24px;
             border-radius: 6px;
             background: rgba(255, 255, 255, 0.9);
             border: 1px solid rgba(255, 255, 255, 0.6);
@@ -364,26 +374,26 @@ try {
         }
 
         .teaser-card h3 {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
             color: #0f172a;
-            margin-bottom: 1.5mm;
+            margin-bottom: 1.2mm;
             line-height: 1.3;
         }
 
         .teaser-card__subtitle {
-            font-size: 9px;
+            font-size: 8px;
             color: #64748b;
-            margin-bottom: 1.5mm;
+            margin-bottom: 1.2mm;
             font-weight: 500;
             line-height: 1.3;
         }
 
         .teaser-card p {
-            font-size: 9px;
-            line-height: 1.4;
+            font-size: 8px;
+            line-height: 1.35;
             color: #475569;
-            margin-bottom: 1.5mm;
+            margin-bottom: 1.2mm;
         }
 
         .teaser-card ul {
@@ -394,8 +404,8 @@ try {
         }
 
         .teaser-card ul li {
-            font-size: 9px;
-            line-height: 1.4;
+            font-size: 8px;
+            line-height: 1.35;
             color: #475569;
             padding-left: 4mm;
             margin-bottom: 0.8mm;
@@ -416,14 +426,15 @@ try {
 
         /**
          * Контейнер для финансового графика
-         * Высота: 200px (оптимизирована для размещения на одной странице A4)
+         * Увеличенная высота для лучшей читаемости и использования доступного пространства
+         * flex: 1 позволяет графику занимать все доступное пространство в карточке
          * Градиентный фон для визуального выделения
          * ApexCharts будет отрендерен внутри этого контейнера
          */
         .teaser-chart {
-            min-height: 180px;
-            max-height: 200px;
-            height: 200px;
+            min-height: 220px;
+            height: 240px;
+            max-height: 260px;
             padding: 1.5mm;
             margin: 0;
             flex: 1;
@@ -431,11 +442,13 @@ try {
             border: 0.5px solid rgba(99, 102, 241, 0.15);
             border-radius: 4px;
             box-shadow: inset 0 0 10px rgba(99, 102, 241, 0.05);
-            overflow: hidden;
+            overflow: visible;
+            display: flex;
+            flex-direction: column;
         }
 
         .teaser-chart__note {
-            font-size: 8px;
+            font-size: 7px;
             color: #94a3b8;
             text-align: center;
             margin-top: 1mm;
@@ -498,8 +511,15 @@ try {
             }
 
             .apexcharts-svg {
-                height: 200px !important;
-                max-height: 200px !important;
+                height: 240px !important;
+                max-height: 260px !important;
+            }
+            
+            /* Увеличиваем размер графика при печати */
+            .teaser-chart {
+                min-height: 240px !important;
+                height: 240px !important;
+                max-height: 260px !important;
             }
 
             /* Keep gradients and shadows in print */
@@ -511,6 +531,11 @@ try {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
+            }
+
+            /* Скрываем иконку в финансовом блоке при печати */
+            .teaser-card[data-variant="chart"] .teaser-card__icon {
+                display: none !important;
             }
         }
 
@@ -575,7 +600,7 @@ try {
                     chart: {
                         id: chartId,
                         type: 'line',
-                        height: 200,
+                        height: 240,
                         parentHeightOffset: 0,
                         toolbar: { show: false },
                         fontFamily: 'Arial, sans-serif',
@@ -583,12 +608,12 @@ try {
                     colors: payload.colors || ['#6366F1', '#0EA5E9', '#F97316', '#10B981'],
                     series: payload.series,
                     stroke: {
-                        width: 3,
+                        width: 2.2,
                         curve: 'smooth',
                     },
                     markers: {
-                        size: 4,
-                        strokeWidth: 2,
+                        size: 3,
+                        strokeWidth: 1.5,
                     },
                     dataLabels: { enabled: false },
                     grid: {
@@ -601,7 +626,7 @@ try {
                         labels: {
                             style: {
                                 colors: 'rgba(71,85,105,0.9)',
-                                fontSize: '9px',
+                                fontSize: '8px',
                             },
                         },
                         axisBorder: { show: false },
@@ -611,7 +636,7 @@ try {
                         labels: {
                             style: {
                                 colors: 'rgba(71,85,105,0.9)',
-                                fontSize: '9px',
+                                fontSize: '8px',
                             },
                             formatter: (value) => {
                                 if (value === null || value === undefined) {
@@ -625,12 +650,12 @@ try {
                     legend: {
                         position: 'top',
                         horizontalAlign: 'left',
-                        fontSize: '9px',
-                        offsetY: -5,
+                        fontSize: '8px',
+                        offsetY: -6,
                         offsetX: 0,
-                        markers: { width: 8, height: 8, radius: 4 },
+                        markers: { width: 7, height: 7, radius: 3.5 },
                         itemMargin: {
-                            horizontal: 8,
+                            horizontal: 6,
                             vertical: 0,
                         },
                     },
@@ -646,9 +671,10 @@ try {
                     },
                 };
 
-                container.style.minHeight = '200px';
-                container.style.height = '200px';
-                container.style.maxHeight = '200px';
+                // Устанавливаем размеры контейнера для максимального использования пространства
+                container.style.minHeight = '240px';
+                container.style.height = '240px';
+                container.style.maxHeight = '260px';
                 
                 const chart = new ApexCharts(container, options);
                 chart.render().then(() => {
