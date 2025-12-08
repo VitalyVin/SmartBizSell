@@ -375,12 +375,27 @@ function buildTeaserPayload(array $form): array
  * @param array $payload Исходные данные анкеты
  * @return array Маскированные данные для тизера
  */
+/**
+ * Создает маскированную версию payload для генерации тизера
+ * 
+ * Эта функция создает промежуточную переменную с маскированными данными,
+ * которая используется только для генерации тизера. Исходные данные анкеты
+ * остаются без изменений.
+ * 
+ * Если в анкете указано "нет" в поле "РАСКРЫТИЕ НАЗВАНИЯ", функция заменяет:
+ * - asset_name на "Актив"
+ * - упоминания названия в company_brands на "Актив"
+ * 
+ * @param array $payload Исходные данные анкеты
+ * @return array Маскированная версия payload (новая копия, исходные данные не изменяются)
+ */
 function buildMaskedTeaserPayload(array $payload): array
 {
     // Создаем копию payload, чтобы не изменять исходные данные
     $maskedPayload = $payload;
     
     // Проверяем, нужно ли маскировать название актива
+    // Значение может быть 'no', 'нет' или другими вариантами
     $assetDisclosure = $maskedPayload['asset_disclosure'] ?? '';
     $shouldMask = ($assetDisclosure === 'no' || $assetDisclosure === 'нет');
     
@@ -389,6 +404,7 @@ function buildMaskedTeaserPayload(array $payload): array
         $maskedPayload['asset_name'] = 'Актив';
         
         // Также заменяем в company_brands, если там упоминается название актива
+        // Это нужно для того, чтобы в тизере не было упоминаний реального названия
         if (!empty($maskedPayload['company_brands'])) {
             $originalName = $payload['asset_name'] ?? '';
             if (!empty($originalName) && strpos($maskedPayload['company_brands'], $originalName) !== false) {
@@ -2559,7 +2575,14 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
 }
 
 /**
- * Возвращает SVG иконку для чипа hero блока
+ * Возвращает SVG иконку для чипа hero блока тизера
+ * 
+ * Функция возвращает SVG код иконки в зависимости от типа чипа.
+ * Поддерживаемые типы: 'segment', 'location', 'people', 'online', 'brand', 'share', 'goal'.
+ * Если тип не найден, возвращается иконка по умолчанию.
+ * 
+ * @param string $iconType Тип иконки ('segment', 'location', 'people', 'online', и т.д.)
+ * @return string SVG код иконки
  */
 function getTeaserChipIconSvg(string $iconType): string
 {
@@ -3241,15 +3264,26 @@ function persistTeaserSnapshot(array $form, array $payload, array $snapshot): ar
 }
 
 /**
- * Создает или обновляет запись в published_teasers для модерации
+ * Создает или обновляет запись в таблице published_teasers для модерации
  * 
- * @param array $form Данные анкеты из БД
- * @param string $html HTML тизера для модерации
+ * Эта функция автоматически вызывается после генерации тизера и создает
+ * запись в таблице published_teasers со статусом 'pending' для последующей
+ * модерации. Если запись уже существует, она обновляется, сбрасывая статус
+ * на 'pending', что позволяет повторно отправить тизер на модерацию.
+ * 
+ * Логика работы:
+ * - Если запись существует: обновляет moderated_html и сбрасывает статус на 'pending'
+ * - Если записи нет: создает новую запись со статусом 'pending'
+ * - При обновлении очищает moderation_notes, moderated_at и published_at
+ * 
+ * @param array $form Данные анкеты из БД (должен содержать поле 'id')
+ * @param string $html HTML тизера для модерации (полный HTML с hero блоком)
  * @return bool true при успехе, false при ошибке
  */
 function createPublishedTeaserRecord(array $form, string $html): bool
 {
     try {
+        // Убеждаемся, что таблица существует
         ensurePublishedTeasersTable();
         $pdo = getDBConnection();
         
@@ -3261,6 +3295,7 @@ function createPublishedTeaserRecord(array $form, string $html): bool
         if ($existing) {
             // Обновляем существующую запись, сбрасывая статус на pending
             // Это позволяет обновить тизер даже если он был опубликован
+            // При повторной отправке на модерацию старый тизер будет заменен новым
             $stmt = $pdo->prepare("
                 UPDATE published_teasers 
                 SET 
@@ -3274,13 +3309,14 @@ function createPublishedTeaserRecord(array $form, string $html): bool
             ");
             $stmt->execute([$html, $existing['id']]);
         } else {
-            // Создаем новую запись
+            // Создаем новую запись со статусом 'pending' для модерации
+            // moderated_html будет заполнен позже при отправке на модерацию
             $stmt = $pdo->prepare("
                 INSERT INTO published_teasers 
-                (seller_form_id, moderation_status, created_at, updated_at)
-                VALUES (?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                (seller_form_id, moderated_html, moderation_status, created_at, updated_at)
+                VALUES (?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ");
-            $stmt->execute([$form['id']]);
+            $stmt->execute([$form['id'], $html]);
         }
         
         return true;

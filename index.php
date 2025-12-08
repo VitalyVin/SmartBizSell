@@ -62,11 +62,31 @@ try {
 }
 
 /**
- * Извлекает данные для карточки из тизера
+ * Извлекает данные для карточки бизнеса из тизера
  * 
- * @param array $teaser Данные из published_teasers
- * @param array|null $formData Данные из data_json формы
- * @return array Данные для карточки
+ * Эта функция парсит HTML тизера и извлекает данные для отображения
+ * в компактной карточке на главной странице. Использует DOM парсинг
+ * для извлечения данных из hero блока (название, описание, чипы, статистика).
+ * 
+ * Особенности:
+ * - Дедупликация чипов (тегов) для избежания повторений
+ * - Приоритет цены предложения продавца над другими ценами
+ * - Извлечение финансовых данных из статистики hero блока
+ * - Fallback на данные из formData, если HTML парсинг не удался
+ * 
+ * @param array $teaser Данные из таблицы published_teasers (содержит moderated_html, asset_name, data_json)
+ * @param array|null $formData Данные из data_json формы (опционально, используется как fallback)
+ * @return array Массив с данными для карточки:
+ *   - id: ID тизера
+ *   - title: Название актива
+ *   - price: Цена (приоритет у цены предложения продавца)
+ *   - revenue, revenue_2026e: Выручка
+ *   - profit, margin, growth: Финансовые показатели
+ *   - employees: Количество сотрудников
+ *   - description, full_description: Описание
+ *   - chips: Массив чипов (тегов) из hero блока
+ *   - stats: Массив статистики из hero блока
+ *   - location, industry: Локация и отрасль
  */
 function extractTeaserCardData(array $teaser, ?array $formData): array
 {

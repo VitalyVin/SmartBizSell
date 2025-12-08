@@ -424,7 +424,7 @@ $statusColors = [
                         
                         <div id="moderation-message" style="margin-top: 16px; padding: 12px; border-radius: 8px; display: none;"></div>
                         
-                        <div style="display: flex; gap: 12px; margin-top: 24px;">
+                        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
                             <button type="button" class="btn btn-primary" onclick="saveTeaserModeration('approved')">
                                 Сохранить и одобрить
                             </button>
@@ -437,6 +437,11 @@ $statusColors = [
                             <?php if ($currentTeaser['moderation_status'] === 'approved'): ?>
                             <button type="button" class="btn btn-primary" onclick="publishTeaser()" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">
                                 Опубликовать
+                            </button>
+                            <?php endif; ?>
+                            <?php if ($currentTeaser['moderation_status'] === 'published'): ?>
+                            <button type="button" class="btn btn-secondary" onclick="unpublishTeaser()" style="background: linear-gradient(135deg, #FF9500 0%, #FF6B00 100%); color: white;">
+                                Снять с публикации
                             </button>
                             <?php endif; ?>
                         </div>
@@ -501,9 +506,22 @@ $statusColors = [
                                 <span class="status-badge" style="background: <?php echo $statusColors[$teaser['moderation_status']] ?? '#86868B'; ?>; color: white; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
                                     <?php echo $statusLabels[$teaser['moderation_status']] ?? $teaser['moderation_status']; ?>
                                 </span>
-                                <a href="moderation.php?id=<?php echo $teaser['id']; ?>" class="btn btn-primary" style="padding: 8px 16px; font-size: 14px;">
-                                    <?php echo $teaser['moderation_status'] === 'pending' ? 'Модерировать' : 'Редактировать'; ?>
-                                </a>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <a href="moderation.php?id=<?php echo $teaser['id']; ?>" class="btn btn-primary" style="padding: 8px 16px; font-size: 14px;">
+                                        <?php echo $teaser['moderation_status'] === 'pending' ? 'Модерировать' : 'Редактировать'; ?>
+                                    </a>
+                                    <?php if ($teaser['moderation_status'] === 'published'): ?>
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-secondary" 
+                                        onclick="quickUnpublish(<?php echo $teaser['id']; ?>, '<?php echo htmlspecialchars($teaser['asset_name'] ?: 'Тизер', ENT_QUOTES, 'UTF-8'); ?>')"
+                                        style="padding: 8px 16px; font-size: 14px; background: linear-gradient(135deg, #FF9500 0%, #FF6B00 100%); color: white; border: none;"
+                                        title="Снять с публикации"
+                                    >
+                                        Снять с публикации
+                                    </button>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -641,6 +659,41 @@ $statusColors = [
                 messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
                 messageDiv.style.color = '#dc2626';
                 messageDiv.textContent = '✗ Ошибка: ' + error.message;
+            }
+        }
+        
+        /**
+         * Быстрое снятие тизера с публикации из списка
+         * 
+         * @param {number} teaserId ID тизера
+         * @param {string} assetName Название актива (для подтверждения)
+         */
+        async function quickUnpublish(teaserId, assetName) {
+            if (!confirm(`Снять тизер "${assetName}" с публикации? Карточка будет удалена с главной страницы, тизер переведен в статус "На модерации".`)) {
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('teaser_id', teaserId);
+                
+                const response = await fetch('moderation_api.php?action=unpublish', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✓ ' + result.message);
+                    window.location.reload();
+                } else {
+                    throw new Error(result.message || 'Ошибка при снятии с публикации');
+                }
+            } catch (error) {
+                console.error('Error unpublishing teaser:', error);
+                alert('✗ Ошибка: ' + error.message);
             }
         }
     </script>

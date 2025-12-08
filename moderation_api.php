@@ -42,17 +42,29 @@ try {
         case 'save':
         case 'approve':
         case 'reject':
-            // Сохранение отредактированного тизера
-            // Поддерживаем как FormData (multipart/form-data), так и JSON
+            /**
+             * Сохранение отредактированного тизера
+             * 
+             * Поддерживает два формата входных данных:
+             * 1. JSON (application/json) - для AJAX запросов
+             * 2. FormData (multipart/form-data) - для форм с файлами или большими данными
+             * 
+             * Параметры:
+             * - teaser_id: ID тизера для обновления
+             * - moderated_html: Отредактированный HTML тизера
+             * - moderation_notes: Заметки модератора (обязательны при отклонении)
+             * - status_action: Действие ('save', 'approved', 'rejected')
+             */
             $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
             if (strpos($contentType, 'application/json') !== false) {
+                // Парсим JSON данные
                 $input = json_decode(file_get_contents('php://input'), true);
                 $teaserId = isset($input['teaser_id']) ? (int)$input['teaser_id'] : 0;
                 $moderatedHtml = $input['moderated_html'] ?? '';
                 $moderationNotes = $input['moderation_notes'] ?? '';
                 $statusAction = $input['status_action'] ?? 'save';
             } else {
-                // FormData или обычный POST
+                // Парсим FormData или обычный POST
                 $teaserId = isset($_POST['teaser_id']) ? (int)$_POST['teaser_id'] : 0;
                 $moderatedHtml = $_POST['moderated_html'] ?? '';
                 $moderationNotes = $_POST['moderation_notes'] ?? '';
@@ -120,7 +132,17 @@ try {
             break;
             
         case 'publish':
-            // Публикация тизера
+            /**
+             * Публикация тизера на главной странице
+             * 
+             * Логика публикации:
+             * 1. Проверяет, что тизер одобрен (status = 'approved')
+             * 2. Снимает с публикации все другие тизеры для той же анкеты (seller_form_id)
+             * 3. Устанавливает статус 'published' и published_at для текущего тизера
+             * 
+             * Это гарантирует, что на главной странице будет отображаться только один
+             * актуальный тизер для каждой анкеты, избегая дублирования.
+             */
             // Поддерживаем как FormData (multipart/form-data), так и JSON
             $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
             if (strpos($contentType, 'application/json') !== false) {
@@ -135,8 +157,8 @@ try {
                 throw new Exception('Не указан ID тизера.');
             }
             
-            // Проверяем, что тизер одобрен
-            $stmt = $pdo->prepare("SELECT id, moderation_status FROM published_teasers WHERE id = ?");
+            // Проверяем, что тизер одобрен (публиковать можно только одобренные тизеры)
+            $stmt = $pdo->prepare("SELECT id, moderation_status, seller_form_id FROM published_teasers WHERE id = ?");
             $stmt->execute([$teaserId]);
             $teaser = $stmt->fetch();
             
@@ -150,22 +172,16 @@ try {
             
             // При публикации нового тизера сбрасываем статус опубликованных тизеров для той же анкеты
             // чтобы избежать дублирования на главной странице
-            $stmt = $pdo->prepare("SELECT seller_form_id FROM published_teasers WHERE id = ?");
-            $stmt->execute([$teaserId]);
-            $teaserData = $stmt->fetch();
-            
-            if ($teaserData) {
-                // Сбрасываем статус других опубликованных тизеров для этой анкеты
-                $stmt = $pdo->prepare("
-                    UPDATE published_teasers 
-                    SET 
-                        moderation_status = 'approved',
-                        published_at = NULL,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE seller_form_id = ? AND id != ? AND moderation_status = 'published'
-                ");
-                $stmt->execute([$teaserData['seller_form_id'], $teaserId]);
-            }
+            // Старые тизеры возвращаются в статус 'approved', но не 'published'
+            $stmt = $pdo->prepare("
+                UPDATE published_teasers 
+                SET 
+                    moderation_status = 'approved',
+                    published_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE seller_form_id = ? AND id != ? AND moderation_status = 'published'
+            ");
+            $stmt->execute([$teaser['seller_form_id'], $teaserId]);
             
             // Публикуем новый тизер
             $stmt = $pdo->prepare("
@@ -181,6 +197,62 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => 'Тизер успешно опубликован на главной странице.'
+            ]);
+            break;
+            
+        case 'unpublish':
+            /**
+             * Снятие тизера с публикации
+             * 
+             * Логика снятия с публикации:
+             * 1. Проверяет, что тизер опубликован (status = 'published')
+             * 2. Переводит статус в 'pending' (На модерации)
+             * 3. Устанавливает published_at в NULL
+             * 
+             * После этого тизер исчезнет с главной страницы, так как там
+             * отображаются только тизеры со статусом 'published'.
+             */
+            // Поддерживаем как FormData (multipart/form-data), так и JSON
+            $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+            if (strpos($contentType, 'application/json') !== false) {
+                $input = json_decode(file_get_contents('php://input'), true);
+                $teaserId = isset($input['teaser_id']) ? (int)$input['teaser_id'] : 0;
+            } else {
+                // FormData или обычный POST
+                $teaserId = isset($_POST['teaser_id']) ? (int)$_POST['teaser_id'] : 0;
+            }
+            
+            if ($teaserId <= 0) {
+                throw new Exception('Не указан ID тизера.');
+            }
+            
+            // Проверяем, что тизер опубликован
+            $stmt = $pdo->prepare("SELECT id, moderation_status FROM published_teasers WHERE id = ?");
+            $stmt->execute([$teaserId]);
+            $teaser = $stmt->fetch();
+            
+            if (!$teaser) {
+                throw new Exception('Тизер не найден.');
+            }
+            
+            if ($teaser['moderation_status'] !== 'published') {
+                throw new Exception('Можно снять с публикации только опубликованные тизеры.');
+            }
+            
+            // Снимаем тизер с публикации, переводя в статус 'pending' (На модерации)
+            $stmt = $pdo->prepare("
+                UPDATE published_teasers 
+                SET 
+                    moderation_status = 'pending',
+                    published_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ");
+            $stmt->execute([$teaserId]);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Тизер снят с публикации и переведен в статус "На модерации". Карточка удалена с главной страницы.'
             ]);
             break;
             

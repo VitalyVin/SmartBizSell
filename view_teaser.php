@@ -38,11 +38,18 @@ try {
         die('Тизер не найден или не опубликован.');
     }
     
-    // Используем отредактированный HTML, если он есть, иначе оригинальный из data_json
+    /**
+     * Приоритет отображения HTML тизера:
+     * 1. moderated_html - отредактированная версия модератором (если есть)
+     * 2. teaser_snapshot.html из data_json - оригинальная версия из генерации
+     * 
+     * Это позволяет показывать отредактированную версию тизера, если модератор
+     * внес изменения, иначе показывается оригинальная версия.
+     */
     $html = $teaser['moderated_html'];
     
     if (empty($html)) {
-        // Извлекаем оригинальный HTML из data_json
+        // Извлекаем оригинальный HTML из data_json (fallback)
         $formData = json_decode($teaser['data_json'], true);
         if (is_array($formData) && !empty($formData['teaser_snapshot']['html'])) {
             $html = $formData['teaser_snapshot']['html'];
@@ -54,7 +61,7 @@ try {
         die('HTML тизера не найден.');
     }
     
-    // Выводим HTML тизера
+    // Выводим HTML тизера (используется для загрузки в модальное окно на главной странице)
     echo $html;
     
 } catch (PDOException $e) {

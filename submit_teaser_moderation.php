@@ -59,7 +59,17 @@ try {
     $teaserHtml = $formData['teaser_snapshot']['html'] ?? '';
     $heroDescription = $formData['teaser_snapshot']['hero_description'] ?? '';
     
-    // Проверяем, существует ли уже запись в published_teasers
+    /**
+     * Проверяем, существует ли уже запись в published_teasers для этой анкеты
+     * 
+     * Если запись существует:
+     * - Обновляем moderated_html новым HTML тизера
+     * - Сбрасываем статус на 'pending' для повторной модерации
+     * - Очищаем moderation_notes, moderated_at и published_at
+     * 
+     * Это позволяет повторно отправить тизер на модерацию, даже если он был
+     * ранее опубликован. После одобрения и публикации новый тизер заменит старый.
+     */
     $stmt = $pdo->prepare("SELECT id, moderation_status FROM published_teasers WHERE seller_form_id = ?");
     $stmt->execute([$formId]);
     $existing = $stmt->fetch();
@@ -86,7 +96,7 @@ try {
             'teaser_id' => $existing['id']
         ]);
     } else {
-        // Создаем новую запись
+        // Создаем новую запись со статусом 'pending' для модерации
         $stmt = $pdo->prepare("
             INSERT INTO published_teasers 
             (seller_form_id, moderated_html, moderation_status, created_at, updated_at)
