@@ -28,40 +28,54 @@ require_once __DIR__ . '/investor_utils.php';
 
 // Если мы в режиме загрузки только функций (для dashboard.php), не выполняем основной код
 if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
+    // Отключаем вывод ошибок PHP в ответ, чтобы не ломать JSON
+    ini_set('display_errors', 0);
+    ini_set('log_errors', 1);
+    error_reporting(E_ALL);
+    
+    // Включаем буферизацию вывода, чтобы перехватить любые случайные выводы
+    ob_start();
+    
+    // Устанавливаем заголовок JSON до любого вывода
     header('Content-Type: application/json; charset=utf-8');
 
     if (!isLoggedIn()) {
+        ob_clean();
         http_response_code(401);
         echo json_encode(['success' => false, 'message' => 'Необходима авторизация.']);
+        ob_end_flush();
         exit;
     }
 
     $user = getCurrentUser();
     if (!$user) {
+        ob_clean();
         http_response_code(401);
         echo json_encode(['success' => false, 'message' => 'Сессия недействительна.']);
+        ob_end_flush();
         exit;
     }
 
-$requestPayload = json_decode(file_get_contents('php://input') ?: '[]', true);
-if (!is_array($requestPayload)) {
-    $requestPayload = [];
-}
-$action = $requestPayload['action'] ?? 'teaser';
+    $requestPayload = json_decode(file_get_contents('php://input') ?: '[]', true);
+    if (!is_array($requestPayload)) {
+        $requestPayload = [];
+    }
+    $action = $requestPayload['action'] ?? 'teaser';
 
-$apiKey = TOGETHER_API_KEY;
-if (empty($apiKey)) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'API-ключ together.ai не настроен.']);
-    exit;
-}
+    $apiKey = TOGETHER_API_KEY;
+    if (empty($apiKey)) {
+        ob_clean();
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'API-ключ together.ai не настроен.']);
+        ob_end_flush();
+        exit;
+    }
 
-try {
     $pdo = getDBConnection();
 
     // Получаем form_id из запроса, если он передан
-    $requestData = json_decode(file_get_contents('php://input'), true);
-    $requestedFormId = isset($requestData['form_id']) ? (int)$requestData['form_id'] : null;
+    // Используем уже прочитанный $requestPayload, так как php://input можно прочитать только один раз
+    $requestedFormId = isset($requestPayload['form_id']) ? (int)$requestPayload['form_id'] : null;
 
     if ($requestedFormId) {
         // Загружаем конкретную анкету по ID, если она принадлежит пользователю
@@ -74,7 +88,9 @@ try {
         $form = $stmt->fetch();
         
         if (!$form) {
+            ob_clean();
             echo json_encode(['success' => false, 'message' => 'Анкета не найдена или не принадлежит вам.']);
+            ob_end_flush();
             exit;
         }
     } else {
@@ -91,7 +107,9 @@ try {
         $form = $stmt->fetch();
 
         if (!$form) {
+            ob_clean();
             echo json_encode(['success' => false, 'message' => 'Нет отправленных анкет для формирования тизера.']);
+            ob_end_flush();
             exit;
         }
     }
@@ -203,83 +221,236 @@ try {
             }
             $message .= " Пропущены: " . implode(', ', $missingLabels) . ".";
         }
+        ob_clean();
         echo json_encode(['success' => false, 'message' => $message]);
+        ob_end_flush();
         exit;
     }
 
-    $formPayload = buildTeaserPayload($form);
-    
-    // Создаем маскированную версию payload для тизера
-    // Это промежуточная переменная, которая НЕ сохраняется в анкету
-    // Она используется только для генерации тизера и не изменяет исходные данные анкеты
-    $maskedPayload = buildMaskedTeaserPayload($formPayload);
-    
-    // Получаем данные DCF модели для графика
-    // Используем упрощенную функцию для извлечения данных напрямую из формы
-    $dcfData = extractDCFDataForChart($form);
+    // Обертываем весь код генерации в try-catch для перехвата всех ошибок
+    try {
+        error_log('Teaser generation started for form_id: ' . ($form['id'] ?? 'unknown'));
+        
+        // Проверяем, что функция существует
+        if (!function_exists('buildTeaserPayload')) {
+            throw new RuntimeException('Function buildTeaserPayload not found');
+        }
+        $formPayload = buildTeaserPayload($form);
+        error_log('buildTeaserPayload completed');
+        
+        // Создаем маскированную версию payload для тизера
+        // Это промежуточная переменная, которая НЕ сохраняется в анкету
+        // Она используется только для генерации тизера и не изменяет исходные данные анкеты
+        if (!function_exists('buildMaskedTeaserPayload')) {
+            throw new RuntimeException('Function buildMaskedTeaserPayload not found');
+        }
+        $maskedPayload = buildMaskedTeaserPayload($formPayload);
+        error_log('buildMaskedTeaserPayload completed');
+        
+        // Получаем данные DCF модели для графика
+        // Используем упрощенную функцию для извлечения данных напрямую из формы
+        if (!function_exists('extractDCFDataForChart')) {
+            throw new RuntimeException('Function extractDCFDataForChart not found');
+        }
+        // Проверяем, что $form не пустой перед вызовом функции
+        if (empty($form) || !is_array($form)) {
+            error_log('Warning: $form is empty or not an array before extractDCFDataForChart');
+            $dcfData = null;
+        } else {
+            $dcfData = extractDCFDataForChart($form);
+        }
+        error_log('extractDCFDataForChart completed');
 
-    if ($action === 'investors') {
-        // Для инвесторов используем маскированные данные
-        $investorPool = buildInvestorPool($maskedPayload, $apiKey);
-        if (empty($investorPool)) {
-            echo json_encode(['success' => false, 'message' => 'Не найдены подходящие инвесторы.']);
+        if ($action === 'investors') {
+            // Для инвесторов используем маскированные данные
+            $investorPool = buildInvestorPool($maskedPayload, $apiKey);
+            if (empty($investorPool)) {
+                ob_clean();
+                echo json_encode(['success' => false, 'message' => 'Не найдены подходящие инвесторы.']);
+                ob_end_flush();
+                exit;
+            }
+
+            $html = renderInvestorSection($investorPool);
+            $snapshot = [
+                'html' => $html,
+                'generated_at' => date('c'),
+            ];
+            persistInvestorSnapshot($form, $formPayload, $snapshot);
+
+            // Очищаем буфер вывода перед отправкой JSON
+            ob_clean();
+            echo json_encode([
+                'success' => true,
+                'html' => $html,
+                'generated_at' => $snapshot['generated_at'],
+            ]);
+            ob_end_flush();
             exit;
         }
 
-        $html = renderInvestorSection($investorPool);
-        $snapshot = [
-            'html' => $html,
-            'generated_at' => date('c'),
-        ];
-        persistInvestorSnapshot($form, $formPayload, $snapshot);
+        // Используем маскированные данные для генерации тизера
+        if (!function_exists('buildTeaserPrompt')) {
+            throw new RuntimeException('Function buildTeaserPrompt not found');
+        }
+        $prompt = buildTeaserPrompt($maskedPayload);
+        error_log('buildTeaserPrompt completed, prompt length: ' . strlen($prompt));
+        
+        if (empty($prompt)) {
+            throw new RuntimeException('Не удалось сформировать запрос к AI. Проверьте данные анкеты.');
+        }
+        
+        if (!function_exists('callTogetherCompletions')) {
+            throw new RuntimeException('Function callTogetherCompletions not found');
+        }
+        error_log('Calling Together.ai API...');
+        $rawResponse = callTogetherCompletions($prompt, $apiKey);
+        error_log('Together.ai API call completed, response length: ' . strlen($rawResponse));
+        
+        if (empty($rawResponse)) {
+            throw new RuntimeException('Пустой ответ от AI. Попробуйте снова.');
+        }
+        
+        // Логируем первые 200 символов ответа для отладки
+        error_log('AI response preview: ' . substr($rawResponse, 0, 200));
+        
+        if (!function_exists('parseTeaserResponse')) {
+            throw new RuntimeException('Function parseTeaserResponse not found');
+        }
+        $teaserData = parseTeaserResponse($rawResponse);
+        error_log('parseTeaserResponse completed');
+        
+        if (empty($teaserData) || !is_array($teaserData)) {
+            throw new RuntimeException('Не удалось обработать ответ от AI. Попробуйте снова.');
+        }
+        
+        if (!function_exists('normalizeTeaserData')) {
+            throw new RuntimeException('Function normalizeTeaserData not found');
+        }
+        $teaserData = normalizeTeaserData($teaserData, $maskedPayload);
+        error_log('normalizeTeaserData completed');
+        
+        if (!function_exists('ensureOverviewWithAi')) {
+            throw new RuntimeException('Function ensureOverviewWithAi not found');
+        }
+        $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey);
+        error_log('ensureOverviewWithAi completed');
+        
+        if (!function_exists('ensureProductsLocalized')) {
+            throw new RuntimeException('Function ensureProductsLocalized not found');
+        }
+        $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
+        error_log('ensureProductsLocalized completed');
+        
+        // Генерируем краткое описание для hero блока из overview summary
+        // Используем маскированные данные
+        if (!function_exists('buildHeroDescription')) {
+            throw new RuntimeException('Function buildHeroDescription not found');
+        }
+        $heroDescription = buildHeroDescription($teaserData, $maskedPayload);
+        error_log('buildHeroDescription completed');
+        
+        // Используем маскированное название актива для рендеринга
+        $displayAssetName = $maskedPayload['asset_name'] ?? 'Актив';
+        if (!function_exists('renderTeaserHtml')) {
+            throw new RuntimeException('Function renderTeaserHtml not found');
+        }
+        error_log('Rendering teaser HTML...');
+        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData);
+        error_log('renderTeaserHtml completed, HTML length: ' . strlen($html));
 
+        // Сохраняем snapshot с исходными данными (не маскированными)
+        // Маскированные данные используются только для генерации HTML тизера
+        if (!function_exists('persistTeaserSnapshot')) {
+            throw new RuntimeException('Function persistTeaserSnapshot not found');
+        }
+        error_log('Saving teaser snapshot...');
+        $snapshot = persistTeaserSnapshot($form, $formPayload, [
+            'html' => $html,
+            'hero_description' => $heroDescription,
+            'generated_at' => date('c'),
+            'model' => TOGETHER_MODEL,
+        ]);
+        error_log('persistTeaserSnapshot completed');
+
+        // Создаем или обновляем запись в published_teasers для модерации
+        if (!function_exists('createPublishedTeaserRecord')) {
+            throw new RuntimeException('Function createPublishedTeaserRecord not found');
+        }
+        error_log('Creating published teaser record...');
+        createPublishedTeaserRecord($form, $html);
+        error_log('createPublishedTeaserRecord completed');
+
+        ob_clean();
         echo json_encode([
             'success' => true,
             'html' => $html,
-            'generated_at' => $snapshot['generated_at'],
+            'generated_at' => $snapshot['generated_at'] ?? null,
         ]);
+        ob_end_flush();
+    } catch (Exception $e) {
+        $errorMessage = $e->getMessage();
+        $errorTrace = $e->getTraceAsString();
+        $errorFile = $e->getFile();
+        $errorLine = $e->getLine();
+        
+        error_log('Teaser generation error: ' . $errorMessage);
+        error_log('Error file: ' . $errorFile . ':' . $errorLine);
+        error_log('Error trace: ' . $errorTrace);
+        
+        // Формируем понятное сообщение для пользователя
+        $userMessage = 'Не удалось создать тизер. Попробуйте позже.';
+        if (strpos($errorMessage, 'JSON') !== false || strpos($errorMessage, 'parse') !== false) {
+            $userMessage = 'Ошибка при обработке ответа от AI. Попробуйте снова.';
+        } elseif (strpos($errorMessage, 'API') !== false) {
+            $userMessage = 'Ошибка при обращении к AI. Проверьте настройки API.';
+        } elseif (strpos($errorMessage, 'pattern') !== false) {
+            $userMessage = 'Ошибка при обработке данных. Попробуйте снова.';
+        } elseif (strpos($errorMessage, 'function') !== false && strpos($errorMessage, 'not found') !== false) {
+            $userMessage = 'Ошибка: функция не найдена. Проверьте конфигурацию.';
+        }
+        
+        // Убеждаемся, что заголовок JSON установлен
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        ob_clean();
+        http_response_code(500);
+        echo json_encode([
+            'success' => false, 
+            'message' => $userMessage,
+            'error' => $errorMessage, // Включаем детальную ошибку для отладки
+            'file' => basename($errorFile), // Имя файла для отладки
+            'line' => $errorLine // Номер строки для отладки
+        ]);
+        ob_end_flush();
+        exit;
+    } catch (Throwable $e) {
+        $errorMessage = $e->getMessage();
+        $errorTrace = $e->getTraceAsString();
+        $errorFile = $e->getFile();
+        $errorLine = $e->getLine();
+        
+        error_log('Fatal error in teaser generation: ' . $errorMessage);
+        error_log('Error file: ' . $errorFile . ':' . $errorLine);
+        error_log('Error trace: ' . $errorTrace);
+        
+        // Убеждаемся, что заголовок JSON установлен
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        ob_clean();
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Критическая ошибка при генерации тизера.',
+            'error' => $errorMessage,
+            'file' => basename($errorFile), // Имя файла для отладки
+            'line' => $errorLine // Номер строки для отладки
+        ]);
+        ob_end_flush();
         exit;
     }
-
-    // Используем маскированные данные для генерации тизера
-    $prompt = buildTeaserPrompt($maskedPayload);
-    $rawResponse = callTogetherCompletions($prompt, $apiKey);
-
-    $teaserData = parseTeaserResponse($rawResponse);
-    $teaserData = normalizeTeaserData($teaserData, $maskedPayload);
-    $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey);
-    $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
-    
-    // Генерируем краткое описание для hero блока из overview summary
-    // Используем маскированные данные
-    $heroDescription = buildHeroDescription($teaserData, $maskedPayload);
-    
-    // Используем маскированное название актива для рендеринга
-    $displayAssetName = $maskedPayload['asset_name'] ?? 'Актив';
-    $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData);
-
-    // Сохраняем snapshot с исходными данными (не маскированными)
-    // Маскированные данные используются только для генерации HTML тизера
-    $snapshot = persistTeaserSnapshot($form, $formPayload, [
-        'html' => $html,
-        'hero_description' => $heroDescription,
-        'generated_at' => date('c'),
-        'model' => TOGETHER_MODEL,
-    ]);
-
-    // Создаем или обновляем запись в published_teasers для модерации
-    createPublishedTeaserRecord($form, $html);
-
-    echo json_encode([
-        'success' => true,
-        'html' => $html,
-        'generated_at' => $snapshot['generated_at'] ?? null,
-    ]);
-} catch (Exception $e) {
-    error_log('Teaser generation error: ' . $e->getMessage());
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Не удалось создать тизер. Попробуйте позже.']);
-}
 } // Конец проверки TEASER_FUNCTIONS_ONLY
 
 /**
@@ -540,15 +711,25 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
     }
 
     $decoded = json_decode($response, true);
+    
+    // Проверяем наличие ошибок в ответе API
+    if (isset($decoded['error'])) {
+        $errorMsg = $decoded['error']['message'] ?? 'Неизвестная ошибка API';
+        throw new RuntimeException('Ошибка API Together.ai: ' . $errorMsg);
+    }
+    
+    // Проверяем различные форматы ответа API
     if (isset($decoded['output']['choices'][0]['text'])) {
-        return $decoded['output']['choices'][0]['text'];
+        return trim($decoded['output']['choices'][0]['text']);
     }
 
     if (isset($decoded['choices'][0]['text'])) {
-        return $decoded['choices'][0]['text'];
+        return trim($decoded['choices'][0]['text']);
     }
-
-    return $response;
+    
+    // Если формат ответа неожиданный, логируем и выбрасываем исключение
+    error_log('Unexpected API response format: ' . substr(json_encode($decoded), 0, 500));
+    throw new RuntimeException('Неожиданный формат ответа от AI. Попробуйте снова.');
 }
 
 /**
@@ -556,22 +737,70 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
  * Если парсер не смог прочитать JSON, возвращаем минимальный каркас overview
  * с текстом, чтобы интерфейс всегда показал хотя бы что-то.
  */
+/**
+ * Парсит ответ от AI и извлекает JSON данные тизера
+ * 
+ * Обрабатывает различные форматы ответа:
+ * - Чистый JSON
+ * - JSON в кодовых блоках ```json ... ```
+ * - Текстовый ответ (fallback)
+ * 
+ * @param string $text Сырой текст ответа от AI
+ * @return array Массив с данными тизера
+ */
 function parseTeaserResponse(string $text): array
 {
     $clean = trim($text);
-    // Удаляем кодовые блоки ```json ... ```
-    if (str_starts_with($clean, '```')) {
+    
+    // Удаляем кодовые блоки ```json ... ``` или ``` ... ```
+    // Используем совместимую функцию вместо str_starts_with для поддержки PHP 7.4+
+    if (substr($clean, 0, 3) === '```') {
+        // Удаляем начальный маркер кодового блока
         $clean = preg_replace('/^```[a-z]*\s*/i', '', $clean);
-        $clean = preg_replace('/```$/', '', $clean);
+        // Удаляем конечный маркер кодового блока
+        $clean = preg_replace('/```\s*$/s', '', $clean);
     }
 
     $clean = trim($clean);
+    
+    // Если строка пустая, возвращаем fallback
+    if (empty($clean)) {
+        error_log("Empty response from AI");
+        return [
+            'overview' => [
+                'title' => 'Резюме',
+                'summary' => 'Не удалось получить ответ от AI. Попробуйте снова.',
+                'key_metrics' => [],
+            ],
+        ];
+    }
 
+    // Пытаемся найти JSON в тексте, если он не в начале
+    // Иногда AI может добавить пояснения перед JSON
+    if (!empty($clean) && $clean[0] !== '{') {
+        // Ищем JSON объект в тексте
+        // Используем более безопасный подход: ищем первый { и последний }
+        $firstBrace = strpos($clean, '{');
+        if ($firstBrace !== false) {
+            $lastBrace = strrpos($clean, '}');
+            if ($lastBrace !== false && $lastBrace > $firstBrace) {
+                $clean = substr($clean, $firstBrace, $lastBrace - $firstBrace + 1);
+            }
+        }
+    }
+
+    // Пытаемся распарсить JSON
     $json = json_decode($clean, true);
     if (json_last_error() === JSON_ERROR_NONE && is_array($json)) {
         return $json;
     }
 
+    // Если JSON не удалось распарсить, логируем ошибку и возвращаем fallback
+    $errorMsg = json_last_error_msg();
+    $errorCode = json_last_error();
+    $textPreview = mb_substr($clean, 0, 500, 'UTF-8');
+    error_log("Failed to parse teaser JSON. Error code: $errorCode, Message: $errorMsg. Text preview: $textPreview");
+    
     return [
         'overview' => [
             'title' => 'Резюме',
@@ -1035,12 +1264,20 @@ function extractNumericValue(string $raw): ?float
  */
 function extractDCFDataForChart(array $form): ?array
 {
+    // Проверяем, что $form не пустой и является массивом
+    if (empty($form) || !is_array($form)) {
+        error_log('extractDCFDataForChart: Invalid form data provided');
+        return null;
+    }
+    
     // Используем output buffering для безопасного подключения dashboard.php
     ob_start();
     $dcfData = null;
     try {
         // Устанавливаем флаг, чтобы dashboard.php не выполнял HTML вывод
-        define('DCF_API_MODE', true);
+        if (!defined('DCF_API_MODE')) {
+            define('DCF_API_MODE', true);
+        }
         
         // Проверяем, определена ли функция calculateUserDCF
         if (!function_exists('calculateUserDCF')) {
@@ -1051,15 +1288,23 @@ function extractDCFDataForChart(array $form): ?array
             }
         }
         
-        // Если функция доступна, вызываем её
-        if (function_exists('calculateUserDCF')) {
+        // Если функция доступна и $form валиден, вызываем её
+        if (function_exists('calculateUserDCF') && !empty($form) && is_array($form)) {
             $dcfData = calculateUserDCF($form);
             if (isset($dcfData['error'])) {
+                error_log('DCF calculation returned error: ' . ($dcfData['error'] ?? 'unknown'));
                 $dcfData = null; // Игнорируем ошибки DCF для графика
             }
+        } else {
+            error_log('extractDCFDataForChart: calculateUserDCF not available or form is invalid');
         }
     } catch (Exception $e) {
         error_log('DCF calculation error in teaser: ' . $e->getMessage());
+        error_log('DCF calculation error trace: ' . $e->getTraceAsString());
+        $dcfData = null;
+    } catch (Throwable $e) {
+        error_log('Fatal DCF calculation error in teaser: ' . $e->getMessage());
+        error_log('DCF calculation error trace: ' . $e->getTraceAsString());
         $dcfData = null;
     } finally {
         // Очищаем буфер вывода (на случай, если dashboard.php что-то вывел)

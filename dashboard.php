@@ -42,6 +42,27 @@ try {
     ");
     $stmt->execute([$user['id']]);
     $forms = $stmt->fetchAll();
+    
+    // Загружаем информацию о модерации тизеров для каждой формы
+    ensurePublishedTeasersTable();
+    foreach ($forms as &$form) {
+        $moderationStmt = $pdo->prepare("
+            SELECT 
+                moderation_status,
+                created_at,
+                moderated_at,
+                published_at,
+                moderation_notes
+            FROM published_teasers
+            WHERE seller_form_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ");
+        $moderationStmt->execute([$form['id']]);
+        $moderationInfo = $moderationStmt->fetch();
+        $form['teaser_moderation'] = $moderationInfo ?: null;
+    }
+    unset($form);
 } catch (PDOException $e) {
     error_log("Error fetching forms: " . $e->getMessage());
     $forms = [];
@@ -1573,12 +1594,20 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             font-size: 11px;
             font-weight: 600;
             color: white;
+            white-space: nowrap;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         .forms-tabs__tab.active .forms-tabs__tab-status {
             background: rgba(255, 255, 255, 0.3) !important;
         }
+        
+        .forms-tabs__tab-rejection-note {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            display: block;
+        }
+        
         @media (max-width: 768px) {
             .forms-tabs {
                 padding: 24px 20px;
@@ -1861,7 +1890,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         }
         .dashboard-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 40px;
         }
@@ -3971,16 +4000,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         
         <div class="dashboard-stats">
             <div class="stat-card">
-                <div class="stat-value"><?php echo count($forms); ?></div>
-                <div class="stat-label">Всего анкет</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo count(array_filter($forms, fn($f) => $f['status'] === 'submitted' || $f['status'] === 'review')); ?></div>
-                <div class="stat-label">На проверке</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo count(array_filter($forms, fn($f) => $f['status'] === 'approved')); ?></div>
-                <div class="stat-label">Одобрено</div>
+                <div class="stat-value"><?php echo count(array_filter($forms, fn($f) => $f['status'] !== 'draft')); ?></div>
+                <div class="stat-label">Заполненных анкет</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value"><?php echo count(array_filter($forms, fn($f) => $f['status'] === 'draft')); ?></div>
@@ -4090,6 +4111,36 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     $isActive = $selectedForm && $selectedForm['id'] == $form['id'];
                     $formName = htmlspecialchars(html_entity_decode($form['asset_name'] ?: 'Без названия', ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES, 'UTF-8');
                     $formStatus = $form['status'] ?? 'draft';
+                    
+                    // Определяем статус модерации тизера
+                    $teaserModeration = $form['teaser_moderation'] ?? null;
+                    $teaserModerationStatus = null;
+                    $teaserModerationLabel = '';
+                    $teaserModerationColor = '#86868B';
+                    $teaserModerationNotes = '';
+                    
+                    if ($teaserModeration) {
+                        $teaserModerationStatus = $teaserModeration['moderation_status'] ?? null;
+                        switch ($teaserModerationStatus) {
+                            case 'pending':
+                                $teaserModerationLabel = 'На модерации';
+                                $teaserModerationColor = '#FF9500';
+                                break;
+                            case 'approved':
+                                $teaserModerationLabel = 'Одобрен';
+                                $teaserModerationColor = '#34C759';
+                                break;
+                            case 'rejected':
+                                $teaserModerationLabel = 'Отказ';
+                                $teaserModerationColor = '#FF3B30';
+                                $teaserModerationNotes = $teaserModeration['moderation_notes'] ?? '';
+                                break;
+                            case 'published':
+                                $teaserModerationLabel = 'Размещен на платформе';
+                                $teaserModerationColor = '#007AFF';
+                                break;
+                        }
+                    }
                     ?>
                     <button 
                         class="forms-tabs__tab <?php echo $isActive ? 'active' : ''; ?>" 
@@ -4097,11 +4148,24 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         aria-selected="<?php echo $isActive ? 'true' : 'false'; ?>"
                         data-form-id="<?php echo $form['id']; ?>"
                         onclick="switchForm(<?php echo $form['id']; ?>)"
+                        title="<?php if ($teaserModerationNotes): ?>Причина отказа: <?php echo htmlspecialchars($teaserModerationNotes, ENT_QUOTES, 'UTF-8'); ?><?php endif; ?>"
                     >
                         <span class="forms-tabs__tab-name"><?php echo $formName; ?></span>
-                        <span class="forms-tabs__tab-status" style="background: <?php echo $statusColors[$formStatus]; ?>;">
-                            <?php echo $statusLabels[$formStatus]; ?>
-                        </span>
+                        <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                            <span class="forms-tabs__tab-status" style="background: <?php echo $statusColors[$formStatus]; ?>;">
+                                <?php echo $statusLabels[$formStatus]; ?>
+                            </span>
+                            <?php if ($teaserModerationStatus): ?>
+                            <span class="forms-tabs__tab-status" style="background: <?php echo $teaserModerationColor; ?>; font-size: 10px; padding: 3px 8px;">
+                                <?php echo htmlspecialchars($teaserModerationLabel, ENT_QUOTES, 'UTF-8'); ?>
+                            </span>
+                            <?php if ($teaserModerationStatus === 'rejected' && $teaserModerationNotes): ?>
+                            <span class="forms-tabs__tab-rejection-note" style="font-size: 9px; color: #FF3B30; max-width: 200px; text-align: right; line-height: 1.2; margin-top: 2px;">
+                                <?php echo htmlspecialchars(mb_substr($teaserModerationNotes, 0, 60), ENT_QUOTES, 'UTF-8'); ?><?php echo mb_strlen($teaserModerationNotes) > 60 ? '...' : ''; ?>
+                            </span>
+                            <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                     </button>
                 <?php endforeach; ?>
             </div>
@@ -5595,9 +5659,28 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         }),
                     });
 
-                    const payload = await response.json();
+                    // Проверяем, что ответ является валидным JSON
+                    let payload;
+                    const responseText = await response.text();
+                    try {
+                        payload = JSON.parse(responseText);
+                    } catch (jsonError) {
+                        console.error('Failed to parse JSON response:', jsonError);
+                        console.error('Response text:', responseText.substring(0, 500));
+                        throw new Error('Ошибка при обработке ответа от сервера. Попробуйте снова.');
+                    }
+                    
                     if (!response.ok || !payload.success) {
-                        throw new Error(payload.message || 'Не удалось создать тизер.');
+                        // Формируем детальное сообщение об ошибке
+                        let errorMessage = payload.message || 'Не удалось создать тизер.';
+                        if (payload.error) {
+                            errorMessage += ' Детали: ' + payload.error;
+                            if (payload.file && payload.line) {
+                                errorMessage += ' (файл: ' + payload.file + ', строка: ' + payload.line + ')';
+                            }
+                        }
+                        console.error('Teaser generation error:', payload);
+                        throw new Error(errorMessage);
                     }
 
                     // Destroy existing charts before inserting new HTML
@@ -5640,7 +5723,15 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     }, 1000);
                 } catch (error) {
                     console.error('Teaser generation failed', error);
-                    teaserStatus.textContent = error.message || 'Ошибка генерации тизера.';
+                    console.error('Error details:', error);
+                    // Показываем детальное сообщение об ошибке
+                    let errorText = error.message || 'Ошибка генерации тизера.';
+                    // Если это ошибка парсинга JSON, показываем больше информации
+                    if (error.message && error.message.includes('parse JSON')) {
+                        errorText += ' Проверьте консоль для деталей.';
+                    }
+                    teaserStatus.textContent = errorText;
+                    teaserStatus.style.color = '#FF3B30';
                     completeTeaserProgress(elements, false);
                 } finally {
                     teaserBtn.disabled = false;
