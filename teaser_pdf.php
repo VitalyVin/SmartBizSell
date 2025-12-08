@@ -548,6 +548,9 @@ try {
     </style>
     <!-- ApexCharts for chart rendering -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
+    <!-- Библиотеки для генерации PDF без вызова print -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
     <div class="teaser-section">
@@ -685,13 +688,68 @@ try {
             });
 
             /**
-             * Автоматический запуск печати после рендеринга графиков
-             * Задержка 1 секунда необходима для полного рендеринга ApexCharts
-             * Это гарантирует, что графики будут видны в PDF
+             * Генерация PDF без использования print
+             * Используем html2canvas + jsPDF для сохранения качественного изображения
              */
-            setTimeout(() => {
-                window.print();
-            }, 1000);
+            const exportTeaserToPdf = async () => {
+                const teaserEl = document.querySelector('.teaser-section');
+                if (!teaserEl || typeof html2canvas === 'undefined' || !window.jspdf) {
+                    console.error('PDF export dependencies not available');
+                    return;
+                }
+
+                try {
+                    // Рендерим тизер в canvas с увеличенным scale для качества
+                    const canvas = await html2canvas(teaserEl, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        windowWidth: teaserEl.scrollWidth,
+                        windowHeight: teaserEl.scrollHeight
+                    });
+
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+                    const pageWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+                    const imgWidth = pageWidth;
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                    let heightLeft = imgHeight;
+                    let position = 0;
+
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+
+                    while (heightLeft > 0) {
+                        position = heightLeft * -1;
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+                    }
+
+                    pdf.save('teaser.pdf');
+                } catch (error) {
+                    console.error('Error exporting PDF:', error);
+                }
+            };
+
+            /**
+             * Ждем, пока все графики будут отрендерены (dataset.chartReady = 1)
+             * После этого запускаем экспорт в PDF
+             */
+            const waitChartsAndExport = () => {
+                const charts = document.querySelectorAll('.teaser-chart[data-chart]');
+                const ready = Array.from(charts).every((c) => c.dataset.chartReady === '1');
+                if (ready || charts.length === 0) {
+                    // Даем небольшой запас после рендеринга графиков
+                    setTimeout(exportTeaserToPdf, 300);
+                } else {
+                    setTimeout(waitChartsAndExport, 300);
+                }
+            };
+
+            waitChartsAndExport();
         });
     </script>
 </body>
