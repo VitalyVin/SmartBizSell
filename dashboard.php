@@ -6148,39 +6148,87 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             };
 
             /**
-             * Инициализация функционала печати DCF модели.
-             * 
-             * Функциональность:
-             * - Добавляет класс 'print-dcf' к body при клике на кнопку экспорта
-             * - Открывает диалог печати браузера
-             * - Восстанавливает состояние после печати
+             * Инициализация функционала экспорта DCF модели в PDF.
+             *
+             * Требование пользователя: "Нужно просто сохранить то, что на экране"
+             * Поэтому экспортируем прямо видимый блок DCF без повторного пересчёта на сервере.
+             * Используем те же библиотеки, что и для AI тизера: html2canvas + jsPDF.
+             * Формат: A4 Landscape, одна страница, масштаб 2x для качества.
+             *
+             * Создано: 2025-01-XX
              */
             const initDcfPrint = () => {
-                const card = document.getElementById('dcf-card');
                 const exportBtn = document.getElementById('export-dcf-pdf');
-                if (!card || !exportBtn) {
+                const dcfCard = document.getElementById('dcf-model');
+                if (!exportBtn || !dcfCard) {
                     return;
                 }
-                const originalText = exportBtn.textContent;
-                const restoreState = () => {
-                    document.body.classList.remove('print-dcf');
-                    exportBtn.disabled = false;
-                    exportBtn.textContent = originalText;
-                };
-                const handleAfterPrint = () => {
-                    restoreState();
-                    window.removeEventListener('afterprint', handleAfterPrint);
-                };
-                exportBtn.addEventListener('click', () => {
-                    document.body.classList.add('print-dcf');
-                    exportBtn.disabled = true;
-                    exportBtn.textContent = 'Открывается диалог...';
-                    window.addEventListener('afterprint', handleAfterPrint);
-                    setTimeout(() => {
-                        window.print();
-                        setTimeout(restoreState, 1000);
-                    }, 50);
+
+                // Утилита для динамической загрузки скриптов, если они ещё не подключены
+                const loadScript = (src) => new Promise((resolve, reject) => {
+                    const exists = Array.from(document.scripts).some((s) => s.src === src);
+                    if (exists) {
+                        resolve();
+                        return;
+                    }
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
                 });
+
+                const ensurePdfDeps = async () => {
+                    if (typeof html2canvas === 'undefined') {
+                        await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+                    }
+                    if (!window.jspdf) {
+                        await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+                    }
+                };
+
+                const exportToPdf = async () => {
+                    try {
+                    exportBtn.disabled = true;
+                        exportBtn.textContent = 'Формируем PDF...';
+
+                        await ensurePdfDeps();
+
+                        const canvas = await html2canvas(dcfCard, {
+                            scale: 2,
+                            useCORS: true,
+                            backgroundColor: '#ffffff',
+                            windowWidth: dcfCard.scrollWidth,
+                            windowHeight: dcfCard.scrollHeight,
+                        });
+
+                        const imgData = canvas.toDataURL('image/png');
+                        const pdf = new window.jspdf.jsPDF('l', 'mm', 'a4'); // Landscape
+                        const pageWidth = pdf.internal.pageSize.getWidth();   // 297 mm
+                        const pageHeight = pdf.internal.pageSize.getHeight(); // 210 mm
+
+                        // Рассчитываем размеры изображения, чтобы уместить на одной странице
+                        let imgWidth = pageWidth;
+                        let imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                        if (imgHeight > pageHeight) {
+                            const scale = pageHeight / imgHeight;
+                            imgWidth *= scale;
+                            imgHeight = pageHeight;
+                        }
+
+                        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                        pdf.save('dcf-model.pdf');
+                    } catch (error) {
+                        console.error('Error exporting DCF PDF:', error);
+                        alert('Не удалось сформировать PDF. Попробуйте ещё раз.');
+                    } finally {
+                        exportBtn.disabled = false;
+                        exportBtn.textContent = 'Сохранить DCF в PDF';
+                    }
+                };
+
+                exportBtn.addEventListener('click', exportToPdf);
             };
 
             /**
