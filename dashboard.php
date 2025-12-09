@@ -7297,7 +7297,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     if (fileInput) {
                         fileInput.value = '';
                     }
-                    
+
                     // Сбрасываем флаги после успешной загрузки
                     // ВАЖНО: Делаем это ПОСЛЕ всех асинхронных операций
                     if (window.documentUploadState) {
@@ -7485,7 +7485,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     // Запускаем polling для проверки изменений файлов
                     // Используем более частую проверку для быстрого обнаружения
                     let pollCount = 0;
-                    const maxPolls = 200; // Проверяем в течение 20 секунд (200 * 100ms)
+                    // Проверяем не дольше 2 секунд (20 * 100ms)
+                    const maxPolls = 20;
                     
                     state.fileCheckInterval = setInterval(() => {
                         pollCount++;
