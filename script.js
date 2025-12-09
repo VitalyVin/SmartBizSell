@@ -936,6 +936,12 @@ async function openBusinessModal(card) {
                     if (modalCharts.length > 0) {
                         initTeaserCharts();
                     }
+                    
+                    // Загружаем документы актива
+                    const sellerFormId = card.getAttribute('data-seller-form-id');
+                    if (sellerFormId) {
+                        loadAssetDocuments(sellerFormId);
+                    }
                 }, 200);
             } else {
                 teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Не удалось загрузить тизер.</p>';
@@ -948,9 +954,132 @@ async function openBusinessModal(card) {
         teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Тизер не найден.</p>';
     }
     
+    // Загружаем документы актива
+    const sellerFormId = card.getAttribute('data-seller-form-id');
+    if (sellerFormId) {
+        loadAssetDocuments(sellerFormId);
+    }
+    
     // Show modal
     businessModal.classList.add('active');
     document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Загрузка документов актива для отображения в модальном окне
+ */
+async function loadAssetDocuments(sellerFormId) {
+    const documentsSection = document.getElementById('modal-documents-section');
+    const documentsList = document.getElementById('modal-documents-list');
+    
+    if (!documentsSection || !documentsList || !sellerFormId) {
+        return;
+    }
+    
+    documentsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">Загрузка документов...</p>';
+    
+    try {
+        const response = await fetch(`get_asset_documents.php?seller_form_id=${sellerFormId}`, {
+            credentials: 'same-origin'
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'Ошибка загрузки документов');
+        }
+        
+        if (result.documents && result.documents.length > 0) {
+            renderModalDocumentsList(result.documents);
+            documentsSection.style.display = 'block';
+        } else {
+            documentsSection.style.display = 'none';
+        }
+        
+    } catch (error) {
+        console.error('Error loading asset documents:', error);
+        documentsSection.style.display = 'none';
+    }
+}
+
+/**
+ * Рендеринг списка документов в модальном окне
+ */
+function renderModalDocumentsList(documents) {
+    const documentsList = document.getElementById('modal-documents-list');
+    if (!documentsList) {
+        return;
+    }
+    
+    const getFileIcon = (fileType, fileName) => {
+        const ext = fileName.split('.').pop().toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+            return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        } else if (ext === 'pdf') {
+            return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/></svg>';
+        } else {
+            return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>';
+        }
+    };
+    
+    const getIconClass = (fileName) => {
+        const ext = fileName.split('.').pop().toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+            return 'document-icon--image';
+        } else if (ext === 'pdf') {
+            return 'document-icon--pdf';
+        } else if (['doc', 'docx'].includes(ext)) {
+            return 'document-icon--doc';
+        } else if (['xls', 'xlsx'].includes(ext)) {
+            return 'document-icon--xls';
+        } else if (['zip', 'rar', '7z'].includes(ext)) {
+            return 'document-icon--archive';
+        }
+        return 'document-icon--default';
+    };
+    
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+    };
+    
+    documentsList.innerHTML = `
+        <div class="modal-documents-grid">
+            ${documents.map(doc => `
+                <div class="modal-document-item">
+                    <div class="modal-document-item__icon">
+                        <div class="document-icon ${getIconClass(doc.file_name)}">
+                            ${getFileIcon(doc.file_type, doc.file_name)}
+                        </div>
+                    </div>
+                    <div class="modal-document-item__info">
+                        <div class="modal-document-item__name" title="${doc.file_name.replace(/"/g, '&quot;')}">
+                            ${doc.file_name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                        </div>
+                        <div class="modal-document-item__meta">
+                            <span>${doc.file_size_mb} МБ</span>
+                            <span>•</span>
+                            <span>${formatDate(doc.uploaded_at)}</span>
+                        </div>
+                    </div>
+                    <div class="modal-document-item__actions">
+                        <a href="download_asset_document.php?document_id=${doc.id}" class="modal-document-item__download" download title="Скачать документ">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
 /**

@@ -2587,3 +2587,350 @@ html {
     cursor: not-allowed !important;
 }
 
+/* ============================================
+   Стили для загрузки и отображения документов
+   ============================================ */
+
+/* Блок документов в личном кабинете */
+.asset-documents-section {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+    border-radius: 20px;
+    padding: 32px;
+    margin-bottom: 40px;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 2px solid rgba(102, 126, 234, 0.2);
+}
+
+.asset-documents-header h2 {
+    background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 8px 0;
+}
+
+.asset-documents-description {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 0 24px 0;
+    line-height: 1.6;
+}
+
+/* Индикатор использования места */
+.storage-indicator {
+    margin-bottom: 24px;
+}
+
+.storage-indicator__label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.storage-indicator__label strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.storage-indicator__bar {
+    height: 8px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.storage-indicator__fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667EEA 0%, #764BA2 100%);
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+/* Зона загрузки документов */
+.document-upload-zone {
+    border: 2px dashed rgba(102, 126, 234, 0.3);
+    border-radius: 16px;
+    padding: 40px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.5);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    margin-bottom: 24px;
+}
+
+.document-upload-zone:hover {
+    border-color: rgba(102, 126, 234, 0.5);
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.document-upload-zone--dragover {
+    border-color: #667EEA;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.document-upload-zone__content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.document-upload-icon {
+    width: 48px;
+    height: 48px;
+    color: #667EEA;
+    margin-bottom: 8px;
+}
+
+.document-upload-zone__text {
+    font-size: 16px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.document-upload-zone__button {
+    background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    pointer-events: auto;
+    position: relative;
+    z-index: 10;
+}
+
+.document-upload-zone__button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.document-upload-zone__hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Список документов */
+.documents-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.documents-empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.document-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease;
+}
+
+.document-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.document-item__icon {
+    flex-shrink: 0;
+}
+
+.document-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: rgba(102, 126, 234, 0.1);
+    color: #667EEA;
+}
+
+.document-icon--pdf {
+    background: rgba(255, 59, 48, 0.1);
+    color: #FF3B30;
+}
+
+.document-icon--doc {
+    background: rgba(0, 122, 255, 0.1);
+    color: #007AFF;
+}
+
+.document-icon--xls {
+    background: rgba(52, 199, 89, 0.1);
+    color: #34C759;
+}
+
+.document-icon--image {
+    background: rgba(255, 149, 0, 0.1);
+    color: #FF9500;
+}
+
+.document-icon--archive {
+    background: rgba(142, 142, 147, 0.1);
+    color: #8E8E93;
+}
+
+.document-item__info {
+    flex: 1;
+    min-width: 0;
+}
+
+.document-item__name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.document-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.document-item__actions {
+    flex-shrink: 0;
+}
+
+.document-item__delete {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: rgba(255, 59, 48, 0.1);
+    color: #FF3B30;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.document-item__delete:hover {
+    background: rgba(255, 59, 48, 0.2);
+    transform: scale(1.1);
+}
+
+/* Документы в модальном окне на главной странице */
+.modal-documents-section {
+    margin-top: 32px;
+    padding-top: 32px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-documents-header h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    color: var(--text-primary);
+}
+
+.modal-documents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.modal-document-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease;
+}
+
+.modal-document-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.modal-document-item__icon {
+    flex-shrink: 0;
+}
+
+.modal-document-item__info {
+    flex: 1;
+    min-width: 0;
+}
+
+.modal-document-item__name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modal-document-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.modal-document-item__actions {
+    flex-shrink: 0;
+}
+
+.modal-document-item__download {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(102, 126, 234, 0.1);
+    color: #667EEA;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.modal-document-item__download:hover {
+    background: rgba(102, 126, 234, 0.2);
+    transform: scale(1.1);
+}
+
+/* Адаптивные стили */
+@media (max-width: 768px) {
+    .asset-documents-section {
+        padding: 24px;
+    }
+    
+    .document-upload-zone {
+        padding: 24px;
+    }
+    
+    .modal-documents-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

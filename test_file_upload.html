@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест загрузки файлов</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .upload-zone {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-zone:hover {
+            border-color: #667EEA;
+            background: #f8f9ff;
+        }
+        .upload-zone.dragover {
+            border-color: #667EEA;
+            background: #f0f4ff;
+        }
+        .upload-btn {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        #file-input {
+            display: none;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #667EEA;
+            padding-left: 10px;
+        }
+        .log-entry.error {
+            border-left-color: #dc3545;
+            color: #dc3545;
+        }
+        .log-entry.success {
+            border-left-color: #28a745;
+            color: #28a745;
+        }
+        .file-list {
+            margin-top: 20px;
+        }
+        .file-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Тест загрузки файлов</h1>
+        
+        <div class="upload-zone" id="upload-zone">
+            <p>Перетащите файлы сюда или</p>
+            <button class="upload-btn" id="upload-btn">Выберите файлы</button>
+            <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                Максимальный размер: 20 МБ
+            </p>
+        </div>
+        
+        <input type="file" id="file-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z,.txt,.csv">
+        
+        <div class="file-list" id="file-list"></div>
+        
+        <div class="log" id="log">
+            <strong>Лог событий:</strong>
+            <div id="log-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // Функция для логирования
+        function log(message, type = 'info') {
+            const logContent = document.getElementById('log-content');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${message}`;
+            logContent.appendChild(entry);
+            logContent.scrollTop = logContent.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        const uploadZone = document.getElementById('upload-zone');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+
+        log('Страница загружена', 'success');
+
+        // Метод 1: Polling (как в dashboard.php)
+        let fileCheckInterval = null;
+
+        const handleUploadClick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            log('Кнопка "Выберите файлы" нажата', 'info');
+            
+            // Останавливаем предыдущий интервал
+            if (fileCheckInterval) {
+                clearInterval(fileCheckInterval);
+                log('Предыдущий интервал остановлен', 'info');
+            }
+            
+            // Сохраняем начальное состояние
+            const initialFileCount = fileInput.files ? fileInput.files.length : 0;
+            log(`Начальное количество файлов: ${initialFileCount}`, 'info');
+            
+            // Открываем диалог
+            fileInput.click();
+            log('Диалог выбора файлов открыт', 'info');
+            
+            // Запускаем polling
+            let pollCount = 0;
+            const maxPolls = 100;
+            
+            fileCheckInterval = setInterval(() => {
+                pollCount++;
+                const currentFileCount = fileInput.files ? fileInput.files.length : 0;
+                
+                if (currentFileCount !== initialFileCount && currentFileCount > 0) {
+                    log(`✅ ФАЙЛЫ ОБНАРУЖЕНЫ ЧЕРЕЗ POLLING! Количество: ${currentFileCount}`, 'success');
+                    clearInterval(fileCheckInterval);
+                    fileCheckInterval = null;
+                    
+                    handleFiles(fileInput.files);
+                } else if (pollCount >= maxPolls) {
+                    log('⏱️ Таймаут polling - файлы не выбраны', 'error');
+                    clearInterval(fileCheckInterval);
+                    fileCheckInterval = null;
+                } else if (pollCount % 10 === 0) {
+                    log(`Polling: проверка #${pollCount}, файлов: ${currentFileCount}`, 'info');
+                }
+            }, 100);
+        };
+
+        // Метод 2: Событие change (fallback)
+        fileInput.addEventListener('change', function(e) {
+            log('=== СОБЫТИЕ CHANGE СРАБОТАЛО ===', 'success');
+            if (e.target.files && e.target.files.length > 0) {
+                if (fileCheckInterval) {
+                    clearInterval(fileCheckInterval);
+                    fileCheckInterval = null;
+                    log('Polling остановлен (файлы обнаружены через change)', 'info');
+                }
+                handleFiles(e.target.files);
+            }
+        });
+
+        // Обработка файлов с загрузкой на сервер
+        async function handleFiles(files) {
+            log(`Обработка ${files.length} файл(ов)`, 'info');
+            
+            fileList.innerHTML = '<h3>Выбранные файлы:</h3>';
+            
+            // Загружаем файлы по одному
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                log(`Загрузка файла ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} МБ)`, 'info');
+                
+                // Создаем элемент для отображения статуса
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.id = `file-item-${i}`;
+                fileItem.innerHTML = `
+                    <div>
+                        <strong>${file.name}</strong><br>
+                        <small>${(file.size / 1024 / 1024).toFixed(2)} МБ • ${file.type || 'неизвестный тип'}</small><br>
+                        <small style="color: #666;">Загрузка...</small>
+                    </div>
+                `;
+                fileList.appendChild(fileItem);
+                
+                try {
+                    // Создаем FormData
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // Отправляем на сервер
+                    log(`Отправка запроса на сервер для файла: ${file.name}`, 'info');
+                    const response = await fetch('test_upload_handler.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    log(`Ответ сервера: ${response.status} ${response.statusText}`, 'info');
+                    
+                    // Проверяем тип ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        log(`Ошибка: сервер вернул не JSON. Ответ: ${text.substring(0, 200)}`, 'error');
+                        throw new Error('Сервер вернул неверный формат ответа.');
+                    }
+                    
+                    const result = await response.json();
+                    log(`Результат загрузки: ${JSON.stringify(result)}`, 'info');
+                    
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Ошибка загрузки файла');
+                    }
+                    
+                    // Обновляем статус файла
+                    fileItem.innerHTML = `
+                        <div>
+                            <strong>${file.name}</strong><br>
+                            <small>${(file.size / 1024 / 1024).toFixed(2)} МБ • ${file.type || 'неизвестный тип'}</small><br>
+                            <small style="color: #28a745;">✅ Загружен: ${result.file.saved_name}</small><br>
+                            <small style="color: #666;">Путь: ${result.file.path}</small>
+                        </div>
+                    `;
+                    fileItem.style.borderLeft = '3px solid #28a745';
+                    
+                    log(`✅ Файл ${i + 1} успешно загружен: ${result.file.saved_name}`, 'success');
+                    
+                } catch (error) {
+                    log(`❌ Ошибка загрузки файла ${i + 1}: ${error.message}`, 'error');
+                    
+                    // Обновляем статус с ошибкой
+                    fileItem.innerHTML = `
+                        <div>
+                            <strong>${file.name}</strong><br>
+                            <small>${(file.size / 1024 / 1024).toFixed(2)} МБ • ${file.type || 'неизвестный тип'}</small><br>
+                            <small style="color: #dc3545;">❌ Ошибка: ${error.message}</small>
+                        </div>
+                    `;
+                    fileItem.style.borderLeft = '3px solid #dc3545';
+                }
+            }
+            
+            log('✅ Обработка всех файлов завершена!', 'success');
+        }
+
+        // Привязываем обработчики
+        uploadBtn.addEventListener('click', handleUploadClick);
+        uploadZone.addEventListener('click', (e) => {
+            if (e.target === uploadZone || e.target === uploadBtn) {
+                handleUploadClick(e);
+            }
+        });
+
+        // Drag and drop
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            
+            if (e.dataTransfer.files.length > 0) {
+                log(`Файлы перетащены: ${e.dataTransfer.files.length}`, 'success');
+                // Устанавливаем файлы в input
+                fileInput.files = e.dataTransfer.files;
+                // Триггерим событие change
+                const event = new Event('change', { bubbles: true });
+                fileInput.dispatchEvent(event);
+            }
+        });
+
+        log('Все обработчики привязаны', 'success');
+        log('Готов к тестированию! Нажмите "Выберите файлы" или перетащите файлы', 'success');
+    </script>
+</body>
+</html>
+

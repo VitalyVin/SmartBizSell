@@ -4172,6 +4172,149 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         </div>
         <?php endif; ?>
 
+        <!-- Блок загрузки документов актива -->
+        <?php if ($selectedForm): ?>
+        <?php
+        // Загружаем список документов для выбранного актива
+        $assetDocuments = [];
+        $documentsStats = ['total_size' => 0, 'total_size_mb' => 0, 'max_size_mb' => 20, 'count' => 0];
+        try {
+            ensureAssetDocumentsTable();
+            $pdo = getDBConnection();
+            $stmt = $pdo->prepare("
+                SELECT 
+                    id,
+                    file_name,
+                    file_size,
+                    file_type,
+                    uploaded_at
+                FROM asset_documents
+                WHERE seller_form_id = ?
+                ORDER BY uploaded_at DESC
+            ");
+            $stmt->execute([$selectedForm['id']]);
+            $assetDocuments = $stmt->fetchAll();
+            
+            // Получаем статистику
+            $stmt = $pdo->prepare("
+                SELECT COALESCE(SUM(file_size), 0) as total_size, COUNT(*) as count
+                FROM asset_documents
+                WHERE seller_form_id = ?
+            ");
+            $stmt->execute([$selectedForm['id']]);
+            $stats = $stmt->fetch();
+            $documentsStats = [
+                'total_size' => (int)$stats['total_size'],
+                'total_size_mb' => round($stats['total_size'] / 1024 / 1024, 2),
+                'max_size_mb' => round(MAX_DOCUMENTS_SIZE_PER_ASSET / 1024 / 1024, 2),
+                'count' => (int)$stats['count']
+            ];
+        } catch (PDOException $e) {
+            error_log("Error loading asset documents: " . $e->getMessage());
+        }
+        ?>
+        <div class="asset-documents-section" id="asset-documents-section" data-form-id="<?php echo $selectedForm['id']; ?>">
+            <div class="asset-documents-header">
+                <h2>Документы актива</h2>
+                <p class="asset-documents-description">Загрузите документы, которые помогут покупателю лучше понять ваш бизнес (презентации, финансовые отчеты, фотографии и т.д.)</p>
+            </div>
+            
+            <!-- Индикатор использования места -->
+            <div class="storage-indicator">
+                <div class="storage-indicator__label">
+                    <span>Использовано места:</span>
+                    <strong><?php echo $documentsStats['total_size_mb']; ?> МБ из <?php echo $documentsStats['max_size_mb']; ?> МБ</strong>
+                </div>
+                <div class="storage-indicator__bar">
+                    <div class="storage-indicator__fill" style="width: <?php echo min(100, ($documentsStats['total_size'] / MAX_DOCUMENTS_SIZE_PER_ASSET) * 100); ?>%;"></div>
+                </div>
+            </div>
+            
+            <!-- Зона загрузки документов -->
+            <div class="document-upload-zone" id="document-upload-zone">
+                <input type="file" id="document-file-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z,.txt,.csv" multiple style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; opacity: 0;">
+                <div class="document-upload-zone__content">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="document-upload-icon">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <p class="document-upload-zone__text">Перетащите файлы сюда или <button type="button" class="document-upload-zone__button" id="document-upload-btn">выберите файлы</button></p>
+                    <p class="document-upload-zone__hint">Максимальный размер одного файла: 20 МБ. Общий объем документов: до <?php echo $documentsStats['max_size_mb']; ?> МБ</p>
+                </div>
+            </div>
+            
+            <!-- Список загруженных документов -->
+            <div class="documents-list" id="documents-list">
+                <?php if (empty($assetDocuments)): ?>
+                    <div class="documents-empty">
+                        <p>Документы не загружены</p>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($assetDocuments as $doc): ?>
+                        <div class="document-item" data-document-id="<?php echo $doc['id']; ?>">
+                            <div class="document-item__icon">
+                                <?php
+                                $fileExt = strtolower(pathinfo($doc['file_name'], PATHINFO_EXTENSION));
+                                $iconClass = 'document-icon--default';
+                                if (in_array($fileExt, ['pdf'])) {
+                                    $iconClass = 'document-icon--pdf';
+                                } elseif (in_array($fileExt, ['doc', 'docx'])) {
+                                    $iconClass = 'document-icon--doc';
+                                } elseif (in_array($fileExt, ['xls', 'xlsx'])) {
+                                    $iconClass = 'document-icon--xls';
+                                } elseif (in_array($fileExt, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                                    $iconClass = 'document-icon--image';
+                                } elseif (in_array($fileExt, ['zip', 'rar', '7z'])) {
+                                    $iconClass = 'document-icon--archive';
+                                }
+                                ?>
+                                <div class="document-icon <?php echo $iconClass; ?>">
+                                    <?php if ($iconClass === 'document-icon--image'): ?>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                                            <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                                            <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    <?php elseif ($iconClass === 'document-icon--pdf'): ?>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/>
+                                            <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/>
+                                            <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/>
+                                            <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/>
+                                        </svg>
+                                    <?php else: ?>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/>
+                                            <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/>
+                                        </svg>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="document-item__info">
+                                <div class="document-item__name" title="<?php echo htmlspecialchars($doc['file_name'], ENT_QUOTES, 'UTF-8'); ?>">
+                                    <?php echo htmlspecialchars($doc['file_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                </div>
+                                <div class="document-item__meta">
+                                    <span><?php echo round($doc['file_size'] / 1024 / 1024, 2); ?> МБ</span>
+                                    <span>•</span>
+                                    <span><?php echo date('d.m.Y H:i', strtotime($doc['uploaded_at'])); ?></span>
+                                </div>
+                            </div>
+                            <div class="document-item__actions">
+                                <button type="button" class="document-item__delete" onclick="handleDocumentDelete(<?php echo $doc['id']; ?>)" title="Удалить документ">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Навигация между блоками - показывается если есть отправленная анкета или раздел Term Sheet -->
         <?php 
         // Навигация показывается если есть отправленная анкета или раздел Term Sheet
@@ -4942,7 +5085,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         echo 'Нажмите «Создать тизер», чтобы подготовить актуальную версию.';
                     }
                     ?>
-                </div>
+            </div>
                 <div class="teaser-progress" id="teaser-progress" aria-hidden="true">
                     <div class="teaser-progress__bar" id="teaser-progress-bar"></div>
                 </div>
@@ -7035,7 +7178,796 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             window.handleTeaserPrint = handleTeaserPrint;
         })();
     </script>
-    <script src="script.js?v=<?php echo time(); ?>"></script>
+    <script>
+            /**
+             * Обработка загрузки документов
+             * Определяем функцию глобально ПЕРЕД загрузкой script.js
+             * чтобы она была доступна в обработчиках событий
+             */
+            window.handleDocumentUpload = async function(files) {
+                console.log('=== handleDocumentUpload CALLED ===');
+                console.log('Files parameter:', files);
+                console.log('Files count:', files ? files.length : 0);
+                console.log('Files type:', typeof files);
+                console.log('Is FileList?', files instanceof FileList);
+                
+                if (!files || files.length === 0) {
+                    console.error('❌ No files provided to handleDocumentUpload');
+                    alert('Файлы не выбраны.');
+                    return;
+                }
+                
+                const documentsSection = document.getElementById('asset-documents-section');
+                if (!documentsSection) {
+                    console.error('❌ Documents section not found');
+                    console.error('Available elements with "document" in ID:');
+                    const allElements = document.querySelectorAll('[id*="document"]');
+                    allElements.forEach(el => console.log('  -', el.id));
+                    alert('Блок документов не найден на странице. Убедитесь, что актив выбран.');
+                    return;
+                }
+                
+                const formId = documentsSection.dataset.formId;
+                if (!formId) {
+                    console.error('❌ Form ID not found in dataset');
+                    console.error('Documents section dataset:', documentsSection.dataset);
+                    alert('Не указан ID актива.');
+                    return;
+                }
+                
+                console.log('✅ Form ID found:', formId);
+                
+                const uploadZone = document.getElementById('document-upload-zone');
+                const fileInput = document.getElementById('document-file-input');
+                
+                if (!uploadZone) {
+                    console.error('❌ Upload zone not found!');
+                    alert('Зона загрузки не найдена на странице.');
+                    return;
+                }
+                
+                if (!fileInput) {
+                    console.error('❌ File input not found!');
+                    alert('Поле выбора файлов не найдено на странице.');
+                    return;
+                }
+                
+                console.log('✅ Upload zone and file input found');
+                
+                // Отключаем зону загрузки
+                uploadZone.style.opacity = '0.6';
+                uploadZone.style.pointerEvents = 'none';
+                
+                // Показываем индикатор загрузки
+                const originalText = uploadZone.querySelector('.document-upload-zone__text');
+                const originalButton = uploadZone.querySelector('.document-upload-zone__button');
+                const originalHTML = originalText ? originalText.innerHTML : '';
+                const originalButtonHTML = originalButton ? originalButton.innerHTML : '';
+                
+                if (originalText) {
+                    originalText.innerHTML = 'Загрузка файлов...';
+                }
+                if (originalButton) {
+                    originalButton.style.display = 'none';
+                }
+                
+                try {
+                    // Загружаем файлы по одному
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        console.log(`Uploading file ${i + 1}/${files.length}:`, file.name, `(${(file.size / 1024 / 1024).toFixed(2)} МБ)`);
+                        
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('seller_form_id', formId);
+                        
+                        console.log('Sending request to upload_asset_document.php...');
+                        
+                        const response = await fetch('upload_asset_document.php', {
+                            method: 'POST',
+                            body: formData,
+                            credentials: 'same-origin'
+                        });
+                        
+                        console.log('Response status:', response.status, response.statusText);
+                        
+                        // Проверяем, является ли ответ JSON
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            const text = await response.text();
+                            console.error('Non-JSON response:', text);
+                            throw new Error('Сервер вернул неверный формат ответа. Проверьте консоль для деталей.');
+                        }
+                        
+                        const result = await response.json();
+                        console.log('Response result:', result);
+                        
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || 'Ошибка загрузки файла: ' + file.name);
+                        }
+                        
+                        console.log('File uploaded successfully:', file.name);
+                    }
+                    
+                    // Обновляем список документов и статистику
+                    console.log('Updating documents list...');
+                    await updateDocumentsList();
+                    
+                    // Очищаем input
+                    if (fileInput) {
+                        fileInput.value = '';
+                    }
+                    
+                    // Сбрасываем флаги после успешной загрузки
+                    // ВАЖНО: Делаем это ПОСЛЕ всех асинхронных операций
+                    if (window.documentUploadState) {
+                        console.log('🔄 Resetting upload flags after successful upload');
+                        window.documentUploadState.isProcessingFiles = false;
+                        window.documentUploadState.isDialogOpen = false;
+                        window.documentUploadState.lastProcessedFiles = null; // Сбрасываем, чтобы можно было загрузить тот же файл снова
+                        console.log('✅ Upload flags reset after success:', {
+                            isProcessingFiles: window.documentUploadState.isProcessingFiles,
+                            isDialogOpen: window.documentUploadState.isDialogOpen,
+                            lastProcessedFiles: window.documentUploadState.lastProcessedFiles
+                        });
+                    }
+                    
+                    // Показываем сообщение об успехе
+                    if (originalText) {
+                        originalText.innerHTML = 'Файлы успешно загружены!';
+                        setTimeout(() => {
+                            originalText.innerHTML = originalHTML;
+                            // Переинициализируем кнопку после изменения HTML
+                            // НЕ нужно переинициализировать, так как обработчики уже привязаны через initDocumentUpload
+                            // Просто восстанавливаем кнопку
+                            if (originalButton) {
+                                originalButton.style.display = '';
+                            }
+                        }, 2000);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error uploading document:', error);
+                    console.error('Error stack:', error.stack);
+                    
+                    let errorMessage = 'Ошибка загрузки документа: ' + error.message;
+                    if (error.message.includes('JSON')) {
+                        errorMessage += '\n\nВозможно, на сервере произошла ошибка. Проверьте логи сервера.';
+                    }
+                    
+                    alert(errorMessage);
+                    
+                    // Восстанавливаем текст
+                    if (originalText) {
+                        originalText.innerHTML = originalHTML;
+                    }
+                    
+                    // Сбрасываем флаги при ошибке
+                    if (window.documentUploadState) {
+                        console.log('🔄 Resetting upload flags after error');
+                        window.documentUploadState.isProcessingFiles = false;
+                        window.documentUploadState.isDialogOpen = false;
+                        window.documentUploadState.lastProcessedFiles = null;
+                        console.log('✅ Upload flags reset after error:', {
+                            isProcessingFiles: window.documentUploadState.isProcessingFiles,
+                            isDialogOpen: window.documentUploadState.isDialogOpen,
+                            lastProcessedFiles: window.documentUploadState.lastProcessedFiles
+                        });
+                    }
+                } finally {
+                    // Включаем зону загрузки обратно
+                    uploadZone.style.opacity = '1';
+                    uploadZone.style.pointerEvents = 'auto';
+                    
+                    // Сбрасываем флаги обработки, чтобы можно было загрузить файлы снова
+                    if (window.documentUploadState) {
+                        console.log('🔄 Resetting upload flags in finally block');
+                        window.documentUploadState.isProcessingFiles = false;
+                        window.documentUploadState.isDialogOpen = false;
+                        window.documentUploadState.lastProcessedFiles = null; // Сбрасываем, чтобы можно было загрузить тот же файл снова
+                        console.log('✅ Upload flags reset:', {
+                            isProcessingFiles: window.documentUploadState.isProcessingFiles,
+                            isDialogOpen: window.documentUploadState.isDialogOpen,
+                            lastProcessedFiles: window.documentUploadState.lastProcessedFiles
+                        });
+                    }
+                }
+            };
+            
+            /**
+             * Инициализация функциональности загрузки документов
+             * Определяем глобально для доступа из других скриптов
+             */
+            
+            // Глобальные переменные для предотвращения повторной обработки
+            // Они должны быть общими для всех вызовов initDocumentUpload
+            if (!window.documentUploadState) {
+                window.documentUploadState = {
+                    isProcessingFiles: false,
+                    lastProcessedFiles: null,
+                    isInitialized: false,
+                    fileCheckInterval: null,
+                    isDialogOpen: false
+                };
+            }
+            
+            window.initDocumentUpload = function() {
+                // Предотвращаем повторную инициализацию
+                if (window.documentUploadState.isInitialized) {
+                    console.log('⚠️ Document upload already initialized, skipping...');
+                    return;
+                }
+                
+                // Помечаем как инициализированное
+                window.documentUploadState.isInitialized = true;
+                
+                // Используем глобальные переменные
+                const state = window.documentUploadState;
+                const uploadZone = document.getElementById('document-upload-zone');
+                const fileInput = document.getElementById('document-file-input');
+                const uploadBtn = document.getElementById('document-upload-btn');
+                
+                if (!uploadZone || !fileInput || !uploadBtn) {
+                    console.log('Document upload elements not found:', {
+                        uploadZone: !!uploadZone,
+                        fileInput: !!fileInput,
+                        uploadBtn: !!uploadBtn
+                    });
+                    return;
+                }
+                
+                console.log('Initializing document upload...');
+                console.log('handleDocumentUpload available:', typeof window.handleDocumentUpload);
+                
+                // Вспомогательная функция для привязки обработчиков к кнопке
+                const bindUploadButton = (btn) => {
+                    if (!btn || btn.dataset.boundUpload === '1') {
+                        return;
+                    }
+                    btn.addEventListener('click', handleUploadClick, { once: false });
+                    btn.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleUploadClick(e);
+                        }
+                    });
+                    btn.dataset.boundUpload = '1';
+                    console.log('✅ Upload button listeners bound');
+                };
+                
+                // Используем глобальные переменные из state (уже определены выше)
+                
+                // Обработчик клика по кнопке загрузки
+                const handleUploadClick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Предотвращаем повторное открытие диалога
+                    if (state.isDialogOpen || state.isProcessingFiles) {
+                        console.log('⚠️ Dialog already open or processing, ignoring click');
+                        console.log('State:', {
+                            isDialogOpen: state.isDialogOpen,
+                            isProcessingFiles: state.isProcessingFiles,
+                            lastProcessedFiles: state.lastProcessedFiles
+                        });
+                        return;
+                    }
+                    
+                    console.log('✅ Button click allowed, state:', {
+                        isDialogOpen: state.isDialogOpen,
+                        isProcessingFiles: state.isProcessingFiles,
+                        lastProcessedFiles: state.lastProcessedFiles
+                    });
+                    
+                    console.log('✅ Upload button clicked, opening file dialog...');
+                    
+                    // Останавливаем предыдущий интервал, если он был
+                    if (state.fileCheckInterval) {
+                        console.log('Stopping previous polling interval');
+                        clearInterval(state.fileCheckInterval);
+                        state.fileCheckInterval = null;
+                    }
+                    
+                    // Очищаем предыдущее значение input для возможности повторной загрузки того же файла
+                    fileInput.value = '';
+                    
+                    // Сохраняем текущее состояние файлов
+                    const initialFileCount = fileInput.files ? fileInput.files.length : 0;
+                    console.log('Initial file count:', initialFileCount);
+                    
+                    // Устанавливаем флаг
+                    state.isDialogOpen = true;
+                    
+                    // Открываем диалог выбора файлов
+                    console.log('Calling fileInput.click()...');
+                    fileInput.click();
+                    
+                    // Запускаем polling для проверки изменений файлов
+                    // Используем более частую проверку для быстрого обнаружения
+                    let pollCount = 0;
+                    const maxPolls = 200; // Проверяем в течение 20 секунд (200 * 100ms)
+                    
+                    state.fileCheckInterval = setInterval(() => {
+                        pollCount++;
+                        const currentFileCount = fileInput.files ? fileInput.files.length : 0;
+                        const currentFiles = fileInput.files;
+                        
+                        // Логируем каждые 5 проверок для более детальной отладки
+                        if (pollCount % 5 === 0) {
+                            console.log(`🔍 Polling check #${pollCount}: files count = ${currentFileCount} (initial: ${initialFileCount})`);
+                            if (currentFiles && currentFiles.length > 0) {
+                                console.log(`   Files: ${Array.from(currentFiles).map(f => f.name).join(', ')}`);
+                            }
+                        }
+                        
+                        // Проверяем, изменилось ли количество файлов
+                        if (currentFileCount !== initialFileCount && currentFileCount > 0 && !state.isProcessingFiles) {
+                            console.log('=== ✅ FILES DETECTED VIA POLLING ===');
+                            console.log('Files count changed from', initialFileCount, 'to', currentFileCount);
+                            clearInterval(state.fileCheckInterval);
+                            state.fileCheckInterval = null;
+                            state.isDialogOpen = false; // Сбрасываем флаг
+                            
+                            if (fileInput.files && fileInput.files.length > 0) {
+                                const files = fileInput.files;
+                                console.log('First file:', files[0].name, files[0].size, 'bytes');
+                                
+                                // Проверяем, не обрабатывали ли мы уже эти файлы
+                                const filesKey = Array.from(files).map(f => `${f.name}-${f.size}-${f.lastModified}`).join('|');
+                                if (state.lastProcessedFiles === filesKey) {
+                                    console.log('⚠️ These files were already processed via polling, ignoring');
+                                    return;
+                                }
+                                
+                                // Устанавливаем флаг обработки
+                                state.isProcessingFiles = true;
+                                state.lastProcessedFiles = filesKey;
+                                
+                                if (typeof window.handleDocumentUpload === 'function') {
+                                    console.log('🚀 Calling handleDocumentUpload with', files.length, 'file(s)');
+                                    try {
+                                        // Вызываем асинхронно
+                                        window.handleDocumentUpload(files).then(() => {
+                                            // Флаги будут сброшены в finally блоке handleDocumentUpload
+                                            // Здесь только очищаем input
+                                            fileInput.value = '';
+                                            console.log('✅ File upload completed (polling), input cleared');
+                                        }).catch(error => {
+                                            console.error('❌ Error in handleDocumentUpload promise:', error);
+                                            // Флаги будут сброшены в finally блоке handleDocumentUpload
+                                            alert('Ошибка при загрузке файла: ' + error.message);
+                                        });
+                                    } catch (error) {
+                                        console.error('❌ ERROR in handleDocumentUpload:', error);
+                                        console.error('Error stack:', error.stack);
+                                        state.isProcessingFiles = false;
+                                        state.lastProcessedFiles = null;
+                                        alert('Ошибка при загрузке файла: ' + error.message);
+                                    }
+                                } else {
+                                    console.error('❌ handleDocumentUpload is not a function!');
+                                    console.error('typeof window.handleDocumentUpload:', typeof window.handleDocumentUpload);
+                                    state.isProcessingFiles = false;
+                                    state.lastProcessedFiles = null;
+                                    alert('Ошибка: функция загрузки не найдена.');
+                                }
+                            }
+                        } else if (pollCount >= maxPolls) {
+                            console.log('⏱️ Polling timeout - no files selected or dialog cancelled');
+                            console.log('Final file count:', currentFileCount, 'initial:', initialFileCount);
+                            clearInterval(state.fileCheckInterval);
+                            state.fileCheckInterval = null;
+                            state.isDialogOpen = false; // Сбрасываем флаг
+                        }
+                    }, 100); // Проверяем каждые 100ms
+                };
+                
+                // Привязываем обработчики только один раз без клонирования кнопки,
+                // чтобы не терять обработчики при последующих кликах
+                if (!uploadBtn.dataset.boundUpload) {
+                    uploadBtn.addEventListener('click', handleUploadClick, { once: false });
+                    // Также обрабатываем нажатие Enter для доступности
+                    uploadBtn.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleUploadClick(e);
+                        }
+                    });
+                    uploadBtn.dataset.boundUpload = '1';
+                    console.log('✅ Upload button event listeners attached (single instance, no clone)');
+                } else {
+                    console.log('⚠️ Upload button listeners already attached, skipping re-bind');
+                }
+                
+                // Обработчик change - основной способ обнаружения файлов
+                const handleFileChange = function(e) {
+                    console.log('=== 🔔 FILE INPUT CHANGE EVENT ===');
+                    console.log('Change event - files:', e.target.files ? e.target.files.length : 0);
+                    console.log('Change event - isProcessingFiles:', state.isProcessingFiles);
+                    
+                    // Предотвращаем повторную обработку - проверяем СРАЗУ
+                    if (state.isProcessingFiles) {
+                        console.log('⚠️ Files are already being processed, ignoring change event');
+                        return;
+                    }
+                    
+                    const files = e.target.files;
+                    console.log('Change event - files object:', files);
+                    console.log('Change event - files.length:', files ? files.length : 'null');
+                    
+                    if (files && files.length > 0) {
+                        // Создаем ключ для проверки дубликатов
+                        const filesKey = Array.from(files).map(f => `${f.name}-${f.size}-${f.lastModified}`).join('|');
+                        
+                        // Проверяем, не обрабатывали ли мы уже эти файлы
+                        if (state.lastProcessedFiles === filesKey) {
+                            console.log('⚠️ These files were already processed, ignoring');
+                            return;
+                        }
+                        
+                        console.log('✅ Files detected in change event:', Array.from(files).map(f => `${f.name} (${f.size} bytes)`));
+                        
+                        // Устанавливаем флаг обработки СРАЗУ, до любых других операций
+                        // Это предотвратит повторную обработку, если событие сработает еще раз
+                        state.isProcessingFiles = true;
+                        state.lastProcessedFiles = filesKey;
+                        
+                        // Останавливаем polling, если он активен
+                        if (state.fileCheckInterval) {
+                            console.log('🛑 Stopping polling (files detected via change event)');
+                            clearInterval(state.fileCheckInterval);
+                            state.fileCheckInterval = null;
+                        }
+                        
+                        // НЕ сбрасываем флаг диалога здесь, так как он будет сброшен после завершения загрузки
+                        // state.isDialogOpen = false; // УБРАНО - сбрасываем только после завершения загрузки
+                        
+                        console.log('handleDocumentUpload type:', typeof window.handleDocumentUpload);
+                        if (typeof window.handleDocumentUpload === 'function') {
+                            console.log('🚀 Calling handleDocumentUpload from change event with', files.length, 'file(s)');
+                            try {
+                                // Вызываем асинхронно
+                                window.handleDocumentUpload(files).then(() => {
+                                    // Флаги будут сброшены в finally блоке handleDocumentUpload
+                                    // Здесь только очищаем input
+                                    fileInput.value = '';
+                                    console.log('✅ File upload completed (change event), input cleared');
+                                    // Убеждаемся, что флаги сброшены
+                                    if (window.documentUploadState) {
+                                        window.documentUploadState.isDialogOpen = false;
+                                        window.documentUploadState.isProcessingFiles = false;
+                                        window.documentUploadState.lastProcessedFiles = null;
+                                        console.log('🔄 Flags reset in then handler:', {
+                                            isDialogOpen: window.documentUploadState.isDialogOpen,
+                                            isProcessingFiles: window.documentUploadState.isProcessingFiles
+                                        });
+                                    }
+                                }).catch(error => {
+                                    console.error('❌ Error in handleDocumentUpload promise:', error);
+                                    // Сбрасываем флаги при ошибке
+                                    if (window.documentUploadState) {
+                                        window.documentUploadState.isDialogOpen = false;
+                                        window.documentUploadState.isProcessingFiles = false;
+                                        window.documentUploadState.lastProcessedFiles = null;
+                                        console.log('🔄 Flags reset in catch handler:', {
+                                            isDialogOpen: window.documentUploadState.isDialogOpen,
+                                            isProcessingFiles: window.documentUploadState.isProcessingFiles
+                                        });
+                                    }
+                                    alert('Ошибка при загрузке файла: ' + error.message);
+                                });
+                            } catch (error) {
+                                console.error('❌ ERROR in handleDocumentUpload from change event:', error);
+                                console.error('Error stack:', error.stack);
+                                // Сбрасываем флаги при синхронной ошибке
+                                state.isProcessingFiles = false;
+                                state.isDialogOpen = false;
+                                state.lastProcessedFiles = null;
+                                alert('Ошибка при загрузке файла: ' + error.message);
+                            }
+                        } else {
+                            console.error('❌ handleDocumentUpload is not a function in change handler!');
+                            console.error('typeof window.handleDocumentUpload:', typeof window.handleDocumentUpload);
+                            state.isProcessingFiles = false;
+                            state.lastProcessedFiles = null;
+                            alert('Ошибка: функция загрузки не найдена.');
+                        }
+                    } else {
+                        console.log('⚠️ Change event fired but no files selected');
+                        state.isDialogOpen = false; // Сбрасываем флаг даже если файлов нет
+                    }
+                };
+                
+                // Привязываем обработчик change ТОЛЬКО один раз
+                // НЕ используем одновременно addEventListener и onchange, чтобы избежать дублирования
+                fileInput.addEventListener('change', handleFileChange, false);
+                
+                // НЕ добавляем обработчик input, так как он может вызывать дублирование
+                // Событие change достаточно для обнаружения файлов
+                
+                // Добавляем обработчик focus для отладки
+                fileInput.addEventListener('focus', function(e) {
+                    console.log('=== 👁️ FILE INPUT FOCUS EVENT ===');
+                });
+                
+                // Добавляем обработчик blur для отладки
+                fileInput.addEventListener('blur', function(e) {
+                    console.log('=== 👁️ FILE INPUT BLUR EVENT ===');
+                    console.log('Blur event - files:', e.target.files ? e.target.files.length : 0);
+                    // Проверяем файлы после blur (когда диалог закрывается)
+                    setTimeout(() => {
+                        const files = e.target.files;
+                        if (files && files.length > 0) {
+                            console.log('✅ Files detected after blur:', Array.from(files).map(f => f.name));
+                            handleFileChange(e);
+                        }
+                    }, 100);
+                });
+                
+                console.log('✅ Change, input, focus, blur event listeners attached to file input');
+                console.log('File input element:', fileInput);
+                console.log('File input display style:', window.getComputedStyle(fileInput).display);
+                console.log('File input visibility:', window.getComputedStyle(fileInput).visibility);
+                console.log('File input opacity:', window.getComputedStyle(fileInput).opacity);
+                
+                // Drag and drop обработчики
+                uploadZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadZone.classList.add('document-upload-zone--dragover');
+                });
+                
+                uploadZone.addEventListener('dragleave', () => {
+                    uploadZone.classList.remove('document-upload-zone--dragover');
+                });
+                
+                uploadZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadZone.classList.remove('document-upload-zone--dragover');
+                    
+                    if (e.dataTransfer.files.length > 0) {
+                        if (typeof window.handleDocumentUpload === 'function') {
+                            window.handleDocumentUpload(e.dataTransfer.files);
+                        }
+                    }
+                });
+                
+                // Загружаем список документов при инициализации
+                updateDocumentsList();
+            };
+            
+            /**
+             * Обработка удаления документа
+             */
+            const handleDocumentDelete = async (documentId) => {
+                if (!confirm('Вы уверены, что хотите удалить этот документ?')) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('delete_asset_document.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ document_id: documentId })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Ошибка удаления документа');
+                    }
+                    
+                    // Обновляем список документов и статистику
+                    await updateDocumentsList();
+                    
+                } catch (error) {
+                    console.error('Error deleting document:', error);
+                    alert('Ошибка удаления документа: ' + error.message);
+                }
+            };
+            
+            /**
+             * Обновление списка документов и статистики
+             */
+            const updateDocumentsList = async () => {
+                const documentsSection = document.getElementById('asset-documents-section');
+                if (!documentsSection) {
+                    return;
+                }
+                
+                const formId = documentsSection.dataset.formId;
+                if (!formId) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`get_asset_documents.php?seller_form_id=${formId}`, {
+                        credentials: 'same-origin'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Ошибка загрузки списка документов');
+                    }
+                    
+                    // Обновляем статистику
+                    updateStorageIndicator(result.stats);
+                    
+                    // Обновляем список документов
+                    renderDocumentsList(result.documents);
+                    
+                } catch (error) {
+                    console.error('Error loading documents list:', error);
+                }
+            };
+            
+            /**
+             * Обновление индикатора использования места
+             */
+            const updateStorageIndicator = (stats) => {
+                const indicatorLabel = document.querySelector('.storage-indicator__label strong');
+                const indicatorFill = document.querySelector('.storage-indicator__fill');
+                
+                if (indicatorLabel) {
+                    indicatorLabel.textContent = `${stats.total_size_mb} МБ из ${stats.max_size_mb} МБ`;
+                }
+                
+                if (indicatorFill) {
+                    const percentage = Math.min(100, (stats.total_size / (stats.max_size_mb * 1024 * 1024)) * 100);
+                    indicatorFill.style.width = percentage + '%';
+                }
+            };
+            
+            /**
+             * Рендеринг списка документов
+             */
+            const renderDocumentsList = (documents) => {
+                const documentsList = document.getElementById('documents-list');
+                if (!documentsList) {
+                    return;
+                }
+                
+                if (documents.length === 0) {
+                    documentsList.innerHTML = '<div class="documents-empty"><p>Документы не загружены</p></div>';
+                    return;
+                }
+                
+                const getFileIcon = (fileType, fileName) => {
+                    const ext = fileName.split('.').pop().toLowerCase();
+                    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+                        return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    } else if (ext === 'pdf') {
+                        return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/></svg>';
+                    } else {
+                        return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>';
+                    }
+                };
+                
+                const getIconClass = (fileName) => {
+                    const ext = fileName.split('.').pop().toLowerCase();
+                    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+                        return 'document-icon--image';
+                    } else if (ext === 'pdf') {
+                        return 'document-icon--pdf';
+                    } else if (['doc', 'docx'].includes(ext)) {
+                        return 'document-icon--doc';
+                    } else if (['xls', 'xlsx'].includes(ext)) {
+                        return 'document-icon--xls';
+                    } else if (['zip', 'rar', '7z'].includes(ext)) {
+                        return 'document-icon--archive';
+                    }
+                    return 'document-icon--default';
+                };
+                
+                const formatDate = (dateString) => {
+                    const date = new Date(dateString);
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    return `${day}.${month}.${year} ${hours}:${minutes}`;
+                };
+                
+                documentsList.innerHTML = documents.map(doc => `
+                    <div class="document-item" data-document-id="${doc.id}">
+                        <div class="document-item__icon">
+                            <div class="document-icon ${getIconClass(doc.file_name)}">
+                                ${getFileIcon(doc.file_type, doc.file_name)}
+                            </div>
+                        </div>
+                        <div class="document-item__info">
+                            <div class="document-item__name" title="${doc.file_name.replace(/"/g, '&quot;')}">
+                                ${doc.file_name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                            </div>
+                            <div class="document-item__meta">
+                                <span>${doc.file_size_mb} МБ</span>
+                                <span>•</span>
+                                <span>${formatDate(doc.uploaded_at)}</span>
+                            </div>
+                        </div>
+                        <div class="document-item__actions">
+                            <button type="button" class="document-item__delete" onclick="handleDocumentDelete(${doc.id})" title="Удалить документ">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            };
+            
+            // Флаг для предотвращения повторной инициализации
+            let docUploadInitialized = false;
+            
+            // Инициализация при загрузке страницы
+            // Используем несколько способов для гарантии инициализации
+            const initDocUploadWhenReady = () => {
+                // Предотвращаем повторную инициализацию
+                if (docUploadInitialized) {
+                    console.log('⚠️ Document upload already initialized, skipping...');
+                    return;
+                }
+                
+                const uploadBtn = document.getElementById('document-upload-btn');
+                if (uploadBtn) {
+                    console.log('✅ Found upload button, initializing document upload...');
+                    if (typeof window.initDocumentUpload === 'function') {
+                        window.initDocumentUpload();
+                        docUploadInitialized = true;
+                    } else {
+                        console.error('❌ window.initDocumentUpload is not a function!');
+                    }
+                } else {
+                    console.log('Upload button not found, retrying...');
+                    // Если элементы еще не загружены, пробуем еще раз через небольшую задержку
+                    setTimeout(initDocUploadWhenReady, 200);
+                }
+            };
+            
+            // Инициализация сразу, если DOM уже загружен
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    console.log('DOMContentLoaded, initializing document upload...');
+                    setTimeout(initDocUploadWhenReady, 100);
+                });
+            } else {
+                console.log('DOM already loaded, initializing document upload...');
+                setTimeout(initDocUploadWhenReady, 100);
+            }
+            
+            // Также инициализируем при переключении между формами
+            // (если блок документов появляется динамически)
+            const originalSwitchForm = window.switchForm;
+            if (typeof originalSwitchForm === 'function') {
+                window.switchForm = function(formId) {
+                    originalSwitchForm(formId);
+                    // Переинициализируем после переключения формы
+                    setTimeout(() => {
+                        console.log('Form switched, reinitializing document upload...');
+                        initDocUploadWhenReady();
+                    }, 500);
+                };
+            }
+            
+            // Также пробуем инициализировать через MutationObserver для динамически добавляемых элементов
+            if (typeof MutationObserver !== 'undefined') {
+                const observer = new MutationObserver((mutations) => {
+                    const uploadBtn = document.getElementById('document-upload-btn');
+                    if (uploadBtn && !uploadBtn.dataset.initialized) {
+                        console.log('MutationObserver detected upload button, initializing...');
+                        uploadBtn.dataset.initialized = 'true';
+                        initDocumentUpload();
+                    }
+                });
+                
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+    </script>
 </body>
 </html>
 <?php

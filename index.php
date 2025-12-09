@@ -1036,6 +1036,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                              data-location="<?php echo htmlspecialchars($card['location'], ENT_QUOTES, 'UTF-8'); ?>"
                              data-id="<?php echo $card['id']; ?>"
                              data-teaser-id="<?php echo $teaser['id']; ?>"
+                             data-seller-form-id="<?php echo $teaser['seller_form_id']; ?>"
                              data-title="<?php echo htmlspecialchars($card['title'], ENT_QUOTES, 'UTF-8'); ?>"
                              data-revenue="<?php echo ($card['revenue'] > 0 ? $card['revenue'] : $card['revenue_2026e']) * 1000000; ?>"
                              data-employees="<?php echo $card['employees']; ?>"
@@ -1204,6 +1205,16 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                     <div class="teaser-section" id="modal-teaser-section">
                         <div class="teaser-result" id="modal-teaser-content">
                             <p style="text-align: center; color: var(--text-secondary); padding: 40px;">Загрузка тизера...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Блок документов актива -->
+                    <div class="modal-documents-section" id="modal-documents-section" style="display: none;">
+                        <div class="modal-documents-header">
+                            <h3>Документы</h3>
+                        </div>
+                        <div class="modal-documents-list" id="modal-documents-list">
+                            <p style="text-align: center; color: var(--text-secondary); padding: 20px;">Загрузка документов...</p>
                         </div>
                     </div>
                 </div>
