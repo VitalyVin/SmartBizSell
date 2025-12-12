@@ -6178,6 +6178,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     document.head.appendChild(script);
                 });
 
+                // Загружаем зависимости html2canvas/jsPDF только при первом клике
                 const ensurePdfDeps = async () => {
                     if (typeof html2canvas === 'undefined') {
                         await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
@@ -6194,6 +6195,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
 
                         await ensurePdfDeps();
 
+                        // Снимаем "скриншот" видимого блока DCF в high-DPI для качества
                         const canvas = await html2canvas(dcfCard, {
                             scale: 2,
                             useCORS: true,
@@ -6207,7 +6209,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         const pageWidth = pdf.internal.pageSize.getWidth();   // 297 mm
                         const pageHeight = pdf.internal.pageSize.getHeight(); // 210 mm
 
-                        // Рассчитываем размеры изображения, чтобы уместить на одной странице
+                        // Подгоняем пропорции, чтобы всё уместилось на одной странице
                         let imgWidth = pageWidth;
                         let imgHeight = (canvas.height * imgWidth) / canvas.width;
 

@@ -373,13 +373,8 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         ]);
         error_log('persistTeaserSnapshot completed');
 
-        // Создаем или обновляем запись в published_teasers для модерации
-        if (!function_exists('createPublishedTeaserRecord')) {
-            throw new RuntimeException('Function createPublishedTeaserRecord not found');
-        }
-        error_log('Creating published teaser record...');
-        createPublishedTeaserRecord($form, $html);
-        error_log('createPublishedTeaserRecord completed');
+        // Запись в published_teasers создается только при нажатии кнопки "Отправить на модерацию"
+        // через submit_teaser_moderation.php, а не автоматически после обновления тизера
 
         ob_clean();
         echo json_encode([
