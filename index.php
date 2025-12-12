@@ -90,9 +90,19 @@ try {
  */
 function extractTeaserCardData(array $teaser, ?array $formData): array
 {
+    // Маскирование названия актива по пожеланию продавца (asset_disclosure = 'нет')
+    $disclosureRaw = '';
+    if (is_array($formData) && isset($formData['asset_disclosure'])) {
+        $disclosureRaw = (string)$formData['asset_disclosure'];
+    }
+    $disclosureNormalized = mb_strtolower(trim($disclosureRaw));
+    $shouldMaskName = in_array($disclosureNormalized, ['нет', 'no', 'false', '0'], true);
+    $titleSource = $teaser['asset_name'] ?: 'Актив';
+    $title = $shouldMaskName ? 'Актив' : $titleSource;
+
     $cardData = [
         'id' => $teaser['id'],
-        'title' => $teaser['asset_name'] ?: 'Актив',
+        'title' => $title,
         'price' => 0,
         'revenue' => 0,
         'revenue_2026e' => 0,

@@ -828,9 +828,21 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         </div>
 
                         <div class="form-group<?php echo requiredClass('deal_share_range'); ?>">
-                            <label for="deal_share_range">Предмет сделки: продажа доли от ___до ____</label>
-                            <input type="text" id="deal_share_range" name="deal_share_range" placeholder="от ___ до ____"<?php echo requiredAttr('deal_share_range'); ?>
-                                   value="<?php echo htmlspecialchars($_POST['deal_share_range'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            <label for="deal_share_range">Предмет сделки: продажа доли ____%</label>
+                            <div class="input-suffix-container">
+                                <input type="number"
+                                       id="deal_share_range"
+                                       name="deal_share_range"
+                                       min="1"
+                                       max="100"
+                                       step="1"
+                                       placeholder="например, 25"
+                                       class="input-with-suffix"
+                                       <?php echo requiredAttr('deal_share_range'); ?>
+                                       value="<?php echo htmlspecialchars(preg_replace('/[^0-9\\.]/', '', $_POST['deal_share_range'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                                <span class="input-suffix">%</span>
+                            </div>
+                            <small style="color: var(--text-secondary);">Введите число от 1 до 100, знак «%» подставится автоматически</small>
                         </div>
 
                         <div class="form-group<?php echo requiredClass('deal_goal'); ?>">
@@ -1171,6 +1183,14 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                         <div class="form-group">
                             <label for="financial_results_table">Таблица финансовых результатов:</label>
+                            <div style="margin: 8px 0 12px; display: flex; gap: 12px; align-items: center;">
+                                <span style="color: var(--text-secondary);">Ед. изм. для всей таблицы:</span>
+                                <select id="financial-unit-select" class="form-control" style="max-width: 200px;">
+                                    <option value="">— выбрать —</option>
+                                    <option value="тыс. руб.">тыс. руб.</option>
+                                    <option value="млн. руб.">млн. руб.</option>
+                                </select>
+                            </div>
                             <div class="table-container">
                                 <table class="form-table" id="financial_results_table">
                                     <thead>
@@ -1214,7 +1234,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                         foreach ($metrics as $key => $label): ?>
                                         <tr>
                                             <td><?php echo $label; ?></td>
-                                            <td><input type="text" name="financial[<?php echo $key; ?>][unit]" value="<?php echo htmlspecialchars($financial[$key]['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                            <td><input class="financial-unit" type="text" name="financial[<?php echo $key; ?>][unit]" value="<?php echo htmlspecialchars($financial[$key]['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2022_fact]" value="<?php echo htmlspecialchars($financial[$key]['2022_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2023_fact]" value="<?php echo htmlspecialchars($financial[$key]['2023_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2024_fact]" value="<?php echo htmlspecialchars($financial[$key]['2024_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
@@ -1230,6 +1250,14 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                         <div class="form-group">
                             <label for="balance_table">Балансовые показатели:</label>
+                            <div style="margin: 8px 0 12px; display: flex; gap: 12px; align-items: center;">
+                                <span style="color: var(--text-secondary);">Ед. изм. для всей таблицы:</span>
+                                <select id="balance-unit-select" class="form-control" style="max-width: 200px;">
+                                    <option value="">— выбрать —</option>
+                                    <option value="тыс. руб.">тыс. руб.</option>
+                                    <option value="млн. руб.">млн. руб.</option>
+                                </select>
+                            </div>
                             <div class="table-container">
                                 <table class="form-table" id="balance_table">
                                     <thead>
@@ -1269,7 +1297,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                         foreach ($balanceMetrics as $key => $label): ?>
                                         <tr>
                                             <td><?php echo $label; ?></td>
-                                            <td><input type="text" name="balance[<?php echo $key; ?>][unit]" value="<?php echo htmlspecialchars($balance[$key]['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                            <td><input class="balance-unit" type="text" name="balance[<?php echo $key; ?>][unit]" value="<?php echo htmlspecialchars($balance[$key]['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="balance[<?php echo $key; ?>][2022_fact]" value="<?php echo htmlspecialchars($balance[$key]['2022_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="balance[<?php echo $key; ?>][2023_fact]" value="<?php echo htmlspecialchars($balance[$key]['2023_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="balance[<?php echo $key; ?>][2024_fact]" value="<?php echo htmlspecialchars($balance[$key]['2024_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
@@ -1485,6 +1513,23 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
             font-size: 13px;
             border-radius: 6px;
         }
+        .input-suffix-container {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            width: 100%;
+            max-width: 280px;
+        }
+        .input-with-suffix {
+            padding-right: 36px;
+        }
+        .input-suffix {
+            position: absolute;
+            right: 12px;
+            color: var(--text-secondary);
+            pointer-events: none;
+            font-weight: 600;
+        }
     </style>
            <script>
                // Автоматически скрываем сообщение о сохранении черновика через 3 секунды
@@ -1591,6 +1636,29 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                    offlineSalesRadios.forEach(radio => radio.addEventListener('change', toggleOfflineFields));
                    toggleOfflineFields(); // Инициализация
+
+                   // Автозаполнение колонки ед. изм. для финансов и баланса
+                   function initUnitSelect(selectId, inputSelector) {
+                       const selectEl = document.getElementById(selectId);
+                       if (!selectEl) return;
+                       const inputs = Array.from(document.querySelectorAll(inputSelector));
+                       if (!inputs.length) return;
+
+                       // Определяем исходное значение: берем первое непустое из колонок
+                       const initial = inputs.map(i => i.value.trim()).find(v => v !== '');
+                       if (initial) {
+                           selectEl.value = initial;
+                       }
+
+                       selectEl.addEventListener('change', () => {
+                           const val = selectEl.value;
+                           if (!val) return;
+                           inputs.forEach(inp => { inp.value = val; });
+                       });
+                   }
+
+                   initUnitSelect('financial-unit-select', '.financial-unit');
+                   initUnitSelect('balance-unit-select', '.balance-unit');
 
                    // Онлайн-продажи
                    const onlineSalesRadios = document.querySelectorAll('input[name="online_sales_presence"]');
