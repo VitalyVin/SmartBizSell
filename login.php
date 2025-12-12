@@ -222,9 +222,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" class="btn-primary">Войти</button>
             </form>
             
-            <div class="auth-footer">
+            <div class="auth-footer" style="margin-top: 16px;">
+                <a href="forgot_password.php" style="display: block; margin-bottom: 12px;">Забыли пароль?</a>
                 Нет аккаунта? <a href="register.php">Зарегистрироваться</a>
             </div>
+            
+            <?php if (isset($_GET['password_reset']) && $_GET['password_reset'] === 'success'): ?>
+                <div style="background: #efe; color: #3c3; padding: 12px; border-radius: 8px; margin-top: 20px; border: 1px solid #cfc;">
+                    Пароль успешно изменен! Теперь вы можете войти с новым паролем.
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </body>
