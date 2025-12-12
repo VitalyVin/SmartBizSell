@@ -147,7 +147,12 @@ function buildDraftPayload(array $source): array
 
     foreach ($scalarFields as $field) {
         if (array_key_exists($field, $source)) {
-            $payload[$field] = normalizeDraftValue($source[$field]);
+            // Специальная обработка для deal_goal: сохраняем массив как JSON
+            if ($field === 'deal_goal' && is_array($source[$field])) {
+                $payload[$field] = json_encode($source[$field], JSON_UNESCAPED_UNICODE);
+            } else {
+                $payload[$field] = normalizeDraftValue($source[$field]);
+            }
         }
     }
 
@@ -288,8 +293,17 @@ function hydrateFormFromDb(array $form): void
     }
 
     // Преобразование значений для совместимости
-    if ($_POST['deal_goal'] === 'cash-out') $_POST['deal_goal'] = 'cash_out';
-    if ($_POST['deal_goal'] === 'cash-in') $_POST['deal_goal'] = 'cash_in';
+    // Обрабатываем deal_goal как массив (checkboxes) или одиночное значение (для обратной совместимости)
+    if (isset($_POST['deal_goal'])) {
+        if (is_array($_POST['deal_goal'])) {
+            // Новый формат: массив значений
+            $_POST['deal_goal'] = $_POST['deal_goal'];
+        } else {
+            // Старый формат: одиночное значение (для обратной совместимости)
+            if ($_POST['deal_goal'] === 'cash-out') $_POST['deal_goal'] = 'cash_out';
+            if ($_POST['deal_goal'] === 'cash-in') $_POST['deal_goal'] = 'cash_in';
+        }
+    }
     $_POST['production_land_ownership'] = $form['production_land_ownership'] ?? '';
     $_POST['contract_production_usage'] = $form['contract_production_usage'] ?? '';
     $_POST['offline_sales_presence'] = $form['offline_sales_presence'] ?? '';
@@ -313,7 +327,17 @@ function hydrateFormFromDb(array $form): void
             // Восстановление остальных полей формы
             foreach ($data as $key => $value) {
                 if (!isset($_POST[$key]) && $key !== 'production' && $key !== 'financial' && $key !== 'balance') {
-                    $_POST[$key] = $value;
+                    // Обрабатываем deal_goal: может быть JSON (массив) или строкой
+                    if ($key === 'deal_goal' && is_string($value)) {
+                        $decoded = json_decode($value, true);
+                        if (is_array($decoded)) {
+                            $_POST[$key] = $decoded; // Массив для checkboxes
+                        } else {
+                            $_POST[$key] = $value; // Строка для обратной совместимости
+                        }
+                    } else {
+                        $_POST[$key] = $value;
+                    }
                 }
             }
         }
@@ -426,6 +450,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!isset($_POST['agree'])) {
             $errors['agree'] = 'Необходимо согласие на обработку данных';
         }
+        // Валидация deal_goal: должен быть выбран хотя бы один вариант
+        $dealGoalValue = $_POST['deal_goal'] ?? '';
+        if (is_array($dealGoalValue)) {
+            if (empty($dealGoalValue)) {
+                $errors['deal_goal'] = 'Выберите хотя бы одну цель сделки';
+            }
+        } elseif (empty($dealGoalValue)) {
+            $errors['deal_goal'] = 'Выберите хотя бы одну цель сделки';
+        }
     }
 
     // Если ошибок валидации нет, сохраняем данные
@@ -477,8 +510,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // ========== РЕЖИМ ФИНАЛЬНОЙ ОТПРАВКИ ==========
                 // Для отправленной формы сохраняем данные в отдельных полях БД
-                // Это обеспечивает совместимость со старым кодом и упрощает запросы
-                $dealPurpose = sanitizeInput($_POST['deal_goal'] ?? '');
+                // Обрабатываем deal_goal: может быть массивом (checkboxes) или строкой (для обратной совместимости)
+                $dealGoalValue = $_POST['deal_goal'] ?? '';
+                if (is_array($dealGoalValue)) {
+                    // Массив значений: сохраняем как JSON
+                    $dealPurpose = json_encode($dealGoalValue, JSON_UNESCAPED_UNICODE);
+                } else {
+                    // Одиночное значение: сохраняем как строку
+                    $dealPurpose = sanitizeInput($dealGoalValue);
+                }
                 $dealSubject = sanitizeInput($_POST['deal_share_range'] ?? '');
                 $assetDisclosure = sanitizeInput($_POST['asset_disclosure'] ?? '');
                 $companyDescription = sanitizeInput($_POST['company_description'] ?? '');
@@ -848,15 +888,37 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         <div class="form-group<?php echo requiredClass('deal_goal'); ?>">
                             <label>Цель сделки:</label>
                             <div class="radio-group">
+                                <?php
+                                // Обрабатываем deal_goal: может быть массивом (новый формат) или строкой (старый формат)
+                                $dealGoalValue = $_POST['deal_goal'] ?? '';
+                                $dealGoalArray = [];
+                                if (is_array($dealGoalValue)) {
+                                    $dealGoalArray = $dealGoalValue;
+                                } elseif (is_string($dealGoalValue)) {
+                                    // Пытаемся декодировать JSON
+                                    $decoded = json_decode($dealGoalValue, true);
+                                    if (is_array($decoded)) {
+                                        $dealGoalArray = $decoded;
+                                    } elseif (!empty($dealGoalValue)) {
+                                        // Одиночное значение для обратной совместимости
+                                        $dealGoalArray = [$dealGoalValue];
+                                    }
+                                }
+                                $isCashOutChecked = in_array('cash_out', $dealGoalArray, true);
+                                $isCashInChecked = in_array('cash_in', $dealGoalArray, true);
+                                ?>
                                 <label class="radio-label">
-                                    <input type="radio" name="deal_goal" value="cash_out" <?php echo (($_POST['deal_goal'] ?? '') === 'cash_out') ? 'checked' : ''; ?><?php echo requiredAttr('deal_goal'); ?>>
+                                    <input type="checkbox" name="deal_goal[]" value="cash_out" <?php echo $isCashOutChecked ? 'checked' : ''; ?><?php echo requiredAttr('deal_goal'); ?>>
                                     <span>a. Продажа бизнеса (cash-out)</span>
                                 </label>
                                 <label class="radio-label">
-                                    <input type="radio" name="deal_goal" value="cash_in" <?php echo (($_POST['deal_goal'] ?? '') === 'cash_in') ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="deal_goal[]" value="cash_in" <?php echo $isCashInChecked ? 'checked' : ''; ?>>
                                     <span>b. Привлечение инвестиций (cash-in)</span>
                                 </label>
                             </div>
+                            <?php if (isset($errors['deal_goal'])): ?>
+                                <span class="error-message"><?php echo $errors['deal_goal']; ?></span>
+                            <?php endif; ?>
                         </div>
 
                         <div class="form-group<?php echo requiredClass('asset_disclosure'); ?>">
@@ -1086,9 +1148,21 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         </div>
 
                         <div class="form-group<?php echo requiredClass('sales_share'); ?>">
-                            <label for="sales_share">Доля продаж в РФ/экспорта:</label>
-                            <input type="text" id="sales_share" name="sales_share" placeholder="__/__0%"<?php echo requiredAttr('sales_share'); ?>
-                                   value="<?php echo htmlspecialchars($_POST['sales_share'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            <label for="sales_share">Доля продаж в РФ, %</label>
+                            <div class="input-suffix-container">
+                                <input type="number"
+                                       id="sales_share"
+                                       name="sales_share"
+                                       min="0"
+                                       max="100"
+                                       step="1"
+                                       placeholder="например, 75"
+                                       class="input-with-suffix"
+                                       <?php echo requiredAttr('sales_share'); ?>
+                                       value="<?php echo htmlspecialchars(preg_replace('/[^0-9\\.]/', '', $_POST['sales_share'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                                <span class="input-suffix">%</span>
+                            </div>
+                            <small style="color: var(--text-secondary);">Введите число от 0 до 100, знак «%» подставится автоматически</small>
                         </div>
 
                             <div class="form-group<?php echo requiredClass('personnel_count'); ?>">
