@@ -131,6 +131,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_email'] = $email;
             $_SESSION['user_name'] = $full_name;
             
+            // Автоматическое запоминание: устанавливаем cookie сессии с удвоенным временем жизни
+            // Это позволяет пользователю не вводить пароль при повторных посещениях
+            // Используем setcookie() так как сессия уже активна и ini_set() не работает
+            $cookieLifetime = SESSION_LIFETIME * 2; // 14 дней
+            $cookieParams = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                session_id(),
+                time() + $cookieLifetime,
+                $cookieParams['path'],
+                $cookieParams['domain'],
+                $cookieParams['secure'],
+                $cookieParams['httponly']
+            );
+            
             // Обновление времени последнего входа
             // Это полезно для аналитики и отслеживания активности пользователей
             $stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");

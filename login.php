@@ -5,7 +5,7 @@
  * Функциональность:
  * - Авторизация пользователя по email и паролю
  * - Проверка активности аккаунта
- * - Опция "Запомнить меня" для продления сессии
+ * - Автоматическое запоминание пользователя (длительная сессия)
  * - Редирект на страницу, с которой пришли (если указана)
  * 
  * @package SmartBizSell
@@ -30,7 +30,6 @@ $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = sanitizeInput($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    $remember = isset($_POST['remember']);
     
     if (empty($email) || empty($password)) {
         $errors['general'] = 'Введите email и пароль';
@@ -54,10 +53,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
                     $stmt->execute([$user['id']]);
                     
-                    // Установка времени жизни сессии
-                    if ($remember) {
-                        ini_set('session.gc_maxlifetime', SESSION_LIFETIME * 2);
-                    }
+                    // Автоматическое запоминание: устанавливаем cookie сессии с удвоенным временем жизни
+                    // Это позволяет пользователю не вводить пароль при повторных посещениях
+                    // Используем setcookie() так как сессия уже активна и ini_set() не работает
+                    $cookieLifetime = SESSION_LIFETIME * 2; // 14 дней
+                    $cookieParams = session_get_cookie_params();
+                    setcookie(
+                        session_name(),
+                        session_id(),
+                        time() + $cookieLifetime,
+                        $cookieParams['path'],
+                        $cookieParams['domain'],
+                        $cookieParams['secure'],
+                        $cookieParams['httponly']
+                    );
                     
                     // Редирект на страницу, с которой пришли, или в кабинет
                     $redirect = $_GET['redirect'] ?? 'dashboard.php';
@@ -144,16 +153,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
         }
-        .form-group-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 20px;
-        }
-        .form-group-checkbox input[type="checkbox"] {
-            width: auto;
-            cursor: pointer;
-        }
         .error-message {
             color: var(--accent-color);
             font-size: 13px;
@@ -218,11 +217,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label for="password">Пароль</label>
                     <input type="password" id="password" name="password" required>
-                </div>
-                
-                <div class="form-group-checkbox">
-                    <input type="checkbox" id="remember" name="remember">
-                    <label for="remember" style="margin: 0;">Запомнить меня</label>
                 </div>
                 
                 <button type="submit" class="btn-primary">Войти</button>
