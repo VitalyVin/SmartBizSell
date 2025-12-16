@@ -958,6 +958,10 @@ async function openBusinessModal(card) {
     const sellerFormId = card.getAttribute('data-seller-form-id');
     if (sellerFormId) {
         loadAssetDocuments(sellerFormId);
+        // Сохраняем sellerFormId в модальном окне для использования в кнопке "Связаться с продавцом"
+        businessModal.setAttribute('data-seller-form-id', sellerFormId);
+    } else {
+        businessModal.removeAttribute('data-seller-form-id');
     }
     
     // Show modal
@@ -1119,13 +1123,176 @@ if (modalCloseBtnFooter) {
     modalCloseBtnFooter.addEventListener('click', closeBusinessModal);
 }
 
+/**
+ * Обработчик кнопки "Связаться с продавцом"
+ * Загружает контактные данные продавца и показывает их в модальном окне
+ */
 if (modalContactBtn) {
-    modalContactBtn.addEventListener('click', () => {
-        const contactLink = document.getElementById('modal-contact');
-        if (contactLink) {
-            window.location.href = contactLink.href;
+    modalContactBtn.addEventListener('click', async () => {
+        const sellerFormId = businessModal.getAttribute('data-seller-form-id');
+        
+        if (!sellerFormId) {
+            alert('Не удалось определить продавца. Попробуйте позже.');
+            return;
+        }
+        
+        // Показываем индикатор загрузки
+        modalContactBtn.disabled = true;
+        const originalText = modalContactBtn.innerHTML;
+        modalContactBtn.innerHTML = '<span>Загрузка...</span>';
+        
+        try {
+            // Загружаем контакты продавца
+            const response = await fetch(`get_seller_contacts.php?seller_form_id=${sellerFormId}`);
+            const result = await response.json();
+            
+            if (result.success && result.seller) {
+                // Показываем модальное окно с контактами
+                showSellerContactsModal(result.seller);
+            } else {
+                alert(result.message || 'Не удалось загрузить контакты продавца.');
+            }
+        } catch (error) {
+            console.error('Error loading seller contacts:', error);
+            alert('Ошибка при загрузке контактов продавца. Попробуйте позже.');
+        } finally {
+            // Восстанавливаем кнопку
+            modalContactBtn.disabled = false;
+            modalContactBtn.innerHTML = originalText;
         }
     });
+}
+
+/**
+ * Показывает модальное окно с контактами продавца
+ * @param {Object} seller - Данные продавца (email, phone, full_name, asset_name)
+ */
+function showSellerContactsModal(seller) {
+    // Создаем модальное окно для контактов, если его еще нет
+    let contactsModal = document.getElementById('seller-contacts-modal');
+    
+    if (!contactsModal) {
+        contactsModal = document.createElement('div');
+        contactsModal.id = 'seller-contacts-modal';
+        contactsModal.className = 'modal-overlay';
+        contactsModal.innerHTML = `
+            <div class="modal-container" style="max-width: 500px;">
+                <button class="modal-close" id="contacts-modal-close" aria-label="Закрыть">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title" style="margin: 0;">Контакты продавца</h2>
+                    </div>
+                    <div class="modal-body" id="seller-contacts-content" style="padding: 24px;">
+                        <!-- Контакты будут вставлены сюда -->
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-primary" id="contacts-modal-close-btn">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(contactsModal);
+        
+        // Обработчики закрытия
+        const closeBtn = contactsModal.querySelector('#contacts-modal-close');
+        const closeBtnFooter = contactsModal.querySelector('#contacts-modal-close-btn');
+        
+        const closeContactsModal = () => {
+            contactsModal.classList.remove('active');
+            // Не меняем overflow, так как основное модальное окно может быть открыто
+            // Если основное модальное окно открыто, overflow уже установлен
+            if (!businessModal.classList.contains('active')) {
+                document.body.style.overflow = '';
+            }
+        };
+        
+        if (closeBtn) closeBtn.addEventListener('click', closeContactsModal);
+        if (closeBtnFooter) closeBtnFooter.addEventListener('click', closeContactsModal);
+        
+        // Закрытие при клике вне модального окна
+        contactsModal.addEventListener('click', (e) => {
+            if (e.target === contactsModal) {
+                closeContactsModal();
+            }
+        });
+        
+        // Закрытие по Escape
+        document.addEventListener('keydown', function closeOnEscape(e) {
+            if (e.key === 'Escape' && contactsModal.classList.contains('active')) {
+                closeContactsModal();
+                document.removeEventListener('keydown', closeOnEscape);
+            }
+        });
+    }
+    
+    // Заполняем контакты
+    const contactsContent = contactsModal.querySelector('#seller-contacts-content');
+    if (contactsContent) {
+        let html = '';
+        
+        if (seller.asset_name) {
+            html += `<p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 14px;">Актив: <strong>${escapeHtml(seller.asset_name)}</strong></p>`;
+        }
+        
+        if (seller.full_name) {
+            html += `<p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 14px;">Продавец: <strong>${escapeHtml(seller.full_name)}</strong></p>`;
+        }
+        
+        html += '<div style="display: flex; flex-direction: column; gap: 16px;">';
+        
+        // Email
+        if (seller.email) {
+            html += `
+                <div style="padding: 16px; background: rgba(99, 102, 241, 0.05); border-radius: 12px; border: 2px solid rgba(99, 102, 241, 0.1);">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Email</div>
+                    <a href="mailto:${escapeHtml(seller.email)}" style="font-size: 16px; font-weight: 600; color: #6366F1; text-decoration: none; word-break: break-all;">
+                        ${escapeHtml(seller.email)}
+                    </a>
+                </div>
+            `;
+        }
+        
+        // Телефон
+        if (seller.phone) {
+            html += `
+                <div style="padding: 16px; background: rgba(34, 197, 94, 0.05); border-radius: 12px; border: 2px solid rgba(34, 197, 94, 0.1);">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Телефон</div>
+                    <a href="tel:${escapeHtml(seller.phone)}" style="font-size: 16px; font-weight: 600; color: #22C55E; text-decoration: none;">
+                        ${escapeHtml(seller.phone)}
+                    </a>
+                </div>
+            `;
+        }
+        
+        if (!seller.email && !seller.phone) {
+            html += '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">Контактные данные не указаны.</p>';
+        }
+        
+        html += '</div>';
+        
+        contactsContent.innerHTML = html;
+    }
+    
+    // Показываем модальное окно с контактами поверх основного модального окна
+    // Увеличиваем z-index для отображения поверх основного модального окна
+    contactsModal.style.zIndex = '10001';
+    contactsModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Экранирует HTML для безопасности
+ * @param {string} text - Текст для экранирования
+ * @returns {string} Экранированный текст
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Close modal when clicking outside

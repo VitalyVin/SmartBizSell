@@ -954,13 +954,104 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
 
     if (!empty($data['deal_terms'])) {
         $deal = $data['deal_terms'];
+        
+        // Форматируем структуру сделки: преобразуем массив в понятный текст
+        $structureText = '';
+        if (!empty($deal['structure'])) {
+            if (is_array($deal['structure'])) {
+                // Если структура - массив, преобразуем в понятный текст
+                $structureMap = [
+                    'cash_out' => 'выход продавца',
+                    'cash_in' => 'привлечение инвестиций',
+                    'debt_refinancing' => 'рефинансирование долга',
+                    'growth_capital' => 'капитал для роста',
+                ];
+                $structureParts = [];
+                foreach ($deal['structure'] as $item) {
+                    $itemStr = trim((string)$item);
+                    // Убираем кавычки и скобки, если они есть
+                    $itemStr = trim($itemStr, '[]"\'');
+                    if (isset($structureMap[$itemStr])) {
+                        $structureParts[] = $structureMap[$itemStr];
+                    } elseif (!empty($itemStr)) {
+                        $structureParts[] = $itemStr;
+                    }
+                }
+                if (!empty($structureParts)) {
+                    $structureText = implode(', ', $structureParts);
+                }
+            } else {
+                $structureValue = (string)$deal['structure'];
+                // Если это JSON-строка массива, пытаемся распарсить
+                if (preg_match('/^\[.*\]$/', $structureValue)) {
+                    $decoded = json_decode($structureValue, true);
+                    if (is_array($decoded)) {
+                        $structureMap = [
+                            'cash_out' => 'выход продавца',
+                            'cash_in' => 'привлечение инвестиций',
+                            'debt_refinancing' => 'рефинансирование долга',
+                            'growth_capital' => 'капитал для роста',
+                        ];
+                        $structureParts = [];
+                        foreach ($decoded as $item) {
+                            $itemStr = trim((string)$item);
+                            if (isset($structureMap[$itemStr])) {
+                                $structureParts[] = $structureMap[$itemStr];
+                            } elseif (!empty($itemStr)) {
+                                $structureParts[] = $itemStr;
+                            }
+                        }
+                        if (!empty($structureParts)) {
+                            $structureText = implode(', ', $structureParts);
+                        }
+                    } else {
+                        $structureText = $structureValue;
+                    }
+                } else {
+                    $structureText = $structureValue;
+                }
+            }
+        }
+        
+        // Форматируем долю: добавляем знак %, если это число
+        $shareText = '';
+        if (!empty($deal['share_for_sale'])) {
+            $shareValue = trim((string)$deal['share_for_sale']);
+            // Проверяем, является ли значение числом (может быть "49", "49%", "49-51" и т.д.)
+            if (preg_match('/^[\d\s\-]+$/', $shareValue)) {
+                // Если это просто число или диапазон чисел, добавляем %
+                $shareText = $shareValue . '%';
+            } else {
+                // Если уже есть % или другой текст, оставляем как есть
+                $shareText = $shareValue;
+            }
+        }
+        
+        // Форматируем цену: убираем дублирование слова "Цена"
+        // В $deal['price'] уже есть "Цена актива: X млн ₽" (см. строку 1772),
+        // поэтому просто используем значение без formatMetric
+        $priceText = '';
+        if (!empty($deal['price'])) {
+            $priceValue = trim((string)$deal['price']);
+            // Если цена уже содержит "Цена актива:", используем как есть
+            if (stripos($priceValue, 'Цена актива:') !== false) {
+                $priceText = $priceValue;
+            } elseif (stripos($priceValue, 'Цена:') !== false) {
+                // Если есть просто "Цена:", заменяем на "Цена актива:"
+                $priceText = str_ireplace('Цена:', 'Цена актива:', $priceValue);
+            } else {
+                // Если нет префикса, добавляем "Цена актива:"
+                $priceText = 'Цена актива: ' . $priceValue;
+            }
+        }
+        
         $bullets = array_filter([
-            formatMetric('Структура сделки', $deal['structure'] ?? ''),
-            formatMetric('Предлагаемая доля', $deal['share_for_sale'] ?? ''),
-            // Добавляем цену, если она указана
-            !empty($deal['price']) ? formatMetric('Цена', $deal['price']) : null,
+            !empty($structureText) ? formatMetric('Структура сделки', $structureText) : null,
+            !empty($shareText) ? formatMetric('Предлагаемая доля', $shareText) : null,
+            // Добавляем цену, если она указана (без дублирования "Цена:")
+            !empty($priceText) ? $priceText : null,
             // Если цена не указана, показываем ожидания по оценке
-            empty($deal['price']) ? formatMetric('Ожидания по оценке', $deal['valuation_expectation'] ?? '') : null,
+            empty($priceText) ? formatMetric('Ожидания по оценке', $deal['valuation_expectation'] ?? '') : null,
             formatMetric('Использование средств', $deal['use_of_proceeds'] ?? ''),
         ]);
         if ($bullets) {
