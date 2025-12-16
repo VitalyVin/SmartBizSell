@@ -870,12 +870,12 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
     if (!empty($data['financials'])) {
         $financials = $data['financials'];
         
-        // Используем данные из DCF модели для текущего финансового года (P1 - 2025)
+        // Используем данные из DCF модели для первого прогнозного года (P1 - 2026E)
         $revenue = null;
         $profit = null;
         $margin = null;
         $capex = null;
-        $year = '2025';
+        $year = '2026';
         
         if ($dcfData && !empty($dcfData['rows']) && is_array($dcfData['rows'])) {
             foreach ($dcfData['rows'] as $row) {
@@ -883,7 +883,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
                     continue;
                 }
                 
-                // Получаем данные за P1 (2025 год)
+                // Получаем данные за P1 (2026E - первый прогнозный период)
                 if ($row['label'] === 'Выручка' && isset($row['values']['P1']) && $row['values']['P1'] !== null && $row['values']['P1'] !== '') {
                     $revenue = (float)$row['values']['P1'];
                 }
@@ -1313,7 +1313,9 @@ function extractDCFDataForChart(array $form): ?array
  * Извлекает данные для графика из результатов DCF модели
  * 
  * Преобразует структуру данных DCF (с периодами P1, P2, P3...) в формат,
- * понятный для renderTeaserChart (с метками 2025E, 2026E...)
+ * понятный для renderTeaserChart (с метками 2026E, 2027E...)
+ * 
+ * ВАЖНО: P1 теперь соответствует 2026E (первый прогнозный период)
  * 
  * @param array $dcfData Результаты расчета DCF модели (rows, columns)
  * @return array|null Массив серий данных для графика или null, если данных недостаточно
@@ -1326,15 +1328,17 @@ function buildTeaserTimelineFromDCF(array $dcfData): ?array
     }
     
     // Маппинг периодов DCF на метки для графика
+    // P1 теперь соответствует 2026E (первый прогнозный период)
     $periodMapping = [
         '2022' => '2022',
         '2023' => '2023',
         '2024' => '2024',
-        'P1' => '2025E',
-        'P2' => '2026E',
-        'P3' => '2027E',
-        'P4' => '2028E',
-        'P5' => '2029E',
+        '2025' => '2025',
+        'P1' => '2026E',  // Первый прогнозный период - 2026 год
+        'P2' => '2027E',  // Второй прогнозный период - 2027 год
+        'P3' => '2028E',  // Третий прогнозный период - 2028 год
+        'P4' => '2029E',
+        'P5' => '2030E',
     ];
     
     // Находим строки с нужными метриками
@@ -1475,7 +1479,7 @@ function buildTeaserTimeline(array $payload): ?array
         '2022_fact' => '2022',
         '2023_fact' => '2023',
         '2024_fact' => '2024',
-        '2025_budget' => '2025E',
+        '2025_fact' => '2025',
         '2026_budget' => '2026E',
     ];
     // Определение метрик для отображения на графике
@@ -1541,7 +1545,7 @@ function seriesHasLabel(array $series, string $label): bool
 /**
  * Извлекает числовое значение для указанной метки периода из массива точек.
  * 
- * @param array $points Массив точек данных [['label' => '2025E', 'value' => 1000], ...]
+ * @param array $points Массив точек данных [['label' => '2026E', 'value' => 1000], ...]
  * @param string $label Метка периода для поиска
  * @return float|null Значение точки или null, если метка не найдена
  */
@@ -1579,7 +1583,8 @@ function valueForLabel(array $points, string $label): ?float
 function renderTeaserChart(array $series): string
 {
     // Порядок отображения периодов (фактические годы и прогнозные)
-    $periodOrder = ['2022', '2023', '2024', '2025E', '2026E', '2027E'];
+    // P1 теперь соответствует 2026E
+    $periodOrder = ['2022', '2023', '2024', '2025', '2026E', '2027E', '2028E'];
     $labels = [];
     
     // Сбор меток периодов в правильном порядке
@@ -2661,41 +2666,41 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
     $heroStats = [];
     
     if (is_array($dcfData)) {
-        // Получаем выручку и прибыль P2 из DCF данных
-        $p2Revenue = null;
-        $p2Profit = null;
+        // Получаем выручку и прибыль P1 из DCF данных (P1 теперь соответствует 2026E)
+        $p1Revenue = null;
+        $p1Profit = null;
         if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
             foreach ($dcfData['rows'] as $row) {
                 if (!isset($row['label']) || !isset($row['values']) || !is_array($row['values'])) {
                     continue;
                 }
-                if ($row['label'] === 'Выручка' && array_key_exists('P2', $row['values'])) {
-                    $val = $row['values']['P2'];
+                if ($row['label'] === 'Выручка' && array_key_exists('P1', $row['values'])) {
+                    $val = $row['values']['P1'];
                     if ($val !== null && $val !== '') {
-                        $p2Revenue = (float)$val;
+                        $p1Revenue = (float)$val;
                     }
                 }
-                if ($row['label'] === 'Прибыль от продаж' && array_key_exists('P2', $row['values'])) {
-                    $val = $row['values']['P2'];
+                if ($row['label'] === 'Прибыль от продаж' && array_key_exists('P1', $row['values'])) {
+                    $val = $row['values']['P1'];
                     if ($val !== null && $val !== '') {
-                        $p2Profit = (float)$val;
+                        $p1Profit = (float)$val;
                     }
                 }
             }
         }
         
-        // Выручка 2026E
-        if ($p2Revenue !== null) {
+        // Выручка 2026E (из P1)
+        if ($p1Revenue !== null) {
             $heroStats[] = [
                 'label' => 'ВЫРУЧКА 2026E',
-                'value' => number_format($p2Revenue, 0, '.', ' ') . ' млн Р',
+                'value' => number_format($p1Revenue, 0, '.', ' ') . ' млн Р',
                 'caption' => 'прогноз на 2026',
             ];
         }
         
-        // Маржинальность
-        if ($p2Profit !== null && $p2Revenue !== null && $p2Revenue != 0) {
-            $marginPercent = ($p2Profit / $p2Revenue) * 100;
+        // Маржинальность (из P1)
+        if ($p1Profit !== null && $p1Revenue !== null && $p1Revenue != 0) {
+            $marginPercent = ($p1Profit / $p1Revenue) * 100;
             $heroStats[] = [
                 'label' => 'МАРЖИНАЛЬНОСТЬ',
                 'value' => number_format($marginPercent, 1, '.', ' ') . '%',
@@ -2703,28 +2708,34 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
             ];
         }
         
-        // Темп роста
-        $p1Revenue = null;
-        $p2RevenueForGrowth = null;
+        // Темп роста (сравниваем 2025 факт с P1 = 2026E)
+        $fact2025Revenue = null;
+        $p1RevenueForGrowth = null;
         if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
             foreach ($dcfData['rows'] as $row) {
                 if (isset($row['label']) && $row['label'] === 'Выручка') {
-                    if (isset($row['values']['P1']) && $row['values']['P1'] !== null) {
-                        $p1Revenue = (float)$row['values']['P1'];
+                    // Ищем факт 2025 года
+                    if (isset($row['values']['2025']) && $row['values']['2025'] !== null) {
+                        $fact2025Revenue = (float)$row['values']['2025'];
                     }
-                    if (isset($row['values']['P2']) && $row['values']['P2'] !== null) {
-                        $p2RevenueForGrowth = (float)$row['values']['P2'];
+                    // Или ищем в исторических данных
+                    if ($fact2025Revenue === null && isset($row['values']['2025_fact']) && $row['values']['2025_fact'] !== null) {
+                        $fact2025Revenue = (float)$row['values']['2025_fact'];
+                    }
+                    // P1 теперь соответствует 2026E
+                    if (isset($row['values']['P1']) && $row['values']['P1'] !== null) {
+                        $p1RevenueForGrowth = (float)$row['values']['P1'];
                     }
                     break;
                 }
             }
         }
-        if ($p1Revenue !== null && $p2RevenueForGrowth !== null && $p1Revenue != 0) {
-            $currentYearGrowth = (($p2RevenueForGrowth - $p1Revenue) / $p1Revenue) * 100;
+        if ($fact2025Revenue !== null && $p1RevenueForGrowth !== null && $fact2025Revenue != 0) {
+            $currentYearGrowth = (($p1RevenueForGrowth - $fact2025Revenue) / $fact2025Revenue) * 100;
             $heroStats[] = [
                 'label' => 'ТЕМП РОСТА',
                 'value' => number_format($currentYearGrowth, 1, '.', ' ') . '%',
-                'caption' => '2026Е к 2025E',
+                'caption' => '2026Е к 2025',
             ];
         }
         
@@ -3076,8 +3087,10 @@ function buildInvestorProspectSentence(array $payload): ?string
 function buildRevenueGrowthMessage(array $payload): ?string
 {
     $financial = $payload['financial']['revenue'] ?? [];
-    $fact = parseNumericValue($financial['2024_fact'] ?? null);
-    $budget = parseNumericValue($financial['2025_budget'] ?? null);
+    // Используем факт 2024 или 2025 года как базовый год
+    $fact = parseNumericValue($financial['2024_fact'] ?? $financial['2025_fact'] ?? null);
+    // Используем прогноз на 2026E (P1) из 2026_budget или из DCF данных
+    $budget = parseNumericValue($financial['2026_budget'] ?? null);
     if ($fact === null || $budget === null || $budget <= 0 || $fact <= 0 || $budget <= $fact) {
         return null;
     }
@@ -3085,7 +3098,8 @@ function buildRevenueGrowthMessage(array $payload): ?string
     $factText = number_format($fact, 0, ',', ' ');
     $budgetText = number_format($budget, 0, ',', ' ');
     $growthText = number_format($growthPercent, 1, ',', ' ');
-    return "Бюджет 2025 предусматривает рост выручки с {$factText} до {$budgetText} млн ₽ (+{$growthText}%).";
+    // Обновлено: прогноз теперь на 2026E (P1)
+    return "Прогноз 2026E показывает рост выручки с {$factText} до {$budgetText} млн ₽ (+{$growthText}%).";
 }
 
 function parseNumericValue($value): ?float

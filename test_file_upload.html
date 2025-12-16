@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!--
+ * Тестовая страница для проверки функциональности загрузки файлов
+ * 
+ * Назначение:
+ * - Тестирование загрузки файлов через drag-and-drop и обычный выбор
+ * - Проверка работы polling механизма для обнаружения выбранных файлов
+ * - Отладка процесса загрузки файлов на сервер
+ * 
+ * @package SmartBizSell
+ * @version 1.0
+-->
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -119,7 +130,15 @@
     </div>
 
     <script>
-        // Функция для логирования
+        /**
+         * Функция для логирования событий на странице
+         * 
+         * @param {string} message - Сообщение для логирования
+         * @param {string} type - Тип сообщения: 'info', 'success', 'error'
+         * 
+         * Выводит сообщение в консоль браузера и в блок лога на странице
+         * с временной меткой для удобства отладки
+         */
         function log(message, type = 'info') {
             const logContent = document.getElementById('log-content');
             const entry = document.createElement('div');
@@ -138,7 +157,14 @@
 
         log('Страница загружена', 'success');
 
-        // Метод 1: Polling (как в dashboard.php)
+        /**
+         * Метод 1: Polling для обнаружения выбранных файлов
+         * 
+         * Используется для обхода проблемы с событием 'change' в некоторых браузерах.
+         * Периодически проверяет наличие файлов в input элементе.
+         * 
+         * Аналогично реализации в dashboard.php
+         */
         let fileCheckInterval = null;
 
         const handleUploadClick = (e) => {
@@ -184,7 +210,12 @@
             }, 100);
         };
 
-        // Метод 2: Событие change (fallback)
+        /**
+         * Метод 2: Событие change (fallback)
+         * 
+         * Используется как резервный механизм для обнаружения выбранных файлов.
+         * Если событие change сработает, polling останавливается.
+         */
         fileInput.addEventListener('change', function(e) {
             log('=== СОБЫТИЕ CHANGE СРАБОТАЛО ===', 'success');
             if (e.target.files && e.target.files.length > 0) {
@@ -197,7 +228,17 @@
             }
         });
 
-        // Обработка файлов с загрузкой на сервер
+        /**
+         * Обработка выбранных файлов с загрузкой на сервер
+         * 
+         * Процесс:
+         * 1. Создает элементы UI для каждого файла
+         * 2. Отправляет файлы на сервер через FormData
+         * 3. Отображает статус загрузки (загрузка/успех/ошибка)
+         * 4. Логирует все этапы процесса для отладки
+         * 
+         * @param {FileList} files - Список выбранных файлов
+         */
         async function handleFiles(files) {
             log(`Обработка ${files.length} файл(ов)`, 'info');
             
@@ -281,7 +322,14 @@
             log('✅ Обработка всех файлов завершена!', 'success');
         }
 
-        // Привязываем обработчики
+        /**
+         * Привязка обработчиков событий
+         * 
+         * Обработчики для:
+         * - Клика по кнопке загрузки
+         * - Клика по зоне загрузки
+         * - Drag and drop событий
+         */
         uploadBtn.addEventListener('click', handleUploadClick);
         uploadZone.addEventListener('click', (e) => {
             if (e.target === uploadZone || e.target === uploadBtn) {
@@ -289,7 +337,12 @@
             }
         });
 
-        // Drag and drop
+        /**
+         * Обработка Drag and Drop событий
+         * 
+         * Позволяет перетаскивать файлы прямо в зону загрузки
+         * вместо использования диалога выбора файлов
+         */
         uploadZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadZone.classList.add('dragover');
