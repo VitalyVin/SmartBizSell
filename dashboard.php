@@ -274,8 +274,7 @@ function convertFinancialRows(array $financial): array
         'fact_2022'    => ['fact_2022', '2022_fact'],
         'fact_2023'    => ['fact_2023', '2023_fact'],
         'fact_2024'    => ['fact_2024', '2024_fact'],
-        'fact_2025_9m' => ['fact_2025_9m', '2025_q3_fact'],
-        'budget_2025'  => ['budget_2025', '2025_budget'],
+        'fact_2025'    => ['fact_2025', '2025_fact', '2025_budget'],
         'budget_2026'  => ['budget_2026', '2026_budget'],
     ];
 
@@ -329,7 +328,7 @@ function convertBalanceRows(array $balance): array
         'fact_2022'    => ['fact_2022', '2022_fact'],
         'fact_2023'    => ['fact_2023', '2023_fact'],
         'fact_2024'    => ['fact_2024', '2024_fact'],
-        'fact_2025_9m' => ['fact_2025_9m', '2025_q3_fact'],
+        'fact_2025'    => ['fact_2025', '2025_fact', '2025_q3_fact'],
     ];
 
     $result = [];
@@ -492,7 +491,7 @@ function removeMaPlatformPhrase(string $text): string
  * 1. Извлечение и нормализация финансовых и балансовых данных
  * 2. Расчет фактических показателей за 2022-2024 годы
  * 3. Расчет темпов роста на основе исторических данных
- * 4. Построение прогноза на 5 лет (P1-P5) с учетом бюджета 2025
+ * 4. Построение прогноза на 5 лет (P1-P5) с учетом факта 2025
  * 5. Расчет FCFF (Free Cash Flow to Firm) для каждого прогнозного периода
  * 6. Дисконтирование FCFF к текущей стоимости
  * 7. Расчет Terminal Value по модели Гордона
@@ -507,8 +506,20 @@ function calculateUserDCF(array $form): array {
         'wacc' => 0.24,              // Средневзвешенная стоимость капитала (24%)
         'tax_rate' => 0.25,          // Ставка налога на прибыль (25%)
         'perpetual_growth' => 0.04,  // Темп бессрочного роста (4%)
-        'vat_rate' => 0.20,          // Ставка НДС (20%)
+        'vat_rate' => 0.20,          // Ставка НДС (20%) — будет переопределена по анкете
     ];
+
+    // Определяем ставку НДС из анкеты (with_vat / without_vat)
+    $vatFlag = $form['financial_results_vat'] ?? null;
+    if (empty($vatFlag) && !empty($form['data_json'])) {
+        $decoded = json_decode($form['data_json'], true);
+        $vatFlag = $decoded['financial_results_vat'] ?? $vatFlag;
+    }
+    if ($vatFlag === 'without_vat') {
+        $defaults['vat_rate'] = 0.0;   // Если указано "без НДС", не очищаем
+    } elseif ($vatFlag === 'with_vat') {
+        $defaults['vat_rate'] = 0.20;  // Стандартная ставка 20%
+    }
 
     /**
      * Очищает значение от НДС.
@@ -545,8 +556,7 @@ function calculateUserDCF(array $form): array {
         'fact_2022'    => '2022',    // Факт 2022 года
         'fact_2023'    => '2023',    // Факт 2023 года
         'fact_2024'    => '2024',    // Факт 2024 года
-        'fact_2025_9m' => '9M2025',  // Факт за 9 месяцев 2025 года
-        'budget_2025'  => '2025',    // Бюджет 2025 года (используется для P1)
+        'fact_2025'    => '2025',    // Факт 2025 года
         'budget_2026'  => '2026',    // Бюджет 2026 года
     ];
 
@@ -582,7 +592,7 @@ function calculateUserDCF(array $form): array {
     }
 
     // Определение структуры таблицы: фактические годы и прогнозные периоды
-    $factYears = ['2022', '2023', '2024'];           // Фактические годы для анализа
+    $factYears = ['2022', '2023', '2024', '2025'];   // Фактические годы для анализа (включая 2025 факт)
     $forecastLabels = ['P1', 'P2', 'P3', 'P4', 'P5']; // Прогнозные периоды (5 лет)
     
     // Формирование структуры колонок для отображения
@@ -596,7 +606,7 @@ function calculateUserDCF(array $form): array {
     $columns[] = ['key' => 'TV', 'label' => 'TV', 'type' => 'tv']; // Terminal Value
 
     // Проверка наличия выручки за последний фактический год
-    $lastFactLabel = '2024';
+    $lastFactLabel = '2025';
     if (($revenueSeries[$lastFactLabel] ?? 0) <= 0) {
         return ['error' => 'Укажите выручку минимум за три последних года (включая 2024).'];
     }
@@ -789,9 +799,9 @@ function calculateUserDCF(array $form): array {
     // Это гарантирует плавный переход к бессрочному росту в Terminal Value
     $forecastGrowth[4] = 0.04;
 
-    // Обработка бюджета 2025 года: если он указан, используем его для P1
-    // Это позволяет учитывать планы компании на ближайший год
-    $budgetRevenue = $revenueSeries['2025'] ?? null;
+    // Обработка бюджета для P1: используем budget_2026 (следующий год после последнего факта)
+    // Это позволяет учитывать планы компании на ближайший прогнозный год
+    $budgetRevenue = $revenueSeries['2026'] ?? null; // Бюджет на 2026 год (P1)
     $lastFactRevenue = $factData['revenue'][$lastFactLabel] ?? 0;
     $hasBudgetOverride = $budgetRevenue !== null && $budgetRevenue > 0;
     
@@ -800,17 +810,18 @@ function calculateUserDCF(array $form): array {
         $budgetRevenue = $removeVAT($budgetRevenue, $vatRate);
     }
     
-    // Если есть бюджет 2025, пересчитываем темп роста P1 на основе бюджета (уже без НДС)
+    // Если есть бюджет 2026, пересчитываем темп роста P1 на основе бюджета (уже без НДС)
+    // Темп роста рассчитывается от последнего факта (2025) к бюджету 2026
     if ($hasBudgetOverride && $lastFactRevenue > 0) {
         $forecastGrowth[0] = ($budgetRevenue - $lastFactRevenue) / $lastFactRevenue;
     }
 
     // Расчет прогнозной выручки для каждого периода
     $forecastRevenue = [];
-    $prevRevenue = $lastFactRevenue;
+    $prevRevenue = $lastFactRevenue; // Начинаем с последнего фактического года (2025)
     foreach ($forecastLabels as $index => $label) {
         if ($index === 0 && $hasBudgetOverride) {
-            // Для P1: если есть бюджет 2025, используем его напрямую (уже без НДС)
+            // Для P1: если есть бюджет 2026, используем его напрямую (уже без НДС)
             $prevRevenue = $budgetRevenue;
         } else {
             // Для остальных периодов: применяем темп роста к предыдущему периоду
@@ -1233,8 +1244,7 @@ function calculateUserDCF(array $form): array {
         'wacc' => $defaults['wacc'],
         'perpetual_growth' => $defaults['perpetual_growth'],
         'footnotes' => [
-            '*с учетом амортизации',
-            '* FCFF₁ скорректирован на оставшуюся часть года'
+            '*с учетом амортизации'
         ],
         'warnings' => $warnings,
         'ev_breakdown' => [
