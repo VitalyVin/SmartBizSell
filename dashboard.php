@@ -1469,6 +1469,19 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
     <style>
+        /* Стили для мобильного меню */
+        @media (max-width: 768px) {
+            .nav-toggle.active span:nth-child(1) {
+                transform: rotate(45deg) translate(5px, 5px);
+            }
+            .nav-toggle.active span:nth-child(2) {
+                opacity: 0;
+            }
+            .nav-toggle.active span:nth-child(3) {
+                transform: rotate(-45deg) translate(7px, -6px);
+            }
+        }
+        
         .dashboard-header {
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
             padding: 40px 0;
@@ -8027,6 +8040,51 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     childList: true,
                     subtree: true
                 });
+            }
+            
+            // Инициализация мобильного меню
+            function initMobileMenu() {
+                const navToggle = document.querySelector('.nav-toggle');
+                const navMenu = document.querySelector('.nav-menu');
+                
+                if (navToggle && navMenu) {
+                    // Удаляем старые обработчики, если они есть
+                    const newToggle = navToggle.cloneNode(true);
+                    navToggle.parentNode.replaceChild(newToggle, navToggle);
+                    
+                    newToggle.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navMenu.classList.toggle('active');
+                        newToggle.classList.toggle('active');
+                    });
+                    
+                    // Закрытие меню при клике на ссылку
+                    const navLinks = navMenu.querySelectorAll('a');
+                    navLinks.forEach(link => {
+                        link.addEventListener('click', function() {
+                            navMenu.classList.remove('active');
+                            newToggle.classList.remove('active');
+                        });
+                    });
+                    
+                    // Закрытие меню при клике вне его
+                    document.addEventListener('click', function(e) {
+                        if (navMenu.classList.contains('active') && 
+                            !navMenu.contains(e.target) && 
+                            !newToggle.contains(e.target)) {
+                            navMenu.classList.remove('active');
+                            newToggle.classList.remove('active');
+                        }
+                    });
+                }
+            }
+            
+            // Инициализируем при загрузке DOM
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initMobileMenu);
+            } else {
+                initMobileMenu();
             }
     </script>
 </body>

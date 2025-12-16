@@ -321,6 +321,24 @@ $statusColors = [
                 grid-template-columns: 1fr;
             }
         }
+        
+        /* Стили для мобильного меню */
+        @media (max-width: 768px) {
+            .nav-toggle.active span:nth-child(1) {
+                transform: rotate(45deg) translate(5px, 5px);
+            }
+            .nav-toggle.active span:nth-child(2) {
+                opacity: 0;
+            }
+            .nav-toggle.active span:nth-child(3) {
+                transform: rotate(-45deg) translate(7px, -6px);
+            }
+            
+            /* Убеждаемся, что меню не исчезает при открытии */
+            .nav-menu.active {
+                z-index: 1001;
+            }
+        }
     </style>
 </head>
 <body>
@@ -338,6 +356,11 @@ $statusColors = [
                     <li><a href="moderation.php">Модерация</a></li>
                     <li><a href="logout.php">Выйти</a></li>
                 </ul>
+                <button class="nav-toggle" aria-label="Toggle menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
             </div>
         </div>
     </nav>
@@ -695,6 +718,51 @@ $statusColors = [
                 console.error('Error unpublishing teaser:', error);
                 alert('✗ Ошибка: ' + error.message);
             }
+        }
+        
+        // Инициализация мобильного меню
+        function initMobileMenu() {
+            const navToggle = document.querySelector('.nav-toggle');
+            const navMenu = document.querySelector('.nav-menu');
+            
+            if (navToggle && navMenu) {
+                // Удаляем старые обработчики, если они есть
+                const newToggle = navToggle.cloneNode(true);
+                navToggle.parentNode.replaceChild(newToggle, navToggle);
+                
+                newToggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navMenu.classList.toggle('active');
+                    newToggle.classList.toggle('active');
+                });
+                
+                // Закрытие меню при клике на ссылку
+                const navLinks = navMenu.querySelectorAll('a');
+                navLinks.forEach(link => {
+                    link.addEventListener('click', function() {
+                        navMenu.classList.remove('active');
+                        newToggle.classList.remove('active');
+                    });
+                });
+                
+                // Закрытие меню при клике вне его (но не при клике на элементы внутри меню)
+                document.addEventListener('click', function(e) {
+                    if (navMenu.classList.contains('active') && 
+                        !navMenu.contains(e.target) && 
+                        !newToggle.contains(e.target)) {
+                        navMenu.classList.remove('active');
+                        newToggle.classList.remove('active');
+                    }
+                });
+            }
+        }
+        
+        // Инициализируем при загрузке DOM
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initMobileMenu);
+        } else {
+            initMobileMenu();
         }
     </script>
     <script src="script.js?v=<?php echo time(); ?>"></script>

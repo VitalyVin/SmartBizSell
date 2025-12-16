@@ -2228,10 +2228,12 @@ section {
         transform: translateX(-100%);
         transition: transform 0.3s ease;
         border-bottom: 1px solid var(--blur-border);
+        z-index: 1001;
     }
 
     .nav-menu.active {
         transform: translateX(0);
+        z-index: 1001;
     }
 
     .nav-toggle {

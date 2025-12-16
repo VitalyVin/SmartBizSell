@@ -189,8 +189,7 @@ function convertFinancialRowsSimple(array $financial): array
         'fact_2022' => ['fact_2022', '2022_fact'],
         'fact_2023' => ['fact_2023', '2023_fact'],
         'fact_2024' => ['fact_2024', '2024_fact'],
-        'fact_2025_9m' => ['fact_2025_9m', '2025_q3_fact', '2025_9m_fact'],
-        'budget_2025' => ['budget_2025', '2025_budget'],
+        'fact_2025' => ['fact_2025', '2025_fact', '2025_q3_fact', '2025_9m_fact', '2025_budget'],
         'budget_2026' => ['budget_2026', '2026_budget'],
     ];
     
@@ -246,8 +245,7 @@ function convertBalanceRowsSimple(array $balance): array
         'fact_2022' => ['fact_2022', '2022_fact'],
         'fact_2023' => ['fact_2023', '2023_fact'],
         'fact_2024' => ['fact_2024', '2024_fact'],
-        'fact_2025_9m' => ['fact_2025_9m', '2025_q3_fact', '2025_9m_fact'],
-        'budget_2025' => ['budget_2025', '2025_budget'],
+        'fact_2025' => ['fact_2025', '2025_fact', '2025_q3_fact', '2025_9m_fact', '2025_budget'],
         'budget_2026' => ['budget_2026', '2026_budget'],
     ];
     
@@ -470,17 +468,17 @@ function extractFinancialData(array $form): array
         }
     }
     
-    // Извлекаем выручку за последний фактический период (2024)
+    // Извлекаем выручку за последний фактический период (2025)
     $revenue = null;
     if (isset($finRows['Выручка'])) {
         $revenueRow = $finRows['Выручка'];
-        // Приоритет: fact_2024, затем fact_2023, затем budget_2025
-        if (!empty($revenueRow['fact_2024'])) {
+        // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+        if (!empty($revenueRow['fact_2025'])) {
+            $revenue = (float)$revenueRow['fact_2025'];
+        } elseif (!empty($revenueRow['fact_2024'])) {
             $revenue = (float)$revenueRow['fact_2024'];
         } elseif (!empty($revenueRow['fact_2023'])) {
             $revenue = (float)$revenueRow['fact_2023'];
-        } elseif (!empty($revenueRow['budget_2025'])) {
-            $revenue = (float)$revenueRow['budget_2025'];
         }
     }
     
@@ -492,12 +490,13 @@ function extractFinancialData(array $form): array
     $operatingProfit = null;
     if (isset($finRows['Прибыль от продаж'])) {
         $profitRow = $finRows['Прибыль от продаж'];
-        if (!empty($profitRow['fact_2024'])) {
+        // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+        if (!empty($profitRow['fact_2025'])) {
+            $operatingProfit = (float)$profitRow['fact_2025'];
+        } elseif (!empty($profitRow['fact_2024'])) {
             $operatingProfit = (float)$profitRow['fact_2024'];
         } elseif (!empty($profitRow['fact_2023'])) {
             $operatingProfit = (float)$profitRow['fact_2023'];
-        } elseif (!empty($profitRow['budget_2025'])) {
-            $operatingProfit = (float)$profitRow['budget_2025'];
         }
     }
     
@@ -509,17 +508,17 @@ function extractFinancialData(array $form): array
         
         if (isset($finRows['Себестоимость продаж'])) {
             $cogsRow = $finRows['Себестоимость продаж'];
-            $cogs = (float)($cogsRow['fact_2024'] ?? $cogsRow['fact_2023'] ?? $cogsRow['budget_2025'] ?? 0);
+            $cogs = (float)($cogsRow['fact_2025'] ?? $cogsRow['fact_2024'] ?? $cogsRow['fact_2023'] ?? 0);
         }
         
         if (isset($finRows['Коммерческие расходы'])) {
             $commercialRow = $finRows['Коммерческие расходы'];
-            $commercial = (float)($commercialRow['fact_2024'] ?? $commercialRow['fact_2023'] ?? $commercialRow['budget_2025'] ?? 0);
+            $commercial = (float)($commercialRow['fact_2025'] ?? $commercialRow['fact_2024'] ?? $commercialRow['fact_2023'] ?? 0);
         }
         
         if (isset($finRows['Управленческие расходы'])) {
             $adminRow = $finRows['Управленческие расходы'];
-            $admin = (float)($adminRow['fact_2024'] ?? $adminRow['fact_2023'] ?? $adminRow['budget_2025'] ?? 0);
+            $admin = (float)($adminRow['fact_2025'] ?? $adminRow['fact_2024'] ?? $adminRow['fact_2023'] ?? 0);
         }
         
         // Прибыль от продаж = Выручка - Себестоимость - Коммерческие - Управленческие
@@ -530,7 +529,8 @@ function extractFinancialData(array $form): array
     $depreciation = 0;
     if (isset($finRows['Амортизация'])) {
         $deprRow = $finRows['Амортизация'];
-        $depreciation = (float)($deprRow['fact_2024'] ?? $deprRow['fact_2023'] ?? $deprRow['budget_2025'] ?? 0);
+        // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+        $depreciation = (float)($deprRow['fact_2025'] ?? $deprRow['fact_2024'] ?? $deprRow['fact_2023'] ?? 0);
     }
     
     // Конвертируем балансовые данные в унифицированный формат (если нужно)
@@ -552,7 +552,8 @@ function extractFinancialData(array $form): array
     if ($depreciation <= 0 && !empty($balRows)) {
         if (isset($balRows['Основные средства'])) {
             $fixedAssetsRow = $balRows['Основные средства'];
-            $fixedAssets = (float)($fixedAssetsRow['fact_2024'] ?? $fixedAssetsRow['fact_2023'] ?? 0);
+            // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+            $fixedAssets = (float)($fixedAssetsRow['fact_2025'] ?? $fixedAssetsRow['fact_2024'] ?? $fixedAssetsRow['fact_2023'] ?? 0);
             if ($fixedAssets > 0) {
                 // Амортизация = 10% от основных средств предыдущего года
                 // Для упрощения используем текущие основные средства
@@ -569,17 +570,20 @@ function extractFinancialData(array $form): array
         // Долг (краткосрочные + долгосрочные займы)
         if (isset($balRows['Краткосрочные займы'])) {
             $shortDebtRow = $balRows['Краткосрочные займы'];
-            $debt += (float)($shortDebtRow['fact_2024'] ?? $shortDebtRow['fact_2023'] ?? 0);
+            // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+            $debt += (float)($shortDebtRow['fact_2025'] ?? $shortDebtRow['fact_2024'] ?? $shortDebtRow['fact_2023'] ?? 0);
         }
         if (isset($balRows['Долгосрочные займы'])) {
             $longDebtRow = $balRows['Долгосрочные займы'];
-            $debt += (float)($longDebtRow['fact_2024'] ?? $longDebtRow['fact_2023'] ?? 0);
+            // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+            $debt += (float)($longDebtRow['fact_2025'] ?? $longDebtRow['fact_2024'] ?? $longDebtRow['fact_2023'] ?? 0);
         }
         
         // Денежные средства
         if (isset($balRows['Денежные средства'])) {
             $cashRow = $balRows['Денежные средства'];
-            $cash = (float)($cashRow['fact_2024'] ?? $cashRow['fact_2023'] ?? 0);
+            // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+            $cash = (float)($cashRow['fact_2025'] ?? $cashRow['fact_2024'] ?? $cashRow['fact_2023'] ?? 0);
         }
     }
     
@@ -587,7 +591,8 @@ function extractFinancialData(array $form): array
     $netProfit = null;
     if (isset($finRows['Чистая прибыль'])) {
         $netProfitRow = $finRows['Чистая прибыль'];
-        $netProfit = (float)($netProfitRow['fact_2024'] ?? $netProfitRow['fact_2023'] ?? $netProfitRow['budget_2025'] ?? 0);
+        // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+        $netProfit = (float)($netProfitRow['fact_2025'] ?? $netProfitRow['fact_2024'] ?? $netProfitRow['fact_2023'] ?? 0);
     }
     
     return [
