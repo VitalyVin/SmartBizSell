@@ -1,0 +1,108 @@
+# robots.txt для SmartBizSell.ru
+# Правила для поисковых роботов и AI-краулеров
+
+User-agent: *
+Allow: /
+Disallow: /uploads/test/
+Disallow: /venv/
+Disallow: /SQL BACKUP/
+Disallow: /db/
+Disallow: /scripts/
+Disallow: /dashboard.php
+Disallow: /login.php
+Disallow: /register.php
+Disallow: /logout.php
+Disallow: /profile.php
+Disallow: /moderation.php
+Disallow: /moderation_api.php
+Disallow: /seller_form.php
+Disallow: /view_form.php
+Disallow: /generate_teaser.php
+Disallow: /generate_term_sheet.php
+Disallow: /calculate_multiplier_valuation.php
+Disallow: /submit_teaser_moderation.php
+Disallow: /upload_asset_document.php
+Disallow: /get_asset_documents.php
+Disallow: /delete_asset_document.php
+Disallow: /download_asset_document.php
+Disallow: /export_form_json.php
+Disallow: /forgot_password.php
+Disallow: /reset_password.php
+Disallow: /get_seller_contacts.php
+Disallow: /debug_draft.php
+Disallow: /test_upload_handler.php
+Disallow: /test_file_upload.html
+Disallow: /test_qwen.py
+
+# Разрешаем доступ к публичным страницам
+Allow: /index.php
+Allow: /blog.php
+Allow: /blog_post.php
+Allow: /about.php
+Allow: /faq.php
+Allow: /services/
+Allow: /ai-knowledge-base.php
+Allow: /view_teaser.php
+
+# Sitemap
+Sitemap: https://smartbizsell.ru/sitemap.php
+
+# Правила для AI-краулеров (ChatGPT, Grok, Claude и др.)
+User-agent: GPTBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: ChatGPT-User
+Allow: /
+Crawl-delay: 1
+
+User-agent: CCBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Google-Extended
+Allow: /
+Crawl-delay: 1
+
+User-agent: anthropic-ai
+Allow: /
+Crawl-delay: 1
+
+User-agent: Claude-Web
+Allow: /
+Crawl-delay: 1
+
+User-agent: PerplexityBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Applebot-Extended
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bytespider
+Allow: /
+Crawl-delay: 1
+
+User-agent: FacebookBot
+Allow: /
+Crawl-delay: 1
+
+# Яндекс
+User-agent: Yandex
+Allow: /
+Crawl-delay: 1
+
+User-agent: YandexBot
+Allow: /
+Crawl-delay: 1
+
+# Google
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Googlebot-Image
+Allow: /
+Crawl-delay: 1
+

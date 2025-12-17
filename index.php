@@ -373,8 +373,33 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartBizSell.ru - Экспертная M&A платформа с ИИ</title>
-    <meta name="description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект, чтобы сделать продажу и покупку бизнеса прозрачной, быстрой и эффективной.">
+    <title>SmartBizSell.ru - Экспертная M&A платформа с ИИ | Продажа и покупка бизнеса</title>
+    <meta name="description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект, чтобы сделать продажу и покупку бизнеса прозрачной, быстрой и эффективной. Оценка бизнеса, подготовка тизеров, поиск инвесторов.">
+    <meta name="keywords" content="продажа бизнеса, покупка бизнеса, M&A сделки, оценка бизнеса, слияния и поглощения, инвестиции в бизнес, купить бизнес, продать бизнес, тизер бизнеса, term sheet, DCF модель, мультипликаторы оценки">
+    <meta name="author" content="SmartBizSell">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="<?php echo BASE_URL; ?>/">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="<?php echo BASE_URL; ?>/">
+    <meta property="og:title" content="SmartBizSell.ru - Экспертная M&A платформа с ИИ">
+    <meta property="og:description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект для продажи и покупки бизнеса. Оценка, тизеры, поиск инвесторов.">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.jpg">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="SmartBizSell.ru">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="<?php echo BASE_URL; ?>/">
+    <meta name="twitter:title" content="SmartBizSell.ru - Экспертная M&A платформа с ИИ">
+    <meta name="twitter:description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект для продажи и покупки бизнеса.">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.jpg">
+    
+    <!-- AI-специфичные мета-теги -->
+    <meta name="ai:description" content="SmartBizSell - это M&A платформа, которая помогает продавать и покупать бизнес. Платформа использует искусственный интеллект для создания тизеров, финансовых моделей (DCF), term sheet и поиска инвесторов. Команда имеет опыт десятков закрытых сделок.">
+    <meta name="ai:category" content="M&A платформа, продажа бизнеса, покупка бизнеса, инвестиции">
+    <meta name="ai:services" content="Оценка бизнеса, подготовка тизеров, финансовое моделирование (DCF), создание term sheet, поиск инвесторов, M&A консалтинг">
     <link rel="stylesheet" href="styles.css?v=<?php echo time(); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -395,9 +420,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <ul class="nav-menu">
-                    <li><a href="#features">Возможности</a></li>
                     <li><a href="#how-it-works">Как это работает</a></li>
                     <li><a href="#buy-business">Купить бизнес</a></li>
+                    <li><a href="/blog">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="dashboard.php">Продать бизнес</a></li>
                         <?php if (isModerator()): ?>
@@ -447,7 +472,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                             <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </a>
-                    <a href="#features" class="btn btn-secondary">
+                    <a href="#how-it-works" class="btn btn-secondary">
                         <span>Узнать больше</span>
                     </a>
                 </div>
@@ -1309,11 +1334,26 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                     Экспертная M&amp;A команда, которая внедрила свой опыт в цифровую платформу и ИИ, чтобы проводить сделки быстрее, прозрачнее и выгоднее.
                 </p>
                 <div class="footer-links">
-                    <a href="#features">Возможности</a>
-                    <a href="#how-it-works">Как это работает</a>
-                    <a href="#buy-business">Купить бизнес</a>
-                    <a href="#seller-form">Продать бизнес</a>
-                    <a href="#contact">Контакты</a>
+                    <div class="footer-links-column">
+                        <h4>Навигация</h4>
+                        <a href="#how-it-works">Как это работает</a>
+                        <a href="#buy-business">Купить бизнес</a>
+                        <a href="#seller-form">Продать бизнес</a>
+                        <a href="#contact">Контакты</a>
+                    </div>
+                    <div class="footer-links-column">
+                        <h4>Услуги</h4>
+                        <a href="/services/sell-business">Продажа бизнеса</a>
+                        <a href="/services/buy-business">Покупка бизнеса</a>
+                        <a href="/services/valuation">Оценка бизнеса</a>
+                        <a href="/services/ma-advisory">M&A консалтинг</a>
+                    </div>
+                    <div class="footer-links-column">
+                        <h4>Информация</h4>
+                        <a href="/blog">Блог</a>
+                        <a href="/about">О нас</a>
+                        <a href="/faq">FAQ</a>
+                    </div>
                 </div>
                 <div class="footer-copyright">
                     <p>&copy; 2025 SmartBizSell.ru. Все права защищены.</p>
@@ -1321,6 +1361,118 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
             </div>
         </div>
     </footer>
+
+    <!-- Структурированные данные (JSON-LD) для поисковых систем -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "Organization",
+                "@id": "<?php echo BASE_URL; ?>/#organization",
+                "name": "SmartBizSell",
+                "url": "<?php echo BASE_URL; ?>",
+                "logo": "<?php echo BASE_URL; ?>/logo.png",
+                "description": "Экспертная M&A платформа с искусственным интеллектом для продажи и покупки бизнеса",
+                "address": {
+                    "@type": "PostalAddress",
+                    "addressLocality": "Москва",
+                    "addressCountry": "RU"
+                },
+                "contactPoint": {
+                    "@type": "ContactPoint",
+                    "contactType": "Customer Service",
+                    "email": "<?php echo ADMIN_EMAIL; ?>"
+                },
+                "sameAs": [
+                    "https://www.smartbizsell.ru"
+                ]
+            },
+            {
+                "@type": "WebSite",
+                "@id": "<?php echo BASE_URL; ?>/#website",
+                "url": "<?php echo BASE_URL; ?>",
+                "name": "SmartBizSell.ru",
+                "description": "Экспертная M&A платформа с ИИ для продажи и покупки бизнеса",
+                "publisher": {
+                    "@id": "<?php echo BASE_URL; ?>/#organization"
+                },
+                "potentialAction": {
+                    "@type": "SearchAction",
+                    "target": {
+                        "@type": "EntryPoint",
+                        "urlTemplate": "<?php echo BASE_URL; ?>/buy-business?q={search_term_string}"
+                    },
+                    "query-input": "required name=search_term_string"
+                }
+            },
+            {
+                "@type": "Service",
+                "@id": "<?php echo BASE_URL; ?>/#service",
+                "name": "M&A услуги",
+                "description": "Продажа и покупка бизнеса, оценка бизнеса, подготовка тизеров, финансовое моделирование, создание term sheet, поиск инвесторов",
+                "provider": {
+                    "@id": "<?php echo BASE_URL; ?>/#organization"
+                },
+                "serviceType": "M&A консалтинг",
+                "areaServed": {
+                    "@type": "Country",
+                    "name": "Россия"
+                },
+                "hasOfferCatalog": {
+                    "@type": "OfferCatalog",
+                    "name": "Услуги SmartBizSell",
+                    "itemListElement": [
+                        {
+                            "@type": "Offer",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Продажа бизнеса",
+                                "description": "Подготовка бизнеса к продаже, создание тизера, поиск покупателей"
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Покупка бизнеса",
+                                "description": "Поиск и оценка бизнесов для покупки, due diligence"
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Оценка бизнеса",
+                                "description": "Оценка стоимости бизнеса методом DCF и мультипликаторов"
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "M&A консалтинг",
+                                "description": "Консультации по сделкам слияний и поглощений"
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "@type": "BreadcrumbList",
+                "@id": "<?php echo BASE_URL; ?>/#breadcrumb",
+                "itemListElement": [
+                    {
+                        "@type": "ListItem",
+                        "position": 1,
+                        "name": "Главная",
+                        "item": "<?php echo BASE_URL; ?>/"
+                    }
+                ]
+            }
+        ]
+    }
+    </script>
 
     <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>

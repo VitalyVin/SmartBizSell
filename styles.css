@@ -2190,17 +2190,30 @@ section {
 }
 
 .footer-links {
-    display: flex;
-    justify-content: center;
-    gap: 32px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 40px;
     margin-bottom: 32px;
-    flex-wrap: wrap;
+}
+
+.footer-links-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.footer-links-column h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
 }
 
 .footer-links a {
     color: var(--text-secondary);
     text-decoration: none;
     font-weight: 500;
+    font-size: 14px;
     transition: color 0.3s ease;
 }
 
@@ -2414,13 +2427,25 @@ section {
         gap: 16px;
     }
 
+    .footer-links {
+        grid-template-columns: 1fr;
+        gap: 32px;
+    }
+    
+    .footer-links-column h4 {
+        font-size: 15px;
+        margin-bottom: 12px;
+    }
+
     .step-number {
         font-size: 36px;
     }
-
-    .footer-links {
-        flex-direction: column;
-        gap: 16px;
+        grid-template-columns: 1fr;
+        gap: 32px;
+    }
+    
+    .footer-links-column h4 {
+        font-size: 15px;
     }
 }
 

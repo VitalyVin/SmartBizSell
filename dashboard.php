@@ -4073,9 +4073,15 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
 
     <div class="dashboard-container">
         <?php if (isset($_GET['success']) && $_GET['success'] == '1'): ?>
-            <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
-                <strong>✓ Анкета успешно отправлена!</strong> Команда SmartBizSell изучит информацию и свяжется с вами.
-            </div>
+            <?php if (isset($_GET['type']) && $_GET['type'] == 'term_sheet'): ?>
+                <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+                    <strong>✓ Анкета Term Sheet успешно отправлена!</strong> Теперь вы можете перейти к его генерации.
+                </div>
+            <?php else: ?>
+                <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+                    <strong>✓ Анкета успешно отправлена!</strong> Команда SmartBizSell изучит информацию и свяжется с вами.
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
         
         <div class="dashboard-stats">
@@ -5360,11 +5366,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
-                                        <span style="padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>20; color: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>;">
-                                            <?php echo $statusLabels[$ts['status']] ?? 'Неизвестно'; ?>
+                                        <?php 
+                                        // Определяем статус с учетом NULL и пустых значений
+                                        $tsStatus = !empty($ts['status']) ? $ts['status'] : 'draft';
+                                        $statusLabel = $statusLabels[$tsStatus] ?? 'Черновик';
+                                        $statusColor = $statusColors[$tsStatus] ?? '#86868B';
+                                        ?>
+                                        <span style="padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: <?php echo $statusColor; ?>20; color: <?php echo $statusColor; ?>;">
+                                            <?php echo $statusLabel; ?>
                                         </span>
                                         <a href="term_sheet_form.php?form_id=<?php echo $ts['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px;">
-                                            <?php echo $ts['status'] === 'draft' ? 'Редактировать' : 'Просмотреть'; ?>
+                                            Редактировать
                                         </a>
                                     </div>
                                 </div>
@@ -5448,11 +5460,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
-                                        <span style="padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>20; color: <?php echo $statusColors[$ts['status']] ?? '#86868B'; ?>;">
-                                            <?php echo $statusLabels[$ts['status']] ?? 'Неизвестно'; ?>
+                                        <?php 
+                                        // Определяем статус с учетом NULL и пустых значений
+                                        $tsStatus = !empty($ts['status']) ? $ts['status'] : 'draft';
+                                        $statusLabel = $statusLabels[$tsStatus] ?? 'Черновик';
+                                        $statusColor = $statusColors[$tsStatus] ?? '#86868B';
+                                        ?>
+                                        <span style="padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: <?php echo $statusColor; ?>20; color: <?php echo $statusColor; ?>;">
+                                            <?php echo $statusLabel; ?>
                                         </span>
                                         <a href="term_sheet_form.php?form_id=<?php echo $ts['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px;">
-                                            <?php echo $ts['status'] === 'draft' ? 'Редактировать' : 'Просмотреть'; ?>
+                                            Редактировать
                                         </a>
                                     </div>
                                 </div>

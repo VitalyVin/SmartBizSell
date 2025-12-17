@@ -492,8 +492,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                                 <th>2022 факт</th>
                                 <th>2023 факт</th>
                                 <th>2024 факт</th>
-                                <th>9М 2025 факт</th>
-                                <th>2025 бюджет</th>
+                                <th>2025 факт</th>
                                 <th>2026 бюджет</th>
                             </tr>
                         </thead>
@@ -505,8 +504,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                                     <td><?php echo htmlspecialchars($row['2022_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2023_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2024_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['2025_q3_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['2025_budget'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['2025_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2026_budget'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -550,8 +548,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                                 <th>2022 факт</th>
                                 <th>2023 факт</th>
                                 <th>2024 факт</th>
-                                <th>9М 2025 факт</th>
-                                <th>2025 бюджет</th>
+                                <th>2025 факт</th>
                                 <th>2026 бюджет</th>
                             </tr>
                         </thead>
@@ -563,8 +560,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                                     <td><?php echo htmlspecialchars($row['2022_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2023_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2024_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['2025_q3_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['2025_budget'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['2025_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2026_budget'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -588,7 +584,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                                 <th>31.12.2022</th>
                                 <th>31.12.2023</th>
                                 <th>31.12.2024</th>
-                                <th>30.09.2025</th>
+                                <th>31.12.2025</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -599,7 +595,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                                     <td><?php echo htmlspecialchars($row['2022_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2023_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['2024_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['2025_q3_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['2025_fact'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

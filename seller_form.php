@@ -22,6 +22,39 @@ if (!isLoggedIn()) {
     redirectToLogin();
 }
 
+/**
+ * Нормализует поля 2025 года в массивах данных (production/financial):
+ * - Переносит 2025_budget -> 2025_fact при отсутствии 2025_fact
+ * - Переносит 2025_q3_fact -> 2025_fact при отсутствии 2025_fact (старые анкеты)
+ * - Удаляет устаревшее поле 2025_q3_fact (9М 2025 Факт)
+ *
+ * @param array $data
+ * @return array
+ */
+function normalize2025Fields(array $data): array
+{
+    foreach ($data as $key => $row) {
+        if (is_array($row)) {
+            // Глубже для ассоциативных подмассивов
+            $row = normalize2025Fields($row);
+        }
+
+        if (is_array($row)) {
+            if (isset($row['2025_budget']) && (!isset($row['2025_fact']) || $row['2025_fact'] === '')) {
+                $row['2025_fact'] = $row['2025_budget'];
+            }
+            if (isset($row['2025_q3_fact']) && (!isset($row['2025_fact']) || $row['2025_fact'] === '')) {
+                $row['2025_fact'] = $row['2025_q3_fact'];
+            }
+            unset($row['2025_budget'], $row['2025_q3_fact']);
+        }
+
+        $data[$key] = $row;
+    }
+
+    return $data;
+}
+
 $pdo = getDBConnection();
 ensureSellerFormSchema($pdo);
 $formId = null;
@@ -292,6 +325,7 @@ function hydrateFormFromDb(array $form): void
         $_POST[$postKey] = $form[$column] ?? '';
     }
 
+
     // Преобразование значений для совместимости
     // Обрабатываем deal_goal как массив (checkboxes) или одиночное значение (для обратной совместимости)
     if (isset($_POST['deal_goal'])) {
@@ -354,6 +388,14 @@ function hydrateFormFromDb(array $form): void
         $_POST['balance'] = json_decode($form['balance_indicators'], true) ?: [];
     }
 
+    // Нормализация старых полей 2025 года (budget -> fact, удаляем 9М 2025)
+    if (!empty($_POST['production'])) {
+        $_POST['production'] = normalize2025Fields($_POST['production']);
+    }
+    if (!empty($_POST['financial'])) {
+        $_POST['financial'] = normalize2025Fields($_POST['financial']);
+    }
+
     // Инициализация пустых массивов с правильной структурой, если они не существуют
     if (!isset($_POST['production']) || empty($_POST['production'])) {
         error_log("INIT PRODUCTION - creating default structure");
@@ -363,8 +405,7 @@ function hydrateFormFromDb(array $form): void
             '2022_fact' => '',
             '2023_fact' => '',
             '2024_fact' => '',
-            '2025_q3_fact' => '',
-            '2025_budget' => '',
+            '2025_fact' => '',
             '2026_budget' => ''
         ]];
     }
@@ -379,8 +420,7 @@ function hydrateFormFromDb(array $form): void
                 '2022_fact' => '',
                 '2023_fact' => '',
                 '2024_fact' => '',
-                '2025_q3_fact' => '',
-                '2025_budget' => '',
+                '2025_fact' => '',
                 '2026_budget' => ''
             ];
         }
@@ -388,7 +428,7 @@ function hydrateFormFromDb(array $form): void
 
     if (!isset($_POST['balance']) || empty($_POST['balance'])) {
         error_log("INIT BALANCE - creating default structure");
-        $balanceItems = ['fixed_assets', 'inventory', 'receivables', 'payables', 'loans', 'cash', 'net_assets'];
+            $balanceItems = ['fixed_assets', 'inventory', 'receivables', 'payables', 'loans', 'cash', 'net_assets'];
         $_POST['balance'] = [];
         foreach ($balanceItems as $item) {
             $_POST['balance'][$item] = [
@@ -396,7 +436,7 @@ function hydrateFormFromDb(array $form): void
                 '2022_fact' => '',
                 '2023_fact' => '',
                 '2024_fact' => '',
-                '2025_q3_fact' => ''
+                    '2025_fact' => ''
             ];
         }
     }
@@ -619,16 +659,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Для финальной отправки - редирект в кабинет
-                            header('Location: dashboard.php?success=1');
-                            exit;
+                header('Location: dashboard.php?success=1');
+                exit;
             }
-                        } catch (PDOException $e) {
-                            error_log("Error saving form: " . $e->getMessage());
+        } catch (PDOException $e) {
+            error_log("Error saving form: " . $e->getMessage());
             if ($isDraftSave) {
                 $errors['general'] = 'Ошибка сохранения черновика: ' . $e->getMessage();
             } else {
-                            $errors['general'] = 'Ошибка сохранения анкеты. Попробуйте позже.';
-                        }
+                $errors['general'] = 'Ошибка сохранения анкеты. Попробуйте позже.';
+            }
         }
     }
 }
@@ -908,7 +948,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                 $isCashInChecked = in_array('cash_in', $dealGoalArray, true);
                                 ?>
                                 <label class="radio-label">
-                                    <input type="checkbox" name="deal_goal[]" value="cash_out" <?php echo $isCashOutChecked ? 'checked' : ''; ?><?php echo requiredAttr('deal_goal'); ?>>
+                                    <input type="checkbox" name="deal_goal[]" value="cash_out" <?php echo $isCashOutChecked ? 'checked' : ''; ?>>
                                     <span>a. Продажа бизнеса (cash-out)</span>
                                 </label>
                                 <label class="radio-label">
@@ -945,8 +985,49 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                         <div class="form-group<?php echo requiredClass('presence_regions'); ?>">
                             <label for="presence_regions">Регионы присутствия:</label>
-                            <input type="text" id="presence_regions" name="presence_regions"<?php echo requiredAttr('presence_regions'); ?>
-                                   value="<?php echo htmlspecialchars($_POST['presence_regions'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            <select id="presence_regions" name="presence_regions"<?php echo requiredAttr('presence_regions'); ?> class="form-control">
+                                <option value="">-- Выберите регион --</option>
+                                <option value="Вся РФ" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Вся РФ') ? 'selected' : ''; ?>>Вся РФ</option>
+                                <option value="Москва" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Москва') ? 'selected' : ''; ?>>Москва</option>
+                                <option value="Санкт-Петербург" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Санкт-Петербург') ? 'selected' : ''; ?>>Санкт-Петербург</option>
+                                <option value="Московская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Московская область') ? 'selected' : ''; ?>>Московская область</option>
+                                <option value="Ленинградская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ленинградская область') ? 'selected' : ''; ?>>Ленинградская область</option>
+                                <option value="Краснодарский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Краснодарский край') ? 'selected' : ''; ?>>Краснодарский край</option>
+                                <option value="Свердловская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Свердловская область') ? 'selected' : ''; ?>>Свердловская область</option>
+                                <option value="Республика Татарстан" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Татарстан') ? 'selected' : ''; ?>>Республика Татарстан</option>
+                                <option value="Новосибирская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Новосибирская область') ? 'selected' : ''; ?>>Новосибирская область</option>
+                                <option value="Нижегородская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Нижегородская область') ? 'selected' : ''; ?>>Нижегородская область</option>
+                                <option value="Ростовская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ростовская область') ? 'selected' : ''; ?>>Ростовская область</option>
+                                <option value="Челябинская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Челябинская область') ? 'selected' : ''; ?>>Челябинская область</option>
+                                <option value="Самарская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Самарская область') ? 'selected' : ''; ?>>Самарская область</option>
+                                <option value="Красноярский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Красноярский край') ? 'selected' : ''; ?>>Красноярский край</option>
+                                <option value="Воронежская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Воронежская область') ? 'selected' : ''; ?>>Воронежская область</option>
+                                <option value="Пермский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Пермский край') ? 'selected' : ''; ?>>Пермский край</option>
+                                <option value="Волгоградская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Волгоградская область') ? 'selected' : ''; ?>>Волгоградская область</option>
+                                <option value="Республика Башкортостан" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Башкортостан') ? 'selected' : ''; ?>>Республика Башкортостан</option>
+                                <option value="Омская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Омская область') ? 'selected' : ''; ?>>Омская область</option>
+                                <option value="Тюменская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тюменская область') ? 'selected' : ''; ?>>Тюменская область</option>
+                                <option value="Кемеровская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Кемеровская область') ? 'selected' : ''; ?>>Кемеровская область</option>
+                                <option value="Иркутская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Иркутская область') ? 'selected' : ''; ?>>Иркутская область</option>
+                                <option value="Республика Дагестан" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Дагестан') ? 'selected' : ''; ?>>Республика Дагестан</option>
+                                <option value="Ставропольский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ставропольский край') ? 'selected' : ''; ?>>Ставропольский край</option>
+                                <option value="Белгородская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Белгородская область') ? 'selected' : ''; ?>>Белгородская область</option>
+                                <option value="Курская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Курская область') ? 'selected' : ''; ?>>Курская область</option>
+                                <option value="Липецкая область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Липецкая область') ? 'selected' : ''; ?>>Липецкая область</option>
+                                <option value="Тульская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тульская область') ? 'selected' : ''; ?>>Тульская область</option>
+                                <option value="Калужская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Калужская область') ? 'selected' : ''; ?>>Калужская область</option>
+                                <option value="Ярославская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ярославская область') ? 'selected' : ''; ?>>Ярославская область</option>
+                                <option value="Тверская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тверская область') ? 'selected' : ''; ?>>Тверская область</option>
+                                <option value="Владимирская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Владимирская область') ? 'selected' : ''; ?>>Владимирская область</option>
+                                <option value="Рязанская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Рязанская область') ? 'selected' : ''; ?>>Рязанская область</option>
+                                <option value="Тамбовская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тамбовская область') ? 'selected' : ''; ?>>Тамбовская область</option>
+                                <option value="Пензенская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Пензенская область') ? 'selected' : ''; ?>>Пензенская область</option>
+                                <option value="Ульяновская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ульяновская область') ? 'selected' : ''; ?>>Ульяновская область</option>
+                                <option value="Саратовская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Саратовская область') ? 'selected' : ''; ?>>Саратовская область</option>
+                                <option value="Астраханская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Астраханская область') ? 'selected' : ''; ?>>Астраханская область</option>
+                                <option value="Республика Крым" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Крым') ? 'selected' : ''; ?>>Республика Крым</option>
+                                <option value="Севастополь" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Севастополь') ? 'selected' : ''; ?>>Севастополь</option>
+                            </select>
                         </div>
 
                         <div class="form-group<?php echo requiredClass('products_services'); ?>">
@@ -1156,13 +1237,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                        min="0"
                                        max="100"
                                        step="1"
-                                       placeholder="например, 75"
                                        class="input-with-suffix"
-                                       <?php echo requiredAttr('sales_share'); ?>
                                        value="<?php echo htmlspecialchars(preg_replace('/[^0-9\\.]/', '', $_POST['sales_share'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                                 <span class="input-suffix">%</span>
                             </div>
-                            <small style="color: var(--text-secondary);">Введите число от 0 до 100, знак «%» подставится автоматически</small>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 8px;">Введите число от 0 до 100, знак «%» подставится автоматически</small>
                         </div>
 
                             <div class="form-group<?php echo requiredClass('personnel_count'); ?>">
@@ -1173,7 +1252,8 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                             <div class="form-group">
                             <label for="company_website">Сайт компании:</label>
-                            <input type="url" id="company_website" name="company_website"
+                            <input type="text" id="company_website" name="company_website"
+                                   placeholder="www.example.com или https://example.com"
                                        value="<?php echo htmlspecialchars($_POST['company_website'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
 
@@ -1197,8 +1277,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                             <th style="width: 10%;">2022 факт</th>
                                             <th style="width: 10%;">2023 факт</th>
                                             <th style="width: 10%;">2024 факт</th>
-                                            <th style="width: 10%;">9М 2025 факт</th>
-                                            <th style="width: 10%;">2025 бюджет</th>
+                                            <th style="width: 10%;">2025 факт</th>
                                             <th style="width: 10%;">2026 бюджет</th>
                                         </tr>
                                     </thead>
@@ -1214,8 +1293,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                 '2022_fact' => '',
                                 '2023_fact' => '',
                                 '2024_fact' => '',
-                                '2025_q3_fact' => '',
-                                '2025_budget' => '',
+                                '2025_fact' => '',
                                 '2026_budget' => ''
                             ];
                             error_log("RENDERING PRODUCTION - added default empty row");
@@ -1230,8 +1308,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                             <td><input type="text" name="production[<?php echo $index; ?>][2022_fact]" value="<?php echo htmlspecialchars($row['2022_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="production[<?php echo $index; ?>][2023_fact]" value="<?php echo htmlspecialchars($row['2023_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="production[<?php echo $index; ?>][2024_fact]" value="<?php echo htmlspecialchars($row['2024_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                            <td><input type="text" name="production[<?php echo $index; ?>][2025_q3_fact]" value="<?php echo htmlspecialchars($row['2025_q3_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                            <td><input type="text" name="production[<?php echo $index; ?>][2025_budget]" value="<?php echo htmlspecialchars($row['2025_budget'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                            <td><input type="text" name="production[<?php echo $index; ?>][2025_fact]" value="<?php echo htmlspecialchars($row['2025_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="production[<?php echo $index; ?>][2026_budget]" value="<?php echo htmlspecialchars($row['2026_budget'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -1274,8 +1351,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                             <th style="width: 10%;">2022 факт</th>
                                             <th style="width: 10%;">2023 факт</th>
                                             <th style="width: 10%;">2024 факт</th>
-                                            <th style="width: 10%;">9М 2025 факт</th>
-                                            <th style="width: 10%;">2025 бюджет</th>
+                                            <th style="width: 10%;">2025 факт</th>
                                             <th style="width: 10%;">2026 бюджет</th>
                                         </tr>
                                     </thead>
@@ -1299,8 +1375,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                                     '2022_fact' => '',
                                                     '2023_fact' => '',
                                                     '2024_fact' => '',
-                                                    '2025_q3_fact' => '',
-                                                    '2025_budget' => '',
+                                                    '2025_fact' => '',
                                                     '2026_budget' => ''
                                                 ];
                                             }
@@ -1312,8 +1387,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2022_fact]" value="<?php echo htmlspecialchars($financial[$key]['2022_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2023_fact]" value="<?php echo htmlspecialchars($financial[$key]['2023_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2024_fact]" value="<?php echo htmlspecialchars($financial[$key]['2024_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                            <td><input type="text" name="financial[<?php echo $key; ?>][2025_q3_fact]" value="<?php echo htmlspecialchars($financial[$key]['2025_q3_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                            <td><input type="text" name="financial[<?php echo $key; ?>][2025_budget]" value="<?php echo htmlspecialchars($financial[$key]['2025_budget'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                            <td><input type="text" name="financial[<?php echo $key; ?>][2025_fact]" value="<?php echo htmlspecialchars($financial[$key]['2025_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="financial[<?php echo $key; ?>][2026_budget]" value="<?php echo htmlspecialchars($financial[$key]['2026_budget'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -1341,7 +1415,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                             <th style="width: 15%;">31.12.2022 факт</th>
                                             <th style="width: 15%;">31.12.2023 факт</th>
                                             <th style="width: 15%;">31.12.2024 факт</th>
-                                            <th style="width: 15%;">30.09.2025 факт</th>
+                                            <th style="width: 15%;">31.12.2025 факт</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1375,7 +1449,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                             <td><input type="text" name="balance[<?php echo $key; ?>][2022_fact]" value="<?php echo htmlspecialchars($balance[$key]['2022_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="balance[<?php echo $key; ?>][2023_fact]" value="<?php echo htmlspecialchars($balance[$key]['2023_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             <td><input type="text" name="balance[<?php echo $key; ?>][2024_fact]" value="<?php echo htmlspecialchars($balance[$key]['2024_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
-                                            <td><input type="text" name="balance[<?php echo $key; ?>][2025_q3_fact]" value="<?php echo htmlspecialchars($balance[$key]['2025_q3_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
+                                            <td><input type="text" name="balance[<?php echo $key; ?>][2025_fact]" value="<?php echo htmlspecialchars($balance[$key]['2025_fact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -1405,7 +1479,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     <div class="form-group checkbox-group<?php echo requiredClass('agree'); ?>">
                         <label class="checkbox-label">
                             <input type="checkbox" name="agree" <?php echo isset($_POST['agree']) ? 'checked' : ''; ?><?php echo requiredAttr('agree'); ?>>
-                            <span>Я соглашаюсь на обработку персональных данных и использование ИИ для подготовки материалов</span>
+                            <span>Я соглашаюсь на обработку персональных данных и использование ИИ для подготовки<br>материалов<span style="color: red;">*</span></span>
                         </label>
                         <?php if (isset($errors['agree'])): ?>
                             <span class="error-message"><?php echo $errors['agree']; ?></span>
@@ -1460,10 +1534,20 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
             font-weight: 600;
         }
 
-        .checkbox-group.required-field .checkbox-label span::after {
-            content: ' *';
-            color: var(--accent-color);
-            font-weight: 600;
+        /* Убираем автоматическую звездочку для checkbox-group, так как она добавляется вручную в HTML */
+        .checkbox-group.required-field .checkbox-label::after,
+        .checkbox-group.required-field .checkbox-label span::after,
+        .checkbox-group.required-field label::after {
+            content: '' !important;
+            display: none !important;
+        }
+        
+        /* Специально для поля согласия - убираем все автоматические звездочки */
+        input[name="agree"] + span::after,
+        label:has(input[name="agree"])::after,
+        label:has(input[name="agree"]) span::after {
+            content: '' !important;
+            display: none !important;
         }
 
         @keyframes fadeOut {
@@ -1603,6 +1687,19 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
             color: var(--text-secondary);
             pointer-events: none;
             font-weight: 600;
+        }
+        .error-message {
+            display: block;
+            color: var(--accent-color);
+            font-size: 14px;
+            margin-top: 8px;
+            margin-bottom: 0;
+            line-height: 1.4;
+        }
+        .form-group small {
+            display: block;
+            margin-top: 8px;
+            line-height: 1.4;
         }
     </style>
            <script>
@@ -1789,8 +1886,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                <td><input type="text" name="production[${rowIndex}][2022_fact]"></td>
                                <td><input type="text" name="production[${rowIndex}][2023_fact]"></td>
                                <td><input type="text" name="production[${rowIndex}][2024_fact]"></td>
-                               <td><input type="text" name="production[${rowIndex}][2025_q3_fact]"></td>
-                               <td><input type="text" name="production[${rowIndex}][2025_budget]"></td>
+                               <td><input type="text" name="production[${rowIndex}][2025_fact]"></td>
                                <td><input type="text" name="production[${rowIndex}][2026_budget]"></td>
                            `;
                            productionRows.appendChild(newRow);

@@ -5,8 +5,27 @@ RewriteEngine On
 # RewriteCond %{HTTPS} off
 # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Remove .php extension from URLs
+# Явное правило для /blog (список статей)
+RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^blog/?$ blog.php [L]
+
+# Blog post routing (blog/slug) - для отдельных статей
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^blog/([^/]+)/?$ blog_post.php?slug=$1 [L,QSA]
+
+# Services routing (services/slug) - должно быть ПЕРЕД общим правилом
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^services/([^/]+)/?$ services/$1.php [L]
+
+# Remove .php extension from URLs (общее правило в конце)
+# Обрабатывает /blog -> blog.php, /about -> about.php и т.д.
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_URI} !^/blog/
+RewriteCond %{REQUEST_URI} !^/services/
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^([^\.]+)$ $1.php [NC,L]
 

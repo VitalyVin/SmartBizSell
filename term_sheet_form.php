@@ -27,8 +27,6 @@ $draftMessage = false;
  * Поля, обязательные для отправки Term Sheet (не применяются к сохранению черновика)
  */
 $requiredFields = [
-    'buyer_name',
-    'seller_name',
     'asset_name',
     'deal_type',
 ];
@@ -266,20 +264,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Берем первые значения из массивов для валидации
     $buyerName = !empty($_POST['buyers'][0]['name']) ? sanitizeInput($_POST['buyers'][0]['name']) : '';
+    $buyerIndividualName = !empty($_POST['buyers'][0]['individual_name']) ? sanitizeInput($_POST['buyers'][0]['individual_name']) : '';
     $sellerName = !empty($_POST['sellers'][0]['name']) ? sanitizeInput($_POST['sellers'][0]['name']) : '';
+    $sellerIndividualName = !empty($_POST['sellers'][0]['individual_name']) ? sanitizeInput($_POST['sellers'][0]['individual_name']) : '';
     $assetName = !empty($_POST['assets'][0]['name']) ? sanitizeInput($_POST['assets'][0]['name']) : '';
 
     $saveDraftFlag = $_POST['save_draft_flag'] ?? '';
-    $isDraftSave = isset($_POST['save_draft']) || $saveDraftFlag === '1';
+    // Определяем, является ли это сохранением черновика или финальной отправкой
+    // Приоритет: если нажата кнопка "submit" (Отправить Term Sheet), это всегда финальная отправка
+    // Если нажата кнопка "save_draft" (Сохранить черновик) И НЕ нажата "submit", это сохранение черновика
+    $isDraftSave = isset($_POST['save_draft']) && !isset($_POST['submit']) && $saveDraftFlag !== '0';
+    
+    // Логирование для отладки
+    error_log("Term Sheet form submission: isDraftSave=" . ($isDraftSave ? 'true' : 'false') . 
+              ", save_draft=" . (isset($_POST['save_draft']) ? 'set' : 'not set') . 
+              ", submit=" . (isset($_POST['submit']) ? 'set' : 'not set') . 
+              ", save_draft_flag=" . $saveDraftFlag . 
+              ", form_id=" . ($formId ?? 'null'));
 
     // Валидация обязательных полей (только для финальной отправки)
     if (!$isDraftSave) {
-        if (empty($buyerName)) {
-            $errors['buyer_name'] = 'Укажите название покупателя';
+        // Для покупателя: должно быть заполнено либо название ЮЛ, либо ФИО ФЛ
+        if (empty($buyerName) && empty($buyerIndividualName)) {
+            $errors['buyer_name'] = 'Укажите название покупателя (ЮЛ) или ФИО покупателя (ФЛ)';
         }
-        if (empty($sellerName)) {
-            $errors['seller_name'] = 'Укажите название продавца';
+        // Для продавца: должно быть заполнено либо название ЮЛ, либо ФИО ФЛ
+        if (empty($sellerName) && empty($sellerIndividualName)) {
+            $errors['seller_name'] = 'Укажите название продавца (ЮЛ) или ФИО продавца (ФЛ)';
         }
+        // Для актива: название обязательно (актив обычно - это юридическое лицо)
         if (empty($assetName)) {
             $errors['asset_name'] = 'Укажите название актива';
         }
@@ -304,8 +317,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($isDraftSave) {
                 // Сохранение черновика
                 // Берем первые значения из массивов для основных полей
-                $firstBuyer = !empty($_POST['buyers'][0]['name']) ? $_POST['buyers'][0]['name'] : '';
-                $firstSeller = !empty($_POST['sellers'][0]['name']) ? $_POST['sellers'][0]['name'] : '';
+                // Для покупателя и продавца используем либо название ЮЛ, либо ФИО ФЛ
+                $firstBuyer = !empty($_POST['buyers'][0]['name']) ? $_POST['buyers'][0]['name'] : (!empty($_POST['buyers'][0]['individual_name']) ? $_POST['buyers'][0]['individual_name'] : '');
+                $firstSeller = !empty($_POST['sellers'][0]['name']) ? $_POST['sellers'][0]['name'] : (!empty($_POST['sellers'][0]['individual_name']) ? $_POST['sellers'][0]['individual_name'] : '');
                 $firstAsset = !empty($_POST['assets'][0]['name']) ? $_POST['assets'][0]['name'] : '';
                 
                 // Сохраняем существующий generated_document, если он есть
@@ -318,8 +332,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 if ($formId && $existingForm) {
-                    $stmt = $pdo->prepare("UPDATE term_sheet_forms SET buyer_name = ?, seller_name = ?, asset_name = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
-                    $stmt->execute([$firstBuyer, $firstSeller, $firstAsset, $dataJson, $formId, $_SESSION['user_id']]);
+                    // При сохранении черновика сохраняем текущий статус (не меняем на draft, если форма уже была отправлена)
+                    $preserveStatus = $existingForm['status'] ?? 'draft';
+                    // Если статус был submitted, review или approved, сохраняем его, иначе ставим draft
+                    if (!in_array($preserveStatus, ['submitted', 'review', 'approved'], true)) {
+                        $preserveStatus = 'draft';
+                    }
+                    $stmt = $pdo->prepare("UPDATE term_sheet_forms SET buyer_name = ?, seller_name = ?, asset_name = ?, data_json = ?, status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
+                    $stmt->execute([$firstBuyer, $firstSeller, $firstAsset, $dataJson, $preserveStatus, $formId, $_SESSION['user_id']]);
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO term_sheet_forms (user_id, buyer_name, seller_name, asset_name, data_json, status) VALUES (?, ?, ?, ?, ?, 'draft')");
                     $stmt->execute([$_SESSION['user_id'], $firstBuyer, $firstSeller, $firstAsset, $dataJson]);
@@ -331,10 +351,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // Финальная отправка
                 // Берем первые значения из массивов для основных полей
-                $firstBuyer = !empty($_POST['buyers'][0]['name']) ? sanitizeInput($_POST['buyers'][0]['name']) : '';
-                $buyerInn = !empty($_POST['buyers'][0]['inn']) ? sanitizeInput($_POST['buyers'][0]['inn']) : '';
-                $firstSeller = !empty($_POST['sellers'][0]['name']) ? sanitizeInput($_POST['sellers'][0]['name']) : '';
-                $sellerInn = !empty($_POST['sellers'][0]['inn']) ? sanitizeInput($_POST['sellers'][0]['inn']) : '';
+                // Для покупателя и продавца используем либо название ЮЛ, либо ФИО ФЛ
+                $firstBuyer = !empty($_POST['buyers'][0]['name']) ? sanitizeInput($_POST['buyers'][0]['name']) : (!empty($_POST['buyers'][0]['individual_name']) ? sanitizeInput($_POST['buyers'][0]['individual_name']) : '');
+                $buyerInn = !empty($_POST['buyers'][0]['inn']) ? sanitizeInput($_POST['buyers'][0]['inn']) : (!empty($_POST['buyers'][0]['individual_inn']) ? sanitizeInput($_POST['buyers'][0]['individual_inn']) : '');
+                $firstSeller = !empty($_POST['sellers'][0]['name']) ? sanitizeInput($_POST['sellers'][0]['name']) : (!empty($_POST['sellers'][0]['individual_name']) ? sanitizeInput($_POST['sellers'][0]['individual_name']) : '');
+                $sellerInn = !empty($_POST['sellers'][0]['inn']) ? sanitizeInput($_POST['sellers'][0]['inn']) : (!empty($_POST['sellers'][0]['individual_inn']) ? sanitizeInput($_POST['sellers'][0]['individual_inn']) : '');
                 $firstAsset = !empty($_POST['assets'][0]['name']) ? sanitizeInput($_POST['assets'][0]['name']) : '';
                 $assetInn = !empty($_POST['assets'][0]['inn']) ? sanitizeInput($_POST['assets'][0]['inn']) : '';
                 
@@ -357,20 +378,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($formId && $existingForm) {
+                    // При финальной отправке обновляем submitted_at только если его еще нет (сохраняем оригинальную дату отправки)
+                    error_log("Term Sheet: Updating form ID {$formId} to status 'submitted'");
                     $stmt = $pdo->prepare("UPDATE term_sheet_forms SET
                         buyer_name = ?, buyer_inn = ?, seller_name = ?, seller_inn = ?,
                         asset_name = ?, asset_inn = ?, deal_type = ?, deal_share_percent = ?,
                         investment_amount = ?, agreement_duration = ?, exclusivity = ?,
                         applicable_law = ?, corporate_governance_ceo = ?, corporate_governance_cfo = ?,
-                        data_json = ?, status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+                        data_json = ?, status = 'submitted', submitted_at = COALESCE(submitted_at, NOW()), updated_at = NOW()
                         WHERE id = ? AND user_id = ?");
-                    $stmt->execute([
+                    $result = $stmt->execute([
                         $firstBuyer, $buyerInn, $firstSeller, $sellerInn,
                         $firstAsset, $assetInn, $dealType, $dealSharePercent,
                         $investmentAmount, $agreementDuration, $exclusivity,
                         $applicableLaw, $corporateGovernanceCeo, $corporateGovernanceCfo,
                         $dataJson, $formId, $_SESSION['user_id']
                     ]);
+                    error_log("Term Sheet: Update result for form ID {$formId}: " . ($result ? 'success' : 'failed') . ", rows affected: " . $stmt->rowCount());
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO term_sheet_forms (
                         user_id, buyer_name, buyer_inn, seller_name, seller_inn,
@@ -389,7 +413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $formId = $pdo->lastInsertId();
                 }
 
-                header('Location: dashboard.php?success=1');
+                header('Location: dashboard.php?success=1&type=term_sheet');
                 exit;
             }
         } catch (PDOException $e) {
@@ -534,6 +558,16 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                     <span>Черновик успешно сохранен!</span>
                 </div>
             <?php endif; ?>
+            
+            <?php if ($existingForm && in_array($existingForm['status'] ?? '', ['submitted', 'review', 'approved'], true)): ?>
+                <div style="background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;">
+                    <span style="font-size: 24px; margin-right: 10px;">⚠️</span>
+                    <div>
+                        <strong>Редактирование отправленной формы</strong>
+                        <p style="margin: 5px 0 0 0; font-size: 14px;">Вы редактируете форму со статусом "<?php echo htmlspecialchars($existingForm['status'] ?? 'submitted'); ?>". При сохранении черновика статус сохранится, при отправке форма будет обновлена.</p>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <?php if (!empty($errors['general'])): ?>
                 <div style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -556,6 +590,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                     <!-- Покупатель -->
                     <div class="form-group" style="margin-bottom: 25px;">
                         <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #333;">Покупатель <span style="color: red;">*</span></label>
+                        <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Заполните либо "Название ЮЛ" (если покупатель - юридическое лицо), либо "ФИО ФЛ" (если покупатель - физическое лицо)</p>
                         <div id="buyers-container">
                             <?php foreach ($_POST['buyers'] as $index => $buyer): ?>
                                 <div class="buyer-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -563,7 +598,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                                         <div>
                                             <label style="display: block; font-size: 14px; margin-bottom: 5px;">Название ЮЛ</label>
                                             <input type="text" name="buyers[<?php echo $index; ?>][name]" value="<?php echo htmlspecialchars($buyer['name'] ?? ''); ?>" 
-                                                   class="form-control<?php echo requiredClass('buyer_name'); ?>"<?php echo requiredAttr('buyer_name'); ?>>
+                                                   class="form-control">
                                         </div>
                                         <div>
                                             <label style="display: block; font-size: 14px; margin-bottom: 5px;">ИНН</label>
@@ -589,12 +624,16 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                                 </div>
                             <?php endforeach; ?>
                         </div>
+                        <?php if (isset($errors['buyer_name'])): ?>
+                            <span class="error-message" style="display: block; color: var(--accent-color); font-size: 14px; margin-top: 8px;"><?php echo $errors['buyer_name']; ?></span>
+                        <?php endif; ?>
                         <button type="button" onclick="addBuyer()" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">+ Добавить покупателя</button>
                     </div>
 
                     <!-- Продавец -->
                     <div class="form-group" style="margin-bottom: 25px;">
                         <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #333;">Продавец <span style="color: red;">*</span></label>
+                        <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Заполните либо "Название ЮЛ" (если продавец - юридическое лицо), либо "ФИО ФЛ" (если продавец - физическое лицо)</p>
                         <div id="sellers-container">
                             <?php foreach ($_POST['sellers'] as $index => $seller): ?>
                                 <div class="seller-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -602,7 +641,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                                         <div>
                                             <label style="display: block; font-size: 14px; margin-bottom: 5px;">Название ЮЛ</label>
                                             <input type="text" name="sellers[<?php echo $index; ?>][name]" value="<?php echo htmlspecialchars($seller['name'] ?? ''); ?>" 
-                                                   class="form-control<?php echo requiredClass('seller_name'); ?>"<?php echo requiredAttr('seller_name'); ?>>
+                                                   class="form-control">
                                         </div>
                                         <div>
                                             <label style="display: block; font-size: 14px; margin-bottom: 5px;">ИНН</label>
@@ -612,7 +651,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                                     </div>
                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                         <div>
-                                            <label style="display: block; font-size: 14px; margin-bottom: 5px;">ФИО ФЛ</label>
+                                            <label style="display: block; font-size: 14px; margin-bottom: 5px;">ФИО ФЛ <span style="color: #666; font-size: 12px;">(если продавец - физ. лицо)</span></label>
                                             <input type="text" name="sellers[<?php echo $index; ?>][individual_name]" value="<?php echo htmlspecialchars($seller['individual_name'] ?? ''); ?>" 
                                                    class="form-control">
                                         </div>
@@ -628,6 +667,9 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                                 </div>
                             <?php endforeach; ?>
                         </div>
+                        <?php if (isset($errors['seller_name'])): ?>
+                            <span class="error-message" style="display: block; color: var(--accent-color); font-size: 14px; margin-top: 8px;"><?php echo $errors['seller_name']; ?></span>
+                        <?php endif; ?>
                         <button type="button" onclick="addSeller()" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">+ Добавить продавца</button>
                     </div>
 
@@ -1044,6 +1086,34 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
 
             // Установка значения deal_type для валидации
             const form = document.getElementById('term-sheet-form');
+            
+            // Обработка нажатия на кнопку "Сохранить черновик"
+            const saveDraftBtn = form.querySelector('button[name="save_draft"]');
+            if (saveDraftBtn) {
+                saveDraftBtn.addEventListener('click', function(e) {
+                    document.getElementById('save_draft_flag').value = '1';
+                    // Удаляем кнопку submit из формы, чтобы она не отправилась
+                    const submitBtn = form.querySelector('button[name="submit"]');
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        setTimeout(() => { submitBtn.disabled = false; }, 100);
+                    }
+                });
+            }
+            
+            // Обработка нажатия на кнопку "Отправить Term Sheet"
+            const submitBtn = form.querySelector('button[name="submit"]');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function(e) {
+                    document.getElementById('save_draft_flag').value = '0';
+                    // Удаляем кнопку save_draft из формы, чтобы она не отправилась
+                    if (saveDraftBtn) {
+                        saveDraftBtn.disabled = true;
+                        setTimeout(() => { saveDraftBtn.disabled = false; }, 100);
+                    }
+                });
+            }
+            
             form.addEventListener('submit', function(e) {
                 const checkedDealTypes = Array.from(document.querySelectorAll('.deal-type-checkbox:checked')).map(cb => cb.value);
                 if (checkedDealTypes.length > 0) {
@@ -1083,7 +1153,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div>
-                        <label style="display: block; font-size: 14px; margin-bottom: 5px;">ФИО ФЛ</label>
+                        <label style="display: block; font-size: 14px; margin-bottom: 5px;">ФИО ФЛ <span style="color: #666; font-size: 12px;">(если покупатель - физ. лицо)</span></label>
                         <input type="text" name="buyers[${buyerIndex}][individual_name]" class="form-control">
                     </div>
                     <div>
@@ -1122,7 +1192,7 @@ if (!isset($_POST['unanimous_decisions_list']) || !is_array($_POST['unanimous_de
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div>
-                        <label style="display: block; font-size: 14px; margin-bottom: 5px;">ФИО ФЛ</label>
+                        <label style="display: block; font-size: 14px; margin-bottom: 5px;">ФИО ФЛ <span style="color: #666; font-size: 12px;">(если продавец - физ. лицо)</span></label>
                         <input type="text" name="sellers[${sellerIndex}][individual_name]" class="form-control">
                     </div>
                     <div>
