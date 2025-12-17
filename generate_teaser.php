@@ -1324,6 +1324,58 @@ function fetchCompanyWebsiteSnapshot(string $url): ?string
  * @param string $raw Исходная строка с числом
  * @return float|null Извлеченное число в млн рублей или null, если не найдено
  */
+
+/**
+ * Определяет единицы измерения из строки
+ * Поддерживает: "тыс. руб.", "млн. руб.", "тыс руб", "млн руб" и их варианты
+ * 
+ * @param string $unit Строка с единицами измерения
+ * @return string 'thousands' для тысяч, 'millions' для миллионов, 'unknown' если не определено
+ */
+function detectFinancialUnit(string $unit): string {
+    $unit = mb_strtolower(trim($unit));
+    if (empty($unit)) {
+        return 'unknown';
+    }
+    // Проверяем на наличие "тыс" (тысячи)
+    if (preg_match('/тыс/', $unit)) {
+        return 'thousands';
+    }
+    // Проверяем на наличие "млн" (миллионы)
+    if (preg_match('/млн/', $unit)) {
+        return 'millions';
+    }
+    return 'unknown';
+}
+
+/**
+ * Конвертирует значение в миллионы рублей с учетом единиц измерения
+ * Если значение в тысячах, делит на 1000; если в миллионах, оставляет как есть
+ * 
+ * @param mixed $value Значение для конвертации
+ * @param string $unit Единицы измерения ('thousands', 'millions', 'unknown')
+ * @return float Значение в миллионах рублей
+ */
+function convertFinancialToMillions($value, string $unit): float {
+    $numValue = parseNumericValue($value);
+    if ($numValue === null || $numValue == 0) {
+        return 0.0;
+    }
+    
+    switch ($unit) {
+        case 'thousands':
+            // Конвертируем из тысяч в миллионы (делим на 1000)
+            return $numValue / 1000.0;
+        case 'millions':
+            // Уже в миллионах, возвращаем как есть
+            return $numValue;
+        case 'unknown':
+        default:
+            // Если единицы не определены, предполагаем миллионы (для обратной совместимости)
+            return $numValue;
+    }
+}
+
 function extractNumericValue(string $raw): ?float
 {
     $normalized = str_replace([' ', ' '], '', $raw);
@@ -1586,14 +1638,19 @@ function buildTeaserTimeline(array $payload): ?array
             continue;
         }
         $row = $payload['financial'][$key];
+        // Определяем единицы измерения из поля unit
+        $unitStr = $row['unit'] ?? '';
+        $unit = detectFinancialUnit($unitStr);
+        
         $points = [];
         // Сбор точек данных для каждого периода
         foreach ($periods as $column => $label) {
             if (empty($row[$column])) {
                 continue;
             }
-            $value = extractNumericValue((string)$row[$column]);
-            if ($value === null) {
+            // Конвертируем значение в миллионы рублей с учетом единиц
+            $value = convertFinancialToMillions($row[$column], $unit);
+            if ($value === null || $value == 0) {
                 continue;
             }
             $points[] = [
@@ -1783,11 +1840,27 @@ function normalizeTeaserData(array $data, array $payload): array
         'sources' => normalizeArray($marketInsight['sources']),
     ];
 
+    // Извлекаем финансовые данные с учетом единиц измерения
+    $revenueRaw = $payload['financial']['revenue']['2024_fact'] ?? null;
+    $revenueUnit = detectFinancialUnit($payload['financial']['revenue']['unit'] ?? '');
+    $revenueValue = $revenueRaw !== null ? convertFinancialToMillions($revenueRaw, $revenueUnit) : null;
+    $revenueText = $revenueValue !== null ? number_format($revenueValue, 0, '.', ' ') . ' млн ₽' : $placeholder;
+    
+    $profitRaw = $payload['financial']['sales_profit']['2024_fact'] ?? null;
+    $profitUnit = detectFinancialUnit($payload['financial']['sales_profit']['unit'] ?? '');
+    $profitValue = $profitRaw !== null ? convertFinancialToMillions($profitRaw, $profitUnit) : null;
+    $profitText = $profitValue !== null ? number_format($profitValue, 0, '.', ' ') . ' млн ₽' : $placeholder;
+    
+    $capexRaw = $payload['financial']['fixed_assets_acquisition']['2024_fact'] ?? null;
+    $capexUnit = detectFinancialUnit($payload['financial']['fixed_assets_acquisition']['unit'] ?? '');
+    $capexValue = $capexRaw !== null ? convertFinancialToMillions($capexRaw, $capexUnit) : null;
+    $capexText = $capexValue !== null ? number_format($capexValue, 0, '.', ' ') . ' млн ₽' : 'Низкая CAPEX-нагрузка.';
+    
     $data['financials'] = [
-        'revenue' => $data['financials']['revenue'] ?? ($payload['financial']['revenue']['2024_fact'] ?? $placeholder),
-        'ebitda' => $data['financials']['ebitda'] ?? ($payload['financial']['sales_profit']['2024_fact'] ?? $placeholder),
+        'revenue' => $data['financials']['revenue'] ?? $revenueText,
+        'ebitda' => $data['financials']['ebitda'] ?? $profitText,
         'margins' => $data['financials']['margins'] ?? 'Маржинальность уточняется.',
-        'capex' => $data['financials']['capex'] ?? ($payload['financial']['fixed_assets_acquisition']['2024_fact'] ?? 'Низкая CAPEX-нагрузка.'),
+        'capex' => $data['financials']['capex'] ?? $capexText,
         'notes' => $data['financials']['notes'] ?? 'Финансовые показатели подтверждены данными анкеты.',
     ];
 
@@ -3178,10 +3251,18 @@ function buildInvestorProspectSentence(array $payload): ?string
 function buildRevenueGrowthMessage(array $payload): ?string
 {
     $financial = $payload['financial']['revenue'] ?? [];
+    // Определяем единицы измерения
+    $unitStr = $financial['unit'] ?? '';
+    $unit = detectFinancialUnit($unitStr);
+    
     // Используем факт 2024 или 2025 года как базовый год
-    $fact = parseNumericValue($financial['2024_fact'] ?? $financial['2025_fact'] ?? null);
+    $factRaw = $financial['2024_fact'] ?? $financial['2025_fact'] ?? null;
+    $fact = $factRaw !== null ? convertFinancialToMillions($factRaw, $unit) : null;
+    
     // Используем прогноз на 2026E (P1) из 2026_budget или из DCF данных
-    $budget = parseNumericValue($financial['2026_budget'] ?? null);
+    $budgetRaw = $financial['2026_budget'] ?? null;
+    $budget = $budgetRaw !== null ? convertFinancialToMillions($budgetRaw, $unit) : null;
+    
     if ($fact === null || $budget === null || $budget <= 0 || $fact <= 0 || $budget <= $fact) {
         return null;
     }

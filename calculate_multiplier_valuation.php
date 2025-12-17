@@ -18,6 +18,60 @@ require_once 'config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
+/**
+ * Определяет единицы измерения из строки
+ * Поддерживает: "тыс. руб.", "млн. руб.", "тыс руб", "млн руб" и их варианты
+ * 
+ * @param string $unit Строка с единицами измерения
+ * @return string 'thousands' для тысяч, 'millions' для миллионов, 'unknown' если не определено
+ */
+function detectUnit(string $unit): string {
+    $unit = mb_strtolower(trim($unit));
+    if (empty($unit)) {
+        return 'unknown';
+    }
+    // Проверяем на наличие "тыс" (тысячи)
+    if (preg_match('/тыс/', $unit)) {
+        return 'thousands';
+    }
+    // Проверяем на наличие "млн" (миллионы)
+    if (preg_match('/млн/', $unit)) {
+        return 'millions';
+    }
+    return 'unknown';
+}
+
+/**
+ * Конвертирует значение в миллионы рублей с учетом единиц измерения
+ * Если значение в тысячах, делит на 1000; если в миллионах, оставляет как есть
+ * 
+ * @param mixed $value Значение для конвертации
+ * @param string $unit Единицы измерения ('thousands', 'millions', 'unknown')
+ * @return float Значение в миллионах рублей
+ */
+function convertToMillions($value, string $unit): float {
+    if ($value === null || $value === '') {
+        return 0.0;
+    }
+    $numValue = is_numeric($value) ? (float)$value : 0.0;
+    if ($numValue == 0) {
+        return 0.0;
+    }
+    
+    switch ($unit) {
+        case 'thousands':
+            // Конвертируем из тысяч в миллионы (делим на 1000)
+            return $numValue / 1000.0;
+        case 'millions':
+            // Уже в миллионах, возвращаем как есть
+            return $numValue;
+        case 'unknown':
+        default:
+            // Если единицы не определены, предполагаем миллионы (для обратной совместимости)
+            return $numValue;
+    }
+}
+
 if (!isLoggedIn()) {
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'Необходима авторизация.']);
@@ -199,6 +253,8 @@ function convertFinancialRowsSimple(array $financial): array
             continue;
         }
         $row = ['metric' => $metric];
+        // Сохраняем единицы измерения из исходных данных
+        $row['unit'] = $financial[$key]['unit'] ?? '';
         foreach ($fields as $legacyKey => $aliases) {
             $value = pickValue($financial[$key], $aliases);
             $row[$legacyKey] = $value !== '' ? $value : null;
@@ -255,6 +311,8 @@ function convertBalanceRowsSimple(array $balance): array
             continue;
         }
         $row = ['metric' => $metric];
+        // Сохраняем единицы измерения из исходных данных
+        $row['unit'] = $balance[$key]['unit'] ?? '';
         foreach ($fields as $legacyKey => $aliases) {
             $value = pickValue($balance[$key], $aliases);
             $row[$legacyKey] = $value !== '' ? $value : null;
@@ -472,13 +530,20 @@ function extractFinancialData(array $form): array
     $revenue = null;
     if (isset($finRows['Выручка'])) {
         $revenueRow = $finRows['Выручка'];
+        // Определяем единицы измерения для выручки
+        $revenueUnit = detectUnit($revenueRow['unit'] ?? '');
         // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+        $revenueRaw = null;
         if (!empty($revenueRow['fact_2025'])) {
-            $revenue = (float)$revenueRow['fact_2025'];
+            $revenueRaw = $revenueRow['fact_2025'];
         } elseif (!empty($revenueRow['fact_2024'])) {
-            $revenue = (float)$revenueRow['fact_2024'];
+            $revenueRaw = $revenueRow['fact_2024'];
         } elseif (!empty($revenueRow['fact_2023'])) {
-            $revenue = (float)$revenueRow['fact_2023'];
+            $revenueRaw = $revenueRow['fact_2023'];
+        }
+        // Конвертируем в миллионы рублей с учетом единиц
+        if ($revenueRaw !== null) {
+            $revenue = convertToMillions($revenueRaw, $revenueUnit);
         }
     }
     
@@ -490,13 +555,20 @@ function extractFinancialData(array $form): array
     $operatingProfit = null;
     if (isset($finRows['Прибыль от продаж'])) {
         $profitRow = $finRows['Прибыль от продаж'];
+        // Определяем единицы измерения для прибыли
+        $profitUnit = detectUnit($profitRow['unit'] ?? '');
         // Приоритет: fact_2025, затем fact_2024, затем fact_2023
+        $profitRaw = null;
         if (!empty($profitRow['fact_2025'])) {
-            $operatingProfit = (float)$profitRow['fact_2025'];
+            $profitRaw = $profitRow['fact_2025'];
         } elseif (!empty($profitRow['fact_2024'])) {
-            $operatingProfit = (float)$profitRow['fact_2024'];
+            $profitRaw = $profitRow['fact_2024'];
         } elseif (!empty($profitRow['fact_2023'])) {
-            $operatingProfit = (float)$profitRow['fact_2023'];
+            $profitRaw = $profitRow['fact_2023'];
+        }
+        // Конвертируем в миллионы рублей с учетом единиц
+        if ($profitRaw !== null) {
+            $operatingProfit = convertToMillions($profitRaw, $profitUnit);
         }
     }
     
@@ -508,17 +580,23 @@ function extractFinancialData(array $form): array
         
         if (isset($finRows['Себестоимость продаж'])) {
             $cogsRow = $finRows['Себестоимость продаж'];
-            $cogs = (float)($cogsRow['fact_2025'] ?? $cogsRow['fact_2024'] ?? $cogsRow['fact_2023'] ?? 0);
+            $cogsUnit = detectUnit($cogsRow['unit'] ?? '');
+            $cogsRaw = $cogsRow['fact_2025'] ?? $cogsRow['fact_2024'] ?? $cogsRow['fact_2023'] ?? null;
+            $cogs = $cogsRaw !== null ? convertToMillions($cogsRaw, $cogsUnit) : 0;
         }
         
         if (isset($finRows['Коммерческие расходы'])) {
             $commercialRow = $finRows['Коммерческие расходы'];
-            $commercial = (float)($commercialRow['fact_2025'] ?? $commercialRow['fact_2024'] ?? $commercialRow['fact_2023'] ?? 0);
+            $commercialUnit = detectUnit($commercialRow['unit'] ?? '');
+            $commercialRaw = $commercialRow['fact_2025'] ?? $commercialRow['fact_2024'] ?? $commercialRow['fact_2023'] ?? null;
+            $commercial = $commercialRaw !== null ? convertToMillions($commercialRaw, $commercialUnit) : 0;
         }
         
         if (isset($finRows['Управленческие расходы'])) {
             $adminRow = $finRows['Управленческие расходы'];
-            $admin = (float)($adminRow['fact_2025'] ?? $adminRow['fact_2024'] ?? $adminRow['fact_2023'] ?? 0);
+            $adminUnit = detectUnit($adminRow['unit'] ?? '');
+            $adminRaw = $adminRow['fact_2025'] ?? $adminRow['fact_2024'] ?? $adminRow['fact_2023'] ?? null;
+            $admin = $adminRaw !== null ? convertToMillions($adminRaw, $adminUnit) : 0;
         }
         
         // Прибыль от продаж = Выручка - Себестоимость - Коммерческие - Управленческие
@@ -529,8 +607,10 @@ function extractFinancialData(array $form): array
     $depreciation = 0;
     if (isset($finRows['Амортизация'])) {
         $deprRow = $finRows['Амортизация'];
+        $deprUnit = detectUnit($deprRow['unit'] ?? '');
         // Приоритет: fact_2025, затем fact_2024, затем fact_2023
-        $depreciation = (float)($deprRow['fact_2025'] ?? $deprRow['fact_2024'] ?? $deprRow['fact_2023'] ?? 0);
+        $deprRaw = $deprRow['fact_2025'] ?? $deprRow['fact_2024'] ?? $deprRow['fact_2023'] ?? null;
+        $depreciation = $deprRaw !== null ? convertToMillions($deprRaw, $deprUnit) : 0;
     }
     
     // Конвертируем балансовые данные в унифицированный формат (если нужно)
@@ -552,8 +632,10 @@ function extractFinancialData(array $form): array
     if ($depreciation <= 0 && !empty($balRows)) {
         if (isset($balRows['Основные средства'])) {
             $fixedAssetsRow = $balRows['Основные средства'];
+            $fixedAssetsUnit = detectUnit($fixedAssetsRow['unit'] ?? '');
             // Приоритет: fact_2025, затем fact_2024, затем fact_2023
-            $fixedAssets = (float)($fixedAssetsRow['fact_2025'] ?? $fixedAssetsRow['fact_2024'] ?? $fixedAssetsRow['fact_2023'] ?? 0);
+            $fixedAssetsRaw = $fixedAssetsRow['fact_2025'] ?? $fixedAssetsRow['fact_2024'] ?? $fixedAssetsRow['fact_2023'] ?? null;
+            $fixedAssets = $fixedAssetsRaw !== null ? convertToMillions($fixedAssetsRaw, $fixedAssetsUnit) : 0;
             if ($fixedAssets > 0) {
                 // Амортизация = 10% от основных средств предыдущего года
                 // Для упрощения используем текущие основные средства
@@ -570,20 +652,26 @@ function extractFinancialData(array $form): array
         // Долг (краткосрочные + долгосрочные займы)
         if (isset($balRows['Краткосрочные займы'])) {
             $shortDebtRow = $balRows['Краткосрочные займы'];
+            $shortDebtUnit = detectUnit($shortDebtRow['unit'] ?? '');
             // Приоритет: fact_2025, затем fact_2024, затем fact_2023
-            $debt += (float)($shortDebtRow['fact_2025'] ?? $shortDebtRow['fact_2024'] ?? $shortDebtRow['fact_2023'] ?? 0);
+            $shortDebtRaw = $shortDebtRow['fact_2025'] ?? $shortDebtRow['fact_2024'] ?? $shortDebtRow['fact_2023'] ?? null;
+            $debt += $shortDebtRaw !== null ? convertToMillions($shortDebtRaw, $shortDebtUnit) : 0;
         }
         if (isset($balRows['Долгосрочные займы'])) {
             $longDebtRow = $balRows['Долгосрочные займы'];
+            $longDebtUnit = detectUnit($longDebtRow['unit'] ?? '');
             // Приоритет: fact_2025, затем fact_2024, затем fact_2023
-            $debt += (float)($longDebtRow['fact_2025'] ?? $longDebtRow['fact_2024'] ?? $longDebtRow['fact_2023'] ?? 0);
+            $longDebtRaw = $longDebtRow['fact_2025'] ?? $longDebtRow['fact_2024'] ?? $longDebtRow['fact_2023'] ?? null;
+            $debt += $longDebtRaw !== null ? convertToMillions($longDebtRaw, $longDebtUnit) : 0;
         }
         
         // Денежные средства
         if (isset($balRows['Денежные средства'])) {
             $cashRow = $balRows['Денежные средства'];
+            $cashUnit = detectUnit($cashRow['unit'] ?? '');
             // Приоритет: fact_2025, затем fact_2024, затем fact_2023
-            $cash = (float)($cashRow['fact_2025'] ?? $cashRow['fact_2024'] ?? $cashRow['fact_2023'] ?? 0);
+            $cashRaw = $cashRow['fact_2025'] ?? $cashRow['fact_2024'] ?? $cashRow['fact_2023'] ?? null;
+            $cash = $cashRaw !== null ? convertToMillions($cashRaw, $cashUnit) : 0;
         }
     }
     
@@ -591,8 +679,10 @@ function extractFinancialData(array $form): array
     $netProfit = null;
     if (isset($finRows['Чистая прибыль'])) {
         $netProfitRow = $finRows['Чистая прибыль'];
+        $netProfitUnit = detectUnit($netProfitRow['unit'] ?? '');
         // Приоритет: fact_2025, затем fact_2024, затем fact_2023
-        $netProfit = (float)($netProfitRow['fact_2025'] ?? $netProfitRow['fact_2024'] ?? $netProfitRow['fact_2023'] ?? 0);
+        $netProfitRaw = $netProfitRow['fact_2025'] ?? $netProfitRow['fact_2024'] ?? $netProfitRow['fact_2023'] ?? null;
+        $netProfit = $netProfitRaw !== null ? convertToMillions($netProfitRaw, $netProfitUnit) : null;
     }
     
     return [

@@ -169,6 +169,57 @@ $statusColors = [
  */
 
 /**
+ * Определяет единицы измерения из строки
+ * Поддерживает: "тыс. руб.", "млн. руб.", "тыс руб", "млн руб" и их варианты
+ * 
+ * @param string $unit Строка с единицами измерения
+ * @return string 'thousands' для тысяч, 'millions' для миллионов, 'unknown' если не определено
+ */
+function detectUnit(string $unit): string {
+    $unit = mb_strtolower(trim($unit));
+    if (empty($unit)) {
+        return 'unknown';
+    }
+    // Проверяем на наличие "тыс" (тысячи)
+    if (preg_match('/тыс/', $unit)) {
+        return 'thousands';
+    }
+    // Проверяем на наличие "млн" (миллионы)
+    if (preg_match('/млн/', $unit)) {
+        return 'millions';
+    }
+    return 'unknown';
+}
+
+/**
+ * Конвертирует значение в миллионы рублей с учетом единиц измерения
+ * Если значение в тысячах, делит на 1000; если в миллионах, оставляет как есть
+ * 
+ * @param mixed $value Значение для конвертации
+ * @param string $unit Единицы измерения ('thousands', 'millions', 'unknown')
+ * @return float Значение в миллионах рублей
+ */
+function convertToMillions($value, string $unit): float {
+    $numValue = dcf_to_float($value);
+    if ($numValue == 0) {
+        return 0.0;
+    }
+    
+    switch ($unit) {
+        case 'thousands':
+            // Конвертируем из тысяч в миллионы (делим на 1000)
+            return $numValue / 1000.0;
+        case 'millions':
+            // Уже в миллионах, возвращаем как есть
+            return $numValue;
+        case 'unknown':
+        default:
+            // Если единицы не определены, предполагаем миллионы (для обратной совместимости)
+            return $numValue;
+    }
+}
+
+/**
  * Преобразует значение в число с плавающей точкой
  * Обрабатывает различные форматы: null, пустые строки, числа, строки с пробелами и запятыми
  * 
@@ -208,15 +259,22 @@ function dcf_rows_by_metric(?array $rows): array {
 /**
  * Строит временной ряд значений из строки данных
  * Преобразует данные из формата с ключами (fact_2022, budget_2025 и т.д.) в временной ряд
+ * Конвертирует все значения в миллионы рублей с учетом единиц измерения
  * 
- * @param array $row Строка данных с ключами периодов
+ * @param array $row Строка данных с ключами периодов и полем 'unit'
  * @param array $order Маппинг ключей периодов на метки (например, 'fact_2022' => '2022')
- * @return array Временной ряд [метка => значение]
+ * @return array Временной ряд [метка => значение в миллионах рублей]
  */
 function dcf_build_series(array $row, array $order): array {
     $series = [];
+    // Определяем единицы измерения из строки данных
+    $unitStr = $row['unit'] ?? '';
+    $unit = detectUnit($unitStr);
+    
     foreach ($order as $key => $label) {
-        $series[$label] = dcf_to_float($row[$key] ?? 0);
+        $value = $row[$key] ?? 0;
+        // Конвертируем значение в миллионы рублей с учетом единиц
+        $series[$label] = convertToMillions($value, $unit);
     }
     return $series;
 }
