@@ -304,11 +304,28 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
             throw new RuntimeException('Function callTogetherCompletions not found');
         }
         error_log('Calling Together.ai API...');
-        $rawResponse = callTogetherCompletions($prompt, $apiKey);
-        error_log('Together.ai API call completed, response length: ' . strlen($rawResponse));
+        
+        // Валидация промпта перед отправкой
+        if (empty($prompt) || strlen(trim($prompt)) < 10) {
+            throw new RuntimeException('Промпт слишком короткий или пустой');
+        }
+        
+        try {
+            $rawResponse = callTogetherCompletions($prompt, $apiKey, 3); // 3 попытки с retry
+            error_log('Together.ai API call completed, response length: ' . strlen($rawResponse));
+        } catch (RuntimeException $e) {
+            // Логируем детали ошибки для отладки
+            error_log('API call failed: ' . $e->getMessage());
+            throw $e;
+        }
         
         if (empty($rawResponse)) {
             throw new RuntimeException('Пустой ответ от AI. Попробуйте снова.');
+        }
+        
+        // Проверяем, что ответ не слишком короткий (может быть обрезан)
+        if (strlen($rawResponse) < 50) {
+            error_log('Warning: Very short response from AI: ' . substr($rawResponse, 0, 100));
         }
         
         // Логируем первые 200 символов ответа для отладки
@@ -678,12 +695,32 @@ PROMPT;
 }
 
 /**
- * Вызывает together.ai Completion API.
+ * Вызывает together.ai Completion API с retry логикой для повышения стабильности.
  * Оборачивает cURL-запрос, проверяет код ответа и пробует разные форматы
  * JSON, которые может вернуть Together (старый output.choices и новый choices).
+ * 
+ * @param string $prompt Промпт для отправки в API
+ * @param string $apiKey API ключ для авторизации
+ * @param int $maxRetries Максимальное количество попыток (по умолчанию 3)
+ * @return string Текст ответа от AI
+ * @throws RuntimeException При ошибках API или сети
  */
-function callTogetherCompletions(string $prompt, string $apiKey): string
+function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries = 3): string
 {
+    // Валидация входных данных
+    if (empty($prompt)) {
+        throw new RuntimeException('Промпт не может быть пустым');
+    }
+    if (empty($apiKey)) {
+        throw new RuntimeException('API ключ не может быть пустым');
+    }
+    
+    // Ограничиваем длину промпта для предотвращения ошибок API
+    if (strlen($prompt) > 50000) {
+        error_log('Warning: Prompt is very long (' . strlen($prompt) . ' chars), truncating to 50000');
+        $prompt = mb_substr($prompt, 0, 50000, 'UTF-8');
+    }
+    
     $body = json_encode([
         'model' => TOGETHER_MODEL,
         'prompt' => $prompt,
@@ -691,51 +728,169 @@ function callTogetherCompletions(string $prompt, string $apiKey): string
         'temperature' => 0.2,
         'top_p' => 0.9,
     ], JSON_UNESCAPED_UNICODE);
-
-    $ch = curl_init('https://api.together.ai/v1/completions');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $apiKey,
-        ],
-        CURLOPT_POSTFIELDS => $body,
-        CURLOPT_TIMEOUT => 60,
-    ]);
-
-    $response = curl_exec($ch);
-    if ($response === false) {
-        throw new RuntimeException('Сеть недоступна: ' . curl_error($ch));
-    }
-
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($status >= 400) {
-        throw new RuntimeException('Ответ API: ' . $response);
-    }
-
-    $decoded = json_decode($response, true);
     
-    // Проверяем наличие ошибок в ответе API
-    if (isset($decoded['error'])) {
-        $errorMsg = $decoded['error']['message'] ?? 'Неизвестная ошибка API';
-        throw new RuntimeException('Ошибка API Together.ai: ' . $errorMsg);
-    }
-    
-    // Проверяем различные форматы ответа API
-    if (isset($decoded['output']['choices'][0]['text'])) {
-        return trim($decoded['output']['choices'][0]['text']);
+    if ($body === false) {
+        throw new RuntimeException('Не удалось закодировать промпт в JSON: ' . json_last_error_msg());
     }
 
-    if (isset($decoded['choices'][0]['text'])) {
-        return trim($decoded['choices'][0]['text']);
+    $lastError = null;
+    
+    // Retry логика с экспоненциальной задержкой
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        try {
+            $ch = curl_init('https://api.together.ai/v1/completions');
+            if ($ch === false) {
+                throw new RuntimeException('Не удалось инициализировать cURL');
+            }
+            
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Authorization: Bearer ' . $apiKey,
+                ],
+                CURLOPT_POSTFIELDS => $body,
+                CURLOPT_TIMEOUT => 90, // Увеличен таймаут до 90 секунд
+                CURLOPT_CONNECTTIMEOUT => 10, // Таймаут соединения 10 секунд
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+            ]);
+
+            $response = curl_exec($ch);
+            $curlError = curl_error($ch);
+            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErrno = curl_errno($ch);
+            curl_close($ch);
+
+            // Обработка сетевых ошибок (retry)
+            if ($response === false || $curlErrno !== 0) {
+                $lastError = 'Сетевая ошибка: ' . ($curlError ?: 'Неизвестная ошибка cURL (код: ' . $curlErrno . ')');
+                error_log("API call attempt $attempt failed: $lastError");
+                
+                // Если это последняя попытка, выбрасываем исключение
+                if ($attempt >= $maxRetries) {
+                    throw new RuntimeException($lastError);
+                }
+                
+                // Экспоненциальная задержка: 1s, 2s, 4s
+                $delay = pow(2, $attempt - 1);
+                error_log("Retrying in $delay seconds...");
+                sleep($delay);
+                continue;
+            }
+
+            // Обработка HTTP ошибок
+            if ($status >= 500) {
+                // Серверные ошибки - retry
+                $lastError = "HTTP $status: " . substr($response, 0, 200);
+                error_log("API call attempt $attempt failed with HTTP $status: $lastError");
+                
+                if ($attempt >= $maxRetries) {
+                    throw new RuntimeException('Сервер API временно недоступен. Попробуйте позже.');
+                }
+                
+                $delay = pow(2, $attempt - 1);
+                sleep($delay);
+                continue;
+            }
+            
+            if ($status >= 400 && $status < 500) {
+                // Клиентские ошибки - не retry, сразу выбрасываем
+                $decoded = json_decode($response, true);
+                $errorMsg = 'Ошибка API';
+                if (isset($decoded['error']['message'])) {
+                    $errorMsg = $decoded['error']['message'];
+                } elseif (isset($decoded['error'])) {
+                    $errorMsg = is_string($decoded['error']) ? $decoded['error'] : json_encode($decoded['error']);
+                }
+                throw new RuntimeException("Ошибка API Together.ai (HTTP $status): $errorMsg");
+            }
+
+            // Парсинг ответа
+            $decoded = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $lastError = 'Не удалось распарсить JSON ответа: ' . json_last_error_msg();
+                error_log("API call attempt $attempt failed: $lastError. Response: " . substr($response, 0, 500));
+                
+                if ($attempt >= $maxRetries) {
+                    throw new RuntimeException('Неожиданный формат ответа от API. Попробуйте снова.');
+                }
+                
+                $delay = pow(2, $attempt - 1);
+                sleep($delay);
+                continue;
+            }
+            
+            // Проверяем наличие ошибок в ответе API
+            if (isset($decoded['error'])) {
+                $errorMsg = $decoded['error']['message'] ?? 'Неизвестная ошибка API';
+                $errorType = $decoded['error']['type'] ?? '';
+                
+                // Некоторые ошибки не требуют retry (например, неверный API ключ)
+                if (strpos($errorType, 'invalid') !== false || strpos($errorType, 'auth') !== false) {
+                    throw new RuntimeException('Ошибка API Together.ai: ' . $errorMsg);
+                }
+                
+                $lastError = 'Ошибка API Together.ai: ' . $errorMsg;
+                error_log("API call attempt $attempt failed: $lastError");
+                
+                if ($attempt >= $maxRetries) {
+                    throw new RuntimeException($lastError);
+                }
+                
+                $delay = pow(2, $attempt - 1);
+                sleep($delay);
+                continue;
+            }
+            
+            // Проверяем различные форматы ответа API
+            $text = null;
+            if (isset($decoded['output']['choices'][0]['text'])) {
+                $text = trim($decoded['output']['choices'][0]['text']);
+            } elseif (isset($decoded['choices'][0]['text'])) {
+                $text = trim($decoded['choices'][0]['text']);
+            }
+            
+            if ($text !== null && $text !== '') {
+                // Успешный ответ
+                return $text;
+            }
+            
+            // Пустой ответ - retry
+            $lastError = 'Пустой ответ от API';
+            error_log("API call attempt $attempt failed: $lastError. Response structure: " . json_encode(array_keys($decoded ?? [])));
+            
+            if ($attempt >= $maxRetries) {
+                error_log('Unexpected API response format: ' . substr(json_encode($decoded), 0, 500));
+                throw new RuntimeException('Неожиданный формат ответа от AI. Попробуйте снова.');
+            }
+            
+            $delay = pow(2, $attempt - 1);
+            sleep($delay);
+            
+        } catch (RuntimeException $e) {
+            // Если это не retry-able ошибка, сразу выбрасываем
+            if (strpos($e->getMessage(), 'Сетевая ошибка') === false && 
+                strpos($e->getMessage(), 'HTTP 5') === false &&
+                strpos($e->getMessage(), 'Не удалось распарсить') === false &&
+                strpos($e->getMessage(), 'Пустой ответ') === false) {
+                throw $e;
+            }
+            
+            $lastError = $e->getMessage();
+            if ($attempt >= $maxRetries) {
+                throw $e;
+            }
+            
+            $delay = pow(2, $attempt - 1);
+            sleep($delay);
+        }
     }
     
-    // Если формат ответа неожиданный, логируем и выбрасываем исключение
-    error_log('Unexpected API response format: ' . substr(json_encode($decoded), 0, 500));
-    throw new RuntimeException('Неожиданный формат ответа от AI. Попробуйте снова.');
+    // Если дошли сюда, все попытки исчерпаны
+    throw new RuntimeException('Не удалось получить ответ от API после ' . $maxRetries . ' попыток. ' . ($lastError ?? ''));
 }
 
 /**
@@ -797,8 +952,48 @@ function parseTeaserResponse(string $text): array
 
     // Пытаемся распарсить JSON
     $json = json_decode($clean, true);
-    if (json_last_error() === JSON_ERROR_NONE && is_array($json)) {
+    if (json_last_error() === JSON_ERROR_NONE && is_array($json) && !empty($json)) {
+        // Дополнительная валидация: проверяем, что это действительно структура тизера
+        if (isset($json['overview']) || isset($json['company_profile']) || isset($json['products'])) {
+            return $json;
+        }
+        // Если структура не похожа на тизер, но это валидный JSON, логируем и используем
+        error_log('Parsed JSON but structure unexpected. Keys: ' . implode(', ', array_keys($json)));
         return $json;
+    }
+    
+    // Если JSON не распарсился, пытаемся исправить распространенные проблемы
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        // Пытаемся исправить незакрытые строки, незакрытые скобки и т.д.
+        $fixed = $clean;
+        
+        // Удаляем trailing commas перед закрывающими скобками/фигурными скобками
+        $fixed = preg_replace('/,\s*([}\]])/u', '$1', $fixed);
+        
+        // Пытаемся закрыть незакрытые строки (простая эвристика)
+        $openQuotes = substr_count($fixed, '"') - substr_count($fixed, '\\"');
+        if ($openQuotes % 2 !== 0) {
+            // Нечетное количество кавычек - пытаемся закрыть последнюю (если она не экранирована)
+            $lastQuotePos = strrpos($fixed, '"');
+            if ($lastQuotePos !== false && ($lastQuotePos === 0 || $fixed[$lastQuotePos - 1] !== '\\')) {
+                // Добавляем закрывающую кавычку в конец, если нужно
+                $fixed = rtrim($fixed, ',') . '"';
+            }
+        }
+        
+        // Пытаемся закрыть незакрытые скобки
+        $openBraces = substr_count($fixed, '{') - substr_count($fixed, '}');
+        if ($openBraces > 0) {
+            $fixed .= str_repeat('}', $openBraces);
+        }
+        
+        $json = json_decode($fixed, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($json) && !empty($json)) {
+            error_log('Successfully fixed JSON parsing errors');
+            if (isset($json['overview']) || isset($json['company_profile']) || isset($json['products'])) {
+                return $json;
+            }
+        }
     }
 
     // Если JSON не удалось распарсить, логируем ошибку и возвращаем fallback
@@ -3004,7 +3199,7 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
             $heroStats[] = [
                 'label' => 'МАРЖИНАЛЬНОСТЬ',
                 'value' => number_format($marginPercent, 1, '.', ' ') . '%',
-                'caption' => '2026Е (Прибыль/Выручка)',
+                'caption' => '2026П (Прибыль/Выручка)',
             ];
         }
         
@@ -3035,7 +3230,7 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
             $heroStats[] = [
                 'label' => 'ТЕМП РОСТА',
                 'value' => number_format($currentYearGrowth, 1, '.', ' ') . '%',
-                'caption' => '2026Е к 2025',
+                'caption' => '2026П к 2025',
             ];
         }
         
