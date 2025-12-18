@@ -2169,19 +2169,34 @@ function buildSalesChannelsText(array $payload): string
     // Offline presence may come as «нет», поэтому нормализуем значение заранее.
     $offline = normalizeChannelValue($payload['offline_sales_presence'] ?? '');
     if ($offline !== '') {
-        $channels[] = 'Оффлайн: ' . $offline;
+        // Если значение просто "да" или "yes", не добавляем его, так как уже есть метка "Оффлайн"
+        if (mb_strtolower($offline, 'UTF-8') === 'да' || mb_strtolower($offline, 'UTF-8') === 'yes') {
+            $channels[] = 'Оффлайн';
+        } else {
+            $channels[] = 'Оффлайн: ' . $offline;
+        }
     }
 
     // Online channels бывают перечислены списком — не скрываем детали.
     $online = normalizeChannelValue($payload['online_sales_channels'] ?? '');
     if ($online !== '') {
-        $channels[] = 'Онлайн: ' . $online;
+        // Если значение просто "да" или "yes", не добавляем его, так как уже есть метка "Онлайн"
+        if (mb_strtolower($online, 'UTF-8') === 'да' || mb_strtolower($online, 'UTF-8') === 'yes') {
+            $channels[] = 'Онлайн';
+        } else {
+            $channels[] = 'Онлайн: ' . $online;
+        }
     }
 
     // Contract manufacturing часто содержит английские ответы (yes/no).
     $contract = normalizeChannelValue($payload['contract_production_usage'] ?? '');
     if ($contract !== '') {
-        $channels[] = 'Контрактное производство: ' . $contract;
+        // Если значение просто "да" или "yes", не добавляем его, так как уже есть метка "Контрактное производство"
+        if (mb_strtolower($contract, 'UTF-8') === 'да' || mb_strtolower($contract, 'UTF-8') === 'yes') {
+            $channels[] = 'Контрактное производство';
+        } else {
+            $channels[] = 'Контрактное производство: ' . $contract;
+        }
     }
 
     if (empty($channels)) {
@@ -2193,7 +2208,7 @@ function buildSalesChannelsText(array $payload): string
 
 /**
  * Приводит значения каналов к читабельной форме и отбрасывает ответы
- * вроде «no», «нет», «n/a».
+ * вроде «no», «нет», «n/a». Также переводит английские значения на русский.
  */
 function normalizeChannelValue($value): string
 {
@@ -2214,6 +2229,31 @@ function normalizeChannelValue($value): string
 
     if (preg_match('/^(no|нет)(\b|[^a-zA-ZА-Яа-я0-9])/iu', $text)) {
         return '';
+    }
+
+    // Переводим английские значения на русский
+    $translations = [
+        'yes' => 'да',
+        'true' => 'да',
+        '1' => 'да',
+        'используется' => 'да',
+        'применяется' => 'да',
+    ];
+    
+    if (isset($translations[$plain])) {
+        return $translations[$plain];
+    }
+    
+    // Если значение содержит только английские буквы и это короткое слово (yes, no, true, false),
+    // переводим его
+    if (preg_match('/^[a-zA-Z]+$/', $text) && strlen($text) <= 5) {
+        $shortTranslations = [
+            'yes' => 'да',
+            'true' => 'да',
+        ];
+        if (isset($shortTranslations[$plain])) {
+            return $shortTranslations[$plain];
+        }
     }
 
     return $text;
