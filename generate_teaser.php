@@ -508,7 +508,18 @@ function buildTeaserPayload(array $form): array
         ];
 
         foreach ($mapping as $key => $column) {
-            $data[$key] = $form[$column] ?? '';
+            $value = $form[$column] ?? '';
+            // Специальная обработка для deal_goal: если это JSON-строка, декодируем её
+            if ($key === 'deal_goal' && is_string($value) && !empty($value)) {
+                $decoded = json_decode($value, true);
+                if (is_array($decoded)) {
+                    $data[$key] = $decoded;
+                } else {
+                    $data[$key] = $value;
+                }
+            } else {
+                $data[$key] = $value;
+            }
         }
 
         $data['production'] = !empty($form['production_volumes']) ? (json_decode($form['production_volumes'], true) ?: []) : [];
@@ -1052,7 +1063,8 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
             !empty($priceText) ? $priceText : null,
             // Если цена не указана, показываем ожидания по оценке
             empty($priceText) ? formatMetric('Ожидания по оценке', $deal['valuation_expectation'] ?? '') : null,
-            formatMetric('Использование средств', $deal['use_of_proceeds'] ?? ''),
+            // Показываем использование средств только если оно указано и цель сделки не только cash_out
+            !empty($deal['use_of_proceeds']) ? formatMetric('Использование средств', $deal['use_of_proceeds']) : null,
         ]);
         if ($bullets) {
             $blocks[] = renderCard('Параметры сделки', [
@@ -1874,6 +1886,9 @@ function normalizeTeaserData(array $data, array $payload): array
         $finalPrice = (float)$payload['final_selling_price'];
     }
     
+    // Проверяем, содержит ли deal_goal только cash_out
+    $isOnlyCashOut = isOnlyCashOut($payload['deal_goal'] ?? '');
+    
     $data['deal_terms'] = [
         'structure' => $data['deal_terms']['structure'] ?? (($payload['deal_goal'] ?? '') ?: 'Гибкая структура сделки.'),
         'share_for_sale' => $data['deal_terms']['share_for_sale'] ?? ($payload['deal_share_range'] ?? 'Доля обсуждается.'),
@@ -1881,7 +1896,8 @@ function normalizeTeaserData(array $data, array $payload): array
         'price' => $finalPrice !== null && $finalPrice > 0 
             ? 'Цена актива: ' . number_format($finalPrice, 0, '.', ' ') . ' млн ₽'
             : ($data['deal_terms']['price'] ?? null),
-        'use_of_proceeds' => $data['deal_terms']['use_of_proceeds'] ?? 'Средства будут направлены на масштабирование бизнеса.',
+        // Не указываем направление средств на развитие, если цель сделки - только cash_out (выход продавца)
+        'use_of_proceeds' => $data['deal_terms']['use_of_proceeds'] ?? ($isOnlyCashOut ? null : 'Средства будут направлены на масштабирование бизнеса.'),
     ];
 
     $data['next_steps'] = [
@@ -3225,10 +3241,55 @@ function buildAdvantageSummarySentences(array $payload): array
     return array_values(array_filter(array_map('trim', $sentences), fn($sentence) => $sentence !== ''));
 }
 
+/**
+ * Проверяет, содержит ли deal_goal только cash_out (выход продавца)
+ * @param mixed $dealGoal Может быть массивом, JSON-строкой или обычной строкой
+ * @return bool true если только cash_out, false иначе
+ */
+function isOnlyCashOut($dealGoal): bool
+{
+    if (empty($dealGoal)) {
+        return false;
+    }
+    
+    // Если это массив
+    if (is_array($dealGoal)) {
+        $normalized = array_map('trim', $dealGoal);
+        return count($normalized) === 1 && in_array('cash_out', $normalized, true);
+    }
+    
+    // Если это строка, пытаемся декодировать как JSON
+    if (is_string($dealGoal)) {
+        $trimmed = trim($dealGoal);
+        
+        // Если это JSON-строка массива (начинается с [)
+        if (preg_match('/^\[.*\]$/', $trimmed)) {
+            $decoded = json_decode($trimmed, true);
+            if (is_array($decoded)) {
+                $normalized = array_map('trim', $decoded);
+                return count($normalized) === 1 && in_array('cash_out', $normalized, true);
+            }
+        }
+        
+        // Пытаемся декодировать как JSON (может быть без скобок)
+        $decoded = json_decode($trimmed, true);
+        if (is_array($decoded)) {
+            $normalized = array_map('trim', $decoded);
+            return count($normalized) === 1 && in_array('cash_out', $normalized, true);
+        }
+        
+        // Если это обычная строка, проверяем на точное совпадение
+        return $trimmed === 'cash_out' || $trimmed === '["cash_out"]';
+    }
+    
+    return false;
+}
+
 function buildInvestorProspectSentence(array $payload): ?string
 {
     $segments = [];
-    if (!empty($payload['deal_goal'])) {
+    // Не добавляем информацию о направлении инвестиций, если цель сделки - только cash_out (выход продавца)
+    if (!empty($payload['deal_goal']) && !isOnlyCashOut($payload['deal_goal'])) {
         $segments[] = 'Инвестиции планируется направить на ' . trim($payload['deal_goal']) . '.';
     }
 
