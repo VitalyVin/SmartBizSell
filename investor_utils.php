@@ -350,7 +350,7 @@ PROMPT;
 
     try {
         // Вызываем ИИ через Together.ai API
-        $raw = callTogetherCompletions($prompt, $apiKey);
+        $raw = callAICompletions($prompt, $apiKey);
     } catch (Throwable $e) {
         error_log('AI investor suggestion failed: ' . $e->getMessage());
         return [];  // При ошибке возвращаем пустой массив

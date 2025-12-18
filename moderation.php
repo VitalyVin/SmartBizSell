@@ -177,6 +177,64 @@ $statusColors = [
         }
         .moderation-header {
             margin-bottom: 32px;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .moderation-header p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 4px 0 0 0;
+        }
+        .ai-provider-selector {
+            margin-top: 0;
+            display: flex !important;
+            align-items: center !important;
+            gap: 12px !important;
+            flex-wrap: wrap !important;
+        }
+        .ai-provider-selector label {
+            font-size: 14px !important;
+            color: var(--text-secondary) !important;
+            font-weight: 500 !important;
+            white-space: nowrap !important;
+        }
+        #ai-provider {
+            padding: 10px 16px !important;
+            border: 2px solid rgba(0, 0, 0, 0.1) !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            background: white !important;
+            cursor: pointer !important;
+            min-width: 220px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+        }
+        #ai-provider:hover {
+            border-color: rgba(0, 122, 255, 0.3) !important;
+        }
+        #provider-status {
+            font-size: 12px !important;
+            color: var(--text-secondary) !important;
+            padding: 6px 12px !important;
+            background: rgba(0, 0, 0, 0.05) !important;
+            border-radius: 6px !important;
+            white-space: nowrap !important;
+        }
+        @media (max-width: 768px) {
+            .moderation-header > div {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+            }
+            .ai-provider-selector {
+                width: 100% !important;
+                justify-content: flex-start !important;
+                margin-top: 16px !important;
+            }
+            #ai-provider {
+                flex: 1 !important;
+                min-width: auto !important;
+            }
         }
         .moderation-header h1 {
             font-size: 32px;
@@ -369,6 +427,18 @@ $statusColors = [
         <div class="moderation-header">
             <h1>Модерация тизеров</h1>
             <p>Проверка и редактирование тизеров перед публикацией</p>
+        </div>
+        
+        <!-- Переключатель AI провайдера -->
+        <div class="ai-provider-section" style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);">
+            <div class="ai-provider-selector" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <label for="ai-provider" style="font-size: 14px; color: var(--text-secondary); font-weight: 500; white-space: nowrap;">AI Провайдер:</label>
+                <select id="ai-provider" style="padding: 10px 16px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; background: white; cursor: pointer; min-width: 220px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <option value="together">Together.ai</option>
+                    <option value="alibaba">Alibaba Cloud Qwen 3 Max</option>
+                </select>
+                <span id="provider-status" style="font-size: 12px; color: var(--text-secondary); padding: 6px 12px; background: rgba(0, 0, 0, 0.05); border-radius: 6px; white-space: nowrap;"></span>
+            </div>
         </div>
 
         <!-- Статистика -->
@@ -765,6 +835,76 @@ $statusColors = [
             initMobileMenu();
         }
     </script>
+    
+    <script>
+        // Управление выбором AI провайдера
+        (function() {
+            const providerSelect = document.getElementById('ai-provider');
+            const providerStatus = document.getElementById('provider-status');
+            
+            if (!providerSelect || !providerStatus) return;
+            
+            // Получаем текущий провайдер из PHP (через data-атрибут или скрытое поле)
+            const currentProvider = '<?php echo getCurrentAIProvider(); ?>';
+            if (currentProvider) {
+                providerSelect.value = currentProvider;
+                updateProviderStatus(currentProvider);
+            }
+            
+            // Обработчик изменения провайдера
+            providerSelect.addEventListener('change', function() {
+                const selectedProvider = this.value;
+                
+                // Показываем индикатор загрузки
+                providerStatus.textContent = 'Сохранение...';
+                providerStatus.style.color = '#007AFF';
+                
+                // Отправляем запрос на сервер
+                fetch('set_ai_provider.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        provider: selectedProvider
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateProviderStatus(selectedProvider);
+                        providerStatus.textContent = '✓ Сохранено';
+                        providerStatus.style.color = '#34C759';
+                        
+                        // Через 2 секунды убираем сообщение
+                        setTimeout(() => {
+                            updateProviderStatus(selectedProvider);
+                        }, 2000);
+                    } else {
+                        providerStatus.textContent = '✗ Ошибка';
+                        providerStatus.style.color = '#FF3B30';
+                        alert('Ошибка при сохранении: ' + (data.message || 'Неизвестная ошибка'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    providerStatus.textContent = '✗ Ошибка';
+                    providerStatus.style.color = '#FF3B30';
+                    alert('Ошибка при сохранении провайдера');
+                });
+            });
+            
+            function updateProviderStatus(provider) {
+                const providerNames = {
+                    'together': 'Together.ai',
+                    'alibaba': 'Alibaba Cloud Qwen 3 Max'
+                };
+                providerStatus.textContent = providerNames[provider] || provider;
+                providerStatus.style.color = 'var(--text-secondary)';
+            }
+        })();
+    </script>
+    
     <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>

@@ -30,11 +30,22 @@ if (!$user) {
     exit;
 }
 
-$apiKey = TOGETHER_API_KEY;
-if (empty($apiKey)) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'API-ключ together.ai не настроен.']);
-    exit;
+// Получаем API ключ в зависимости от выбранного провайдера
+$provider = getCurrentAIProvider();
+if ($provider === 'alibaba') {
+    $apiKey = ALIBABA_API_KEY;
+    if (empty($apiKey)) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'API-ключ Alibaba Cloud не настроен.']);
+        exit;
+    }
+} else {
+    $apiKey = TOGETHER_API_KEY;
+    if (empty($apiKey)) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'API-ключ together.ai не настроен.']);
+        exit;
+    }
 }
 
 try {
@@ -81,7 +92,9 @@ try {
     
     // Вызываем ИИ-модель через Together.ai API для генерации Term Sheet
     // Используется модель, указанная в конфигурации (например, Qwen2.5)
-    $rawResponse = callTogetherCompletions($prompt, $apiKey);
+    // Используем chat completions с system message для Term Sheet
+    $systemMessage = 'Ты опытный M&A консультант и корпоративный юрист с глубоким знанием российского корпоративного права и практики инвестиционных сделок. Твоя специализация — создание Term Sheet для M&A и инвестиционных сделок. Твои документы всегда на русском языке, используют традиционную юридическую терминологию, точные формулировки и соответствуют лучшим практикам российского корпоративного права. КРИТИЧЕСКИ ВАЖНО: Всегда создавай ПОЛНЫЙ и ЗАВЕРШЕННЫЙ документ, включая обязательный раздел ПОДПИСИ СТОРОН в конце. Документ должен быть готов к использованию и подписанию.';
+    $rawResponse = callAICompletions($prompt, $apiKey, 3, $systemMessage);
     
     // Проверяем, что ответ от API не пустой
     if (empty($rawResponse) || trim($rawResponse) === '') {
@@ -667,90 +680,8 @@ function buildTermSheetPrompt(array $formData): string
  * @return string Сгенерированный текст Term Sheet
  * @throws Exception Если произошла ошибка при обращении к API или неожиданный формат ответа
  */
-function callTogetherCompletions(string $prompt, string $apiKey): string
-{
-    // URL эндпоинта Together.ai API для генерации текста
-    $url = 'https://api.together.xyz/v1/chat/completions';
-    
-    // Формируем запрос к API в формате chat completions
-    // system message задает роль ИИ как профессионального M&A консультанта
-    // user message содержит детальный промпт с данными анкеты
-    $data = [
-        'model' => TOGETHER_MODEL, // Модель из конфигурации (например, Qwen2.5)
-        'messages' => [
-            [
-                'role' => 'system',
-                // Системное сообщение определяет роль и стиль работы ИИ
-                // Важно: подчеркивается необходимость создания полного документа с подписями
-                'content' => 'Ты опытный M&A консультант и корпоративный юрист с глубоким знанием российского корпоративного права и практики инвестиционных сделок. Твоя специализация — создание Term Sheet для M&A и инвестиционных сделок. Твои документы всегда на русском языке, используют традиционную юридическую терминологию, точные формулировки и соответствуют лучшим практикам российского корпоративного права. КРИТИЧЕСКИ ВАЖНО: Всегда создавай ПОЛНЫЙ и ЗАВЕРШЕННЫЙ документ, включая обязательный раздел ПОДПИСИ СТОРОН в конце. Документ должен быть готов к использованию и подписанию.'
-            ],
-            [
-                'role' => 'user',
-                // Пользовательское сообщение содержит детальный промпт с данными анкеты
-                'content' => $prompt
-            ]
-        ],
-        'temperature' => 0.7, // Баланс между креативностью и точностью (0.0-1.0)
-        'max_tokens' => 12000, // Максимальная длина ответа (увеличено для гарантии полного документа с подписями)
-    ];
-    
-    // Выполняем HTTP запрос к API через cURL
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); // Возвращать результат, а не выводить
-    curl_setopt($ch, CURLOPT_POST, true); // POST запрос
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data)); // JSON тело запроса
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey, // API ключ в заголовке Authorization
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Таймаут 120 секунд (генерация может занять время)
-    
-    // Выполняем запрос и получаем ответ
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    // Проверяем HTTP статус код
-    // Код 200 означает успешный запрос
-    if ($httpCode !== 200) {
-        error_log("Together.ai API error: HTTP $httpCode, Response: $response");
-        throw new Exception("Ошибка при обращении к API ИИ");
-    }
-    
-    // Парсим JSON ответ и извлекаем сгенерированный текст
-    // Структура ответа: { "choices": [{ "message": { "content": "..." } }] }
-    $result = json_decode($response, true);
-    
-    // Проверяем наличие ошибок в ответе API
-    if (isset($result['error'])) {
-        $errorMessage = $result['error']['message'] ?? 'Неизвестная ошибка API';
-        error_log("Together.ai API error response: " . json_encode($result['error']));
-        throw new Exception("Ошибка API ИИ: " . $errorMessage);
-    }
-    
-    // Проверяем структуру ответа
-    if (!isset($result['choices']) || !is_array($result['choices']) || empty($result['choices'])) {
-        error_log("Together.ai API unexpected response structure: " . substr($response, 0, 500));
-        throw new Exception("Неожиданный формат ответа от API ИИ: отсутствуют choices");
-    }
-    
-    if (!isset($result['choices'][0]['message']['content'])) {
-        error_log("Together.ai API unexpected response: " . substr($response, 0, 500));
-        throw new Exception("Неожиданный формат ответа от API ИИ: отсутствует content");
-    }
-    
-    // Извлекаем контент
-    $content = $result['choices'][0]['message']['content'];
-    
-    // Проверяем, что контент не пустой
-    if (empty($content) || trim($content) === '') {
-        error_log("Together.ai API returned empty content. Full response: " . substr($response, 0, 1000));
-        throw new Exception("API ИИ вернул пустой ответ. Попробуйте снова.");
-    }
-    
-    // Возвращаем сгенерированный контент (текст Term Sheet)
-    return $content;
-}
+// Функция callTogetherCompletions() теперь определена в config.php
+// Используется универсальная функция callAICompletions() с поддержкой system message
 
 /**
  * Проверяет полноту документа и добавляет недостающие элементы.
