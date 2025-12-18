@@ -483,8 +483,21 @@ function buildTeaserPayload(array $form): array
     }
 
     // Добавляем финальную цену продажи из data_json, если она есть
+    // Обеспечиваем, что цена доступна в обоих полях для совместимости
     if (isset($data['final_price']) && $data['final_price'] > 0) {
         $data['final_selling_price'] = $data['final_price'];
+    } elseif (isset($data['final_selling_price']) && $data['final_selling_price'] > 0) {
+        // Если есть только final_selling_price, копируем в final_price для совместимости
+        $data['final_price'] = $data['final_selling_price'];
+    }
+    
+    // Логируем наличие цены для отладки
+    if (isset($data['final_price']) && $data['final_price'] > 0) {
+        error_log('buildTeaserPayload: Found final_price in data_json: ' . $data['final_price']);
+    } elseif (isset($data['final_selling_price']) && $data['final_selling_price'] > 0) {
+        error_log('buildTeaserPayload: Found final_selling_price in data_json: ' . $data['final_selling_price']);
+    } else {
+        error_log('buildTeaserPayload: No final price found in data_json');
     }
     
     if (empty($data)) {
@@ -2087,23 +2100,75 @@ function normalizeTeaserData(array $data, array $payload): array
     $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
 
     // Используем финальную цену продажи, если она указана
+    // Проверяем все возможные источники цены предложения продавца
     $finalPrice = null;
+    
+    // 1. Прямо из payload
     if (isset($payload['final_price']) && $payload['final_price'] > 0) {
         $finalPrice = (float)$payload['final_price'];
+        error_log('normalizeTeaserData: Found final_price in payload: ' . $finalPrice);
     } elseif (isset($payload['final_selling_price']) && $payload['final_selling_price'] > 0) {
         $finalPrice = (float)$payload['final_selling_price'];
+        error_log('normalizeTeaserData: Found final_selling_price in payload: ' . $finalPrice);
+    }
+    
+    // 2. Из data_json в payload (если цена не найдена выше)
+    if ($finalPrice === null && !empty($payload['data_json'])) {
+        $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+        if (is_array($formDataJson)) {
+            if (isset($formDataJson['final_price']) && $formDataJson['final_price'] > 0) {
+                $finalPrice = (float)$formDataJson['final_price'];
+                error_log('normalizeTeaserData: Found final_price in data_json: ' . $finalPrice);
+            } elseif (isset($formDataJson['final_selling_price']) && $formDataJson['final_selling_price'] > 0) {
+                $finalPrice = (float)$formDataJson['final_selling_price'];
+                error_log('normalizeTeaserData: Found final_selling_price in data_json: ' . $finalPrice);
+            }
+        }
+    }
+    
+    // 3. Проверяем, не была ли цена уже установлена AI в data['deal_terms']['price']
+    // Если AI вернул цену, но она не совпадает с ценой продавца, приоритет у цены продавца
+    if ($finalPrice === null && !empty($data['deal_terms']['price'])) {
+        $aiPriceText = trim((string)$data['deal_terms']['price']);
+        // Пытаемся извлечь числовое значение из текста AI (например, "Цена актива: 100 млн ₽")
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:млн|млн\s*₽|₽)/u', $aiPriceText, $matches)) {
+            $extractedPrice = (float)str_replace(',', '.', $matches[1]);
+            if ($extractedPrice > 0) {
+                error_log('normalizeTeaserData: Extracted price from AI text: ' . $extractedPrice);
+                // Используем цену от AI только если нет цены продавца
+                // Но лучше не использовать, так как приоритет у цены продавца
+            }
+        }
+    }
+    
+    if ($finalPrice === null) {
+        error_log('normalizeTeaserData: No final price found in payload or data_json');
     }
     
     // Проверяем, содержит ли deal_goal только cash_out
     $isOnlyCashOut = isOnlyCashOut($payload['deal_goal'] ?? '');
     
+    // Формируем цену: приоритет у цены предложения продавца, если она есть
+    $priceText = null;
+    if ($finalPrice !== null && $finalPrice > 0) {
+        $priceText = 'Цена актива: ' . number_format($finalPrice, 0, '.', ' ') . ' млн ₽';
+    } elseif (!empty($data['deal_terms']['price'])) {
+        // Если цена от AI уже есть и она валидная, используем её
+        $aiPrice = trim((string)$data['deal_terms']['price']);
+        // Проверяем, что это не placeholder и содержит информацию о цене
+        if ($aiPrice !== '' && 
+            stripos($aiPrice, 'уточняется') === false && 
+            stripos($aiPrice, 'обсуждается') === false &&
+            (stripos($aiPrice, 'цена') !== false || stripos($aiPrice, 'млн') !== false || stripos($aiPrice, '₽') !== false)) {
+            $priceText = $aiPrice;
+        }
+    }
+    
     $data['deal_terms'] = [
         'structure' => $data['deal_terms']['structure'] ?? (($payload['deal_goal'] ?? '') ?: 'Гибкая структура сделки.'),
         'share_for_sale' => $data['deal_terms']['share_for_sale'] ?? ($payload['deal_share_range'] ?? 'Доля обсуждается.'),
         'valuation_expectation' => $data['deal_terms']['valuation_expectation'] ?? 'Ожидаемая оценка обсуждается с инвестором.',
-        'price' => $finalPrice !== null && $finalPrice > 0 
-            ? 'Цена актива: ' . number_format($finalPrice, 0, '.', ' ') . ' млн ₽'
-            : ($data['deal_terms']['price'] ?? null),
+        'price' => $priceText,
         // Не указываем направление средств на развитие, если цель сделки - только cash_out (выход продавца)
         'use_of_proceeds' => $data['deal_terms']['use_of_proceeds'] ?? ($isOnlyCashOut ? null : 'Средства будут направлены на масштабирование бизнеса.'),
     ];
