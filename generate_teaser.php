@@ -844,7 +844,12 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
             formatMetric('Год основания', $profile['established'] ?? ''),
             formatMetric('Персонал', $profile['headcount'] ?? ''),
             formatMetric('Локации', $profile['locations'] ?? ''),
-            formatMetric('Операционная модель', $profile['operations'] ?? ''),
+            // Показываем "Операционная модель" только если есть полезная информация
+            (!empty($profile['operations']) && 
+             $profile['operations'] !== 'Дополнительные сведения доступны по запросу.' &&
+             trim($profile['operations']) !== '') 
+                ? formatMetric('Операционная модель', $profile['operations']) 
+                : null,
             formatMetric('Уникальные активы', $profile['unique_assets'] ?? ''),
         ]);
         if ($bullets) {
@@ -881,7 +886,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
     if (!empty($data['financials'])) {
         $financials = $data['financials'];
         
-        // Используем данные из DCF модели для первого прогнозного года (P1 - 2026E)
+        // Используем данные из DCF модели для первого прогнозного года (P1 - 2026П)
         $revenue = null;
         $profit = null;
         $margin = null;
@@ -894,7 +899,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
                     continue;
                 }
                 
-                // Получаем данные за P1 (2026E - первый прогнозный период)
+                // Получаем данные за P1 (2026П - первый прогнозный период)
                 if ($row['label'] === 'Выручка' && isset($row['values']['P1']) && $row['values']['P1'] !== null && $row['values']['P1'] !== '') {
                     $revenue = (float)$row['values']['P1'];
                 }
@@ -1468,9 +1473,9 @@ function extractDCFDataForChart(array $form): ?array
  * Извлекает данные для графика из результатов DCF модели
  * 
  * Преобразует структуру данных DCF (с периодами P1, P2, P3...) в формат,
- * понятный для renderTeaserChart (с метками 2026E, 2027E...)
+ * понятный для renderTeaserChart (с метками 2026П, 2027П...)
  * 
- * ВАЖНО: P1 теперь соответствует 2026E (первый прогнозный период)
+ * ВАЖНО: P1 теперь соответствует 2026П (первый прогнозный период)
  * 
  * @param array $dcfData Результаты расчета DCF модели (rows, columns)
  * @return array|null Массив серий данных для графика или null, если данных недостаточно
@@ -1483,17 +1488,17 @@ function buildTeaserTimelineFromDCF(array $dcfData): ?array
     }
     
     // Маппинг периодов DCF на метки для графика
-    // P1 теперь соответствует 2026E (первый прогнозный период)
+    // P1 теперь соответствует 2026П (первый прогнозный период)
     $periodMapping = [
         '2022' => '2022',
         '2023' => '2023',
         '2024' => '2024',
         '2025' => '2025',
-        'P1' => '2026E',  // Первый прогнозный период - 2026 год
-        'P2' => '2027E',  // Второй прогнозный период - 2027 год
-        'P3' => '2028E',  // Третий прогнозный период - 2028 год
-        'P4' => '2029E',
-        'P5' => '2030E',
+        'P1' => '2026П',  // Первый прогнозный период - 2026 год
+        'P2' => '2027П',  // Второй прогнозный период - 2027 год
+        'P3' => '2028П',  // Третий прогнозный период - 2028 год
+        'P4' => '2029П',
+        'P5' => '2030П',
     ];
     
     // Находим строки с нужными метриками
@@ -1635,7 +1640,7 @@ function buildTeaserTimeline(array $payload): ?array
         '2023_fact' => '2023',
         '2024_fact' => '2024',
         '2025_fact' => '2025',
-        '2026_budget' => '2026E',
+        '2026_budget' => '2026П',
     ];
     // Определение метрик для отображения на графике
     $metrics = [
@@ -1687,7 +1692,7 @@ function buildTeaserTimeline(array $payload): ?array
  * Проверяет наличие метки периода в сериях данных графика.
  * 
  * @param array $series Массив серий данных графика
- * @param string $label Метка периода для поиска (например, '2025E')
+ * @param string $label Метка периода для поиска (например, '2025П')
  * @return bool true, если метка найдена хотя бы в одной серии
  */
 function seriesHasLabel(array $series, string $label): bool
@@ -1705,7 +1710,7 @@ function seriesHasLabel(array $series, string $label): bool
 /**
  * Извлекает числовое значение для указанной метки периода из массива точек.
  * 
- * @param array $points Массив точек данных [['label' => '2026E', 'value' => 1000], ...]
+ * @param array $points Массив точек данных [['label' => '2026П', 'value' => 1000], ...]
  * @param string $label Метка периода для поиска
  * @return float|null Значение точки или null, если метка не найдена
  */
@@ -1743,8 +1748,8 @@ function valueForLabel(array $points, string $label): ?float
 function renderTeaserChart(array $series): string
 {
     // Порядок отображения периодов (фактические годы и прогнозные)
-    // P1 теперь соответствует 2026E
-    $periodOrder = ['2022', '2023', '2024', '2025', '2026E', '2027E', '2028E'];
+    // P1 теперь соответствует 2026П
+    $periodOrder = ['2022', '2023', '2024', '2025', '2026П', '2027П', '2028П'];
     $labels = [];
     
     // Сбор меток периодов в правильном порядке
@@ -1828,12 +1833,20 @@ function normalizeTeaserData(array $data, array $payload): array
         ]),
     ];
 
+    // Формируем описание операционной модели на основе данных анкеты
+    $operationsModel = $data['company_profile']['operations'] ?? null;
+    // Если AI не предоставил описание или это placeholder, пытаемся сформировать из данных анкеты
+    if (empty($operationsModel) || $operationsModel === $placeholder || trim($operationsModel) === '') {
+        $operationsModel = buildOperationsModel($payload);
+    }
+    
     $data['company_profile'] = [
         'industry' => $data['company_profile']['industry'] ?? ($payload['products_services'] ?? $placeholder),
         'established' => $data['company_profile']['established'] ?? ($payload['production_area'] ? 'Бизнес с развитой инфраструктурой' : $placeholder),
         'headcount' => $data['company_profile']['headcount'] ?? ($payload['personnel_count'] ?? $placeholder),
         'locations' => $data['company_profile']['locations'] ?? ($payload['presence_regions'] ?? $placeholder),
-        'operations' => $data['company_profile']['operations'] ?? ($payload['own_production'] ?? $placeholder),
+        // Используем сформированное описание или null (будет скрыто при отображении)
+        'operations' => $operationsModel,
         'unique_assets' => $data['company_profile']['unique_assets'] ?? ($payload['company_brands'] ?? $placeholder),
     ];
 
@@ -2204,6 +2217,73 @@ function normalizeChannelValue($value): string
     }
 
     return $text;
+}
+
+/**
+ * Формирует описание операционной модели на основе данных анкеты
+ * Анализирует поля: собственное производство, контрактное производство, каналы продаж, загрузка мощностей
+ * @param array $payload Данные анкеты
+ * @return string|null Описание операционной модели или null, если данных недостаточно
+ */
+function buildOperationsModel(array $payload): ?string
+{
+    $parts = [];
+    
+    // Проверяем наличие собственного производства
+    $ownProduction = trim((string)($payload['own_production'] ?? ''));
+    $ownProductionLower = mb_strtolower($ownProduction, 'UTF-8');
+    if ($ownProduction !== '' && 
+        !in_array($ownProductionLower, ['нет', 'no', 'н', '', '0', '-', '—', 'не указано', 'n/a']) &&
+        !preg_match('/^(no|нет)(\b|[^a-zA-ZА-Яа-я0-9])/iu', $ownProduction)) {
+        $parts[] = 'Собственное производство';
+    }
+    
+    // Проверяем контрактное производство
+    $contractProduction = normalizeChannelValue($payload['contract_production_usage'] ?? '');
+    if ($contractProduction !== '') {
+        $parts[] = 'Контрактное производство';
+    }
+    
+    // Проверяем каналы продаж
+    $offline = normalizeChannelValue($payload['offline_sales_presence'] ?? '');
+    $online = normalizeChannelValue($payload['online_sales_presence'] ?? '');
+    $onlineShare = trim((string)($payload['online_sales_share'] ?? ''));
+    
+    $salesChannels = [];
+    if ($offline !== '') {
+        $salesChannels[] = 'офлайн';
+    }
+    if ($online !== '') {
+        if ($onlineShare !== '') {
+            $salesChannels[] = 'онлайн (' . $onlineShare . ')';
+        } else {
+            $salesChannels[] = 'онлайн';
+        }
+    }
+    
+    if (!empty($salesChannels)) {
+        $parts[] = 'Продажи через ' . implode(' и ', $salesChannels);
+    }
+    
+    // Проверяем загрузку мощностей (если есть производство)
+    if (!empty($parts) && $ownProduction !== '' && 
+        !in_array($ownProductionLower, ['нет', 'no', 'н', '', '0', '-', '—', 'не указано', 'n/a'])) {
+        $productionLoad = trim((string)($payload['production_load'] ?? ''));
+        $productionLoadLower = mb_strtolower($productionLoad, 'UTF-8');
+        if ($productionLoad !== '' && 
+            !in_array($productionLoadLower, ['нет', 'no', 'н', '', '0', '-', '—', 'не указано', 'n/a']) &&
+            !preg_match('/^(no|нет)(\b|[^a-zA-ZА-Яа-я0-9])/iu', $productionLoad)) {
+            $parts[] = 'Загрузка мощностей: ' . $productionLoad;
+        }
+    }
+    
+    // Если есть хотя бы одна часть, формируем описание
+    if (!empty($parts)) {
+        return implode('. ', $parts) . '.';
+    }
+    
+    // Если данных недостаточно, возвращаем null
+    return null;
 }
 
 /**
@@ -2846,7 +2926,7 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
     $heroStats = [];
     
     if (is_array($dcfData)) {
-        // Получаем выручку и прибыль P1 из DCF данных (P1 теперь соответствует 2026E)
+        // Получаем выручку и прибыль P1 из DCF данных (P1 теперь соответствует 2026П)
         $p1Revenue = null;
         $p1Profit = null;
         if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
@@ -2869,10 +2949,10 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
             }
         }
         
-        // Выручка 2026E (из P1)
+        // Выручка 2026П (из P1)
         if ($p1Revenue !== null) {
             $heroStats[] = [
-                'label' => 'ВЫРУЧКА 2026E',
+                'label' => 'ВЫРУЧКА 2026П',
                 'value' => number_format($p1Revenue, 0, '.', ' ') . ' млн Р',
                 'caption' => 'прогноз на 2026',
             ];
@@ -2888,7 +2968,7 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
             ];
         }
         
-        // Темп роста (сравниваем 2025 факт с P1 = 2026E)
+        // Темп роста (сравниваем 2025 факт с P1 = 2026П)
         $fact2025Revenue = null;
         $p1RevenueForGrowth = null;
         if (!empty($dcfData['rows']) && is_array($dcfData['rows'])) {
@@ -2902,7 +2982,7 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
                     if ($fact2025Revenue === null && isset($row['values']['2025_fact']) && $row['values']['2025_fact'] !== null) {
                         $fact2025Revenue = (float)$row['values']['2025_fact'];
                     }
-                    // P1 теперь соответствует 2026E
+                    // P1 теперь соответствует 2026П
                     if (isset($row['values']['P1']) && $row['values']['P1'] !== null) {
                         $p1RevenueForGrowth = (float)$row['values']['P1'];
                     }
@@ -3320,7 +3400,7 @@ function buildRevenueGrowthMessage(array $payload): ?string
     $factRaw = $financial['2024_fact'] ?? $financial['2025_fact'] ?? null;
     $fact = $factRaw !== null ? convertFinancialToMillions($factRaw, $unit) : null;
     
-    // Используем прогноз на 2026E (P1) из 2026_budget или из DCF данных
+    // Используем прогноз на 2026П (P1) из 2026_budget или из DCF данных
     $budgetRaw = $financial['2026_budget'] ?? null;
     $budget = $budgetRaw !== null ? convertFinancialToMillions($budgetRaw, $unit) : null;
     
@@ -3331,8 +3411,8 @@ function buildRevenueGrowthMessage(array $payload): ?string
     $factText = number_format($fact, 0, ',', ' ');
     $budgetText = number_format($budget, 0, ',', ' ');
     $growthText = number_format($growthPercent, 1, ',', ' ');
-    // Обновлено: прогноз теперь на 2026E (P1)
-    return "Прогноз 2026E показывает рост выручки с {$factText} до {$budgetText} млн ₽ (+{$growthText}%).";
+    // Обновлено: прогноз теперь на 2026П (P1)
+    return "Прогноз 2026П показывает рост выручки с {$factText} до {$budgetText} млн ₽ (+{$growthText}%).";
 }
 
 function parseNumericValue($value): ?float

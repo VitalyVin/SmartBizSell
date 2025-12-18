@@ -1290,7 +1290,7 @@ function calculateUserDCF(array $form): array {
 
     $warnings = [];
     // Убрано нерелевантное замечание о корректировке P1 относительно темпа 2024 года
-    // P1 теперь соответствует 2026E, сравнение с темпом роста 2024 года не актуально
+    // P1 теперь соответствует 2026П, сравнение с темпом роста 2024 года не актуально
     if (abs($forecastGrowth[0] - $gLastFact) > 0.10) {
         $warnings[] = 'Отклонение P1 от фактического темпа роста ограничено 10 п.п. согласно регламенту.';
     }
@@ -5009,7 +5009,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         // Поэтому используем значение как есть, без деления
                         $p2RevenueInMillions = $p2Revenue;
                         $heroStats[] = [
-                            'label' => 'Выручка 2026E',
+                            'label' => 'Выручка 2026П',
                             'value' => number_format($p2RevenueInMillions, 0, '.', ' ') . ' млн ₽',
                             'caption' => 'прогноз на 2026',
                         ];
@@ -5022,7 +5022,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         $heroStats[] = [
                             'label' => 'Маржинальность',
                             'value' => number_format($marginPercent, 1, '.', ' ') . '%',
-                            'caption' => '2026E (Прибыль/Выручка)',
+                            'caption' => '2026П (Прибыль/Выручка)',
                         ];
                     }
                     
@@ -5047,7 +5047,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         $heroStats[] = [
                             'label' => 'Темп роста',
                             'value' => number_format($currentYearGrowth, 1, '.', ' ') . '%',
-                            'caption' => '2026E к 2025E',
+                            'caption' => '2026П к 2025П',
                         ];
                     }
                     

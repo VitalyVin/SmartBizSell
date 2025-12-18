@@ -1306,17 +1306,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                         </svg>
                     </div>
                     <h3>Телефон</h3>
-                    <p>+7 (495) 123-45-67</p>
-                </div>
-                <div class="contact-card">
-                    <div class="contact-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="16" cy="12" r="6" stroke="#10B981" stroke-width="2" fill="none"/>
-                            <path d="M16 18C10 18 4 20 4 24V28H28V24C28 20 22 18 16 18Z" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <h3>Адрес</h3>
-                    <p>Москва, Россия</p>
+                    <p>+7 929 9373802</p>
                 </div>
             </div>
         </div>
@@ -1374,11 +1364,6 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                 "url": "<?php echo BASE_URL; ?>",
                 "logo": "<?php echo BASE_URL; ?>/logo.png",
                 "description": "Экспертная M&A платформа с искусственным интеллектом для продажи и покупки бизнеса",
-                "address": {
-                    "@type": "PostalAddress",
-                    "addressLocality": "Москва",
-                    "addressCountry": "RU"
-                },
                 "contactPoint": {
                     "@type": "ContactPoint",
                     "contactType": "Customer Service",
