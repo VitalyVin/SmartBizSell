@@ -560,12 +560,17 @@ function removeMaPlatformPhrase(string $text): string
  */
 function calculateUserDCF(array $form): array {
     // Параметры модели по умолчанию
+    // WACC рассчитывается с помощью ИИ на основе отраслевой принадлежности компании
+    $calculatedWACC = calculateWACCWithAI($form);
     $defaults = [
-        'wacc' => 0.24,              // Средневзвешенная стоимость капитала (24%)
+        'wacc' => $calculatedWACC,   // Средневзвешенная стоимость капитала (рассчитывается ИИ: 18-22%)
         'tax_rate' => 0.25,          // Ставка налога на прибыль (25%)
         'perpetual_growth' => 0.04,  // Темп бессрочного роста (4%)
         'vat_rate' => 0.20,          // Ставка НДС (20%) — будет переопределена по анкете
     ];
+    
+    // Логирование вычисленного WACC для отладки
+    error_log("DCF Calculation: WACC = " . ($calculatedWACC * 100) . "% для формы ID " . ($form['id'] ?? 'unknown'));
 
     // Определяем ставку НДС из анкеты (with_vat / without_vat)
     $vatFlag = $form['financial_results_vat'] ?? null;
