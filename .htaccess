@@ -1,6 +1,16 @@
 # Enable rewrite engine
 RewriteEngine On
 
+# Явно пропускаем API-файлы по имени (работает с любым базовым путем)
+RewriteCond %{REQUEST_URI} (^|/)(view_teaser|get_asset_documents|get_seller_contacts|moderation_api|blog_api|set_ai_provider)\.php [NC]
+RewriteRule . - [L]
+
+# Пропускаем прямые запросы к существующим файлам (включая PHP, CSS, JS и т.д.)
+# Это правило должно быть первым - проверяет существование файла
+# REQUEST_FILENAME автоматически игнорирует query string при проверке
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule . - [L]
+
 # Force HTTPS (uncomment when SSL certificate is installed)
 # RewriteCond %{HTTPS} off
 # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
@@ -14,6 +24,11 @@ RewriteRule ^blog/?$ blog.php [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^blog/([^/]+)/?$ blog_post.php?slug=$1 [L,QSA]
+
+# Business card routing (business/{id}) - для уникальных ссылок на карточки
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^business/([0-9]+)/?$ index.php?business=$1 [L,QSA]
 
 # Services routing (services/slug) - должно быть ПЕРЕД общим правилом
 RewriteCond %{REQUEST_FILENAME} !-f

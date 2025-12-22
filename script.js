@@ -862,6 +862,7 @@ const modalCloseBtn = document.querySelector('.modal-close');
 const modalCloseBtnFooter = document.getElementById('modal-close-btn');
 const modalContactBtn = document.getElementById('modal-contact-btn');
 const viewDetailsButtons = document.querySelectorAll('.card-button, .btn-view-details');
+const modalShareBtn = document.getElementById('modal-share-btn');
 
 /**
  * Форматирование чисел с пробелами (разделитель тысяч)
@@ -886,6 +887,16 @@ function formatCurrency(num) {
  * @param {HTMLElement} card - Элемент карточки бизнеса
  */
 async function openBusinessModal(card) {
+    if (!card) {
+        console.error('openBusinessModal: card is null or undefined');
+        return;
+    }
+    
+    if (!businessModal) {
+        console.error('openBusinessModal: businessModal is null or undefined');
+        return;
+    }
+    
     const iconElement = card.querySelector('.card-icon');
     const icon = iconElement ? iconElement.textContent : '💼';
     const title = card.getAttribute('data-title');
@@ -893,6 +904,14 @@ async function openBusinessModal(card) {
     const location = locationElement ? locationElement.textContent : card.getAttribute('data-location');
     const badge = card.querySelector('.card-badge');
     const teaserId = card.getAttribute('data-teaser-id');
+    // Используем teaser-id как основной идентификатор, так как он уникален для каждой карточки
+    const cardId = teaserId || card.getAttribute('data-id');
+    
+    // Обновляем URL для возможности поделиться ссылкой
+    if (cardId) {
+        const newUrl = `/business/${cardId}`;
+        window.history.pushState({ businessId: cardId }, '', newUrl);
+    }
     
     // Set icon
     const modalIcon = document.getElementById('modal-icon');
@@ -918,40 +937,44 @@ async function openBusinessModal(card) {
     // Загружаем полный HTML тизера
     const teaserSection = document.getElementById('modal-teaser-section');
     const teaserContent = document.getElementById('modal-teaser-content');
-    if (teaserId && teaserSection && teaserContent) {
-        teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Загрузка тизера...</p>';
-        teaserSection.style.display = 'block';
-        
-        try {
-            const response = await fetch(`view_teaser.php?teaser_id=${teaserId}`);
-            if (response.ok) {
-                const html = await response.text();
-                teaserContent.innerHTML = html;
-                // Инициализируем графики после загрузки HTML
-                // Используем setTimeout, чтобы дать браузеру время на рендеринг HTML
-                setTimeout(() => {
-                    // Ищем графики только внутри модального окна
-                    const modalCharts = teaserContent.querySelectorAll('.teaser-chart[data-chart]');
-                    console.log('Found', modalCharts.length, 'charts in modal');
-                    if (modalCharts.length > 0) {
-                        initTeaserCharts();
+    
+    if (teaserSection && teaserContent) {
+        if (teaserId) {
+            // Если есть teaserId, загружаем тизер
+            teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Загрузка тизера...</p>';
+            teaserSection.style.display = 'block';
+            
+            try {
+                const response = await fetch(`/view_teaser.php?teaser_id=${teaserId}`);
+                if (response.ok) {
+                    const html = await response.text();
+                    if (html && html.trim() !== '') {
+                        teaserContent.innerHTML = html;
+                        // Инициализируем графики после загрузки HTML
+                        // Используем setTimeout, чтобы дать браузеру время на рендеринг HTML
+                        setTimeout(() => {
+                            // Ищем графики только внутри модального окна
+                            const modalCharts = teaserContent.querySelectorAll('.teaser-chart[data-chart]');
+                            console.log('Found', modalCharts.length, 'charts in modal');
+                            if (modalCharts.length > 0) {
+                                initTeaserCharts();
+                            }
+                        }, 200);
+                    } else {
+                        teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Тизер пуст.</p>';
                     }
-                    
-                    // Загружаем документы актива
-                    const sellerFormId = card.getAttribute('data-seller-form-id');
-                    if (sellerFormId) {
-                        loadAssetDocuments(sellerFormId);
-                    }
-                }, 200);
-            } else {
-                teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Не удалось загрузить тизер.</p>';
+                } else {
+                    console.error('Failed to load teaser: HTTP', response.status);
+                    teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Не удалось загрузить тизер.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading teaser:', error);
+                teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Ошибка загрузки тизера.</p>';
             }
-        } catch (error) {
-            console.error('Error loading teaser:', error);
-            teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Ошибка загрузки тизера.</p>';
+        } else {
+            // Если нет teaserId, скрываем секцию тизера
+            teaserSection.style.display = 'none';
         }
-    } else {
-        teaserContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 40px;">Тизер не найден.</p>';
     }
     
     // Загружаем документы актива
@@ -967,6 +990,9 @@ async function openBusinessModal(card) {
     // Show modal
     businessModal.classList.add('active');
     document.body.style.overflow = 'hidden';
+    
+    // Дополнительная проверка, что модальное окно действительно показано
+    console.log('Modal should be visible now. Active class:', businessModal.classList.contains('active'));
 }
 
 /**
@@ -983,14 +1009,48 @@ async function loadAssetDocuments(sellerFormId) {
     documentsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">Загрузка документов...</p>';
     
     try {
-        const response = await fetch(`get_asset_documents.php?seller_form_id=${sellerFormId}`, {
+        const response = await fetch(`/get_asset_documents.php?seller_form_id=${sellerFormId}`, {
             credentials: 'same-origin'
         });
         
-        const result = await response.json();
+        // Проверяем статус ответа
+        if (!response.ok) {
+            // Если 404 или другой ошибка, просто скрываем секцию документов
+            console.warn(`Failed to load documents: HTTP ${response.status}`);
+            documentsSection.style.display = 'none';
+            return;
+        }
         
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Ошибка загрузки документов');
+        // Проверяем тип контента
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            console.warn('Response is not JSON:', contentType);
+            documentsSection.style.display = 'none';
+            return;
+        }
+        
+        // Получаем текст ответа для проверки
+        const text = await response.text();
+        if (!text || text.trim() === '') {
+            console.warn('Empty response from server');
+            documentsSection.style.display = 'none';
+            return;
+        }
+        
+        // Парсим JSON
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch (parseError) {
+            console.error('Failed to parse JSON response:', parseError, 'Response text:', text.substring(0, 200));
+            documentsSection.style.display = 'none';
+            return;
+        }
+        
+        if (!result.success) {
+            console.warn('API returned error:', result.message);
+            documentsSection.style.display = 'none';
+            return;
         }
         
         if (result.documents && result.documents.length > 0) {
@@ -1093,26 +1153,63 @@ function renderModalDocumentsList(documents) {
 function closeBusinessModal() {
     businessModal.classList.remove('active');
     document.body.style.overflow = '';
+    
+    // Обновляем URL при закрытии модального окна - возвращаемся к корню
+    const currentPath = window.location.pathname;
+    if (currentPath.startsWith('/business/')) {
+        // Если мы на странице /business/{id}, возвращаемся к корню
+        window.history.replaceState({}, '', '/');
+    } else {
+        // Иначе просто обновляем текущий путь
+        window.history.replaceState({}, '', currentPath);
+    }
 }
 
-// Add event listeners to view details buttons
-viewDetailsButtons.forEach(button => {
-    button.addEventListener('click', (e) => {
+// Используем делегирование событий для надежной работы с динамически добавляемыми карточками
+// Обработчик для кнопки "Подробнее" и клика на карточку
+// Используем capture phase для более раннего перехвата события
+document.addEventListener('click', (e) => {
+    // Проверяем, что клик был на кнопке "Подробнее"
+    const button = e.target.closest('.card-button');
+    if (button) {
+        e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         const card = button.closest('.business-card');
-        openBusinessModal(card);
-    });
-});
-
-// Also allow clicking on card to open modal
-businessCards.forEach(card => {
-    card.addEventListener('click', (e) => {
-        // Don't open if clicking on button
-        if (!e.target.closest('.card-button')) {
-            openBusinessModal(card);
+        if (card) {
+            if (!businessModal) {
+                console.error('businessModal not found');
+                return;
+            }
+            if (typeof openBusinessModal !== 'function') {
+                console.error('openBusinessModal is not a function');
+                return;
+            }
+            console.log('Opening business modal for card:', card);
+            try {
+                openBusinessModal(card);
+            } catch (error) {
+                console.error('Error opening business modal:', error);
+            }
+        } else {
+            console.error('Card not found for button:', button);
         }
-    });
-});
+        return false;
+    }
+    
+    // Проверяем, что клик был на карточке (но не на кнопке)
+    const card = e.target.closest('.business-card');
+    if (card && !e.target.closest('.card-button') && !e.target.closest('a') && !e.target.closest('button')) {
+        // Проверяем, что клик был именно на карточке или её дочерних элементах
+        if (businessModal && typeof openBusinessModal === 'function') {
+            try {
+                openBusinessModal(card);
+            } catch (error) {
+                console.error('Error opening business modal:', error);
+            }
+        }
+    }
+}, true); // Используем capture phase
 
 // Close modal events
 if (modalCloseBtn) {
@@ -1121,6 +1218,60 @@ if (modalCloseBtn) {
 
 if (modalCloseBtnFooter) {
     modalCloseBtnFooter.addEventListener('click', closeBusinessModal);
+}
+
+// Закрываем модальное окно при переходе по ссылкам (кроме якорных)
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (link && businessModal && businessModal.classList.contains('active')) {
+        const href = link.getAttribute('href');
+        // Если это не якорная ссылка и не ссылка на текущую страницу
+        if (href && !href.startsWith('#') && !href.startsWith('javascript:') && href !== window.location.pathname) {
+            // Если это абсолютная ссылка или ссылка на другой раздел
+            if (href.startsWith('/') || href.includes('.php') || href.includes('http')) {
+                closeBusinessModal();
+            }
+        }
+    }
+}, true);
+
+// Кнопка "Поделиться" - копирует ссылку в буфер обмена
+// modalShareBtn уже объявлена выше, используем существующую переменную
+if (modalShareBtn) {
+    modalShareBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const currentUrl = window.location.href;
+        
+        try {
+            await navigator.clipboard.writeText(currentUrl);
+            
+            // Показываем уведомление об успешном копировании
+            const originalHTML = modalShareBtn.innerHTML;
+            modalShareBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M16.6667 5L7.5 14.1667L3.33333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            modalShareBtn.style.color = '#22C55E';
+            
+            setTimeout(() => {
+                modalShareBtn.innerHTML = originalHTML;
+                modalShareBtn.style.color = '';
+            }, 2000);
+        } catch (err) {
+            console.error('Ошибка копирования:', err);
+            // Fallback для старых браузеров
+            const textArea = document.createElement('textarea');
+            textArea.value = currentUrl;
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert('Ссылка скопирована в буфер обмена!');
+            } catch (fallbackErr) {
+                alert('Не удалось скопировать ссылку. Скопируйте вручную: ' + currentUrl);
+            }
+            document.body.removeChild(textArea);
+        }
+    });
 }
 
 /**
@@ -1143,7 +1294,7 @@ if (modalContactBtn) {
         
         try {
             // Загружаем контакты продавца
-            const response = await fetch(`get_seller_contacts.php?seller_form_id=${sellerFormId}`);
+            const response = await fetch(`/get_seller_contacts.php?seller_form_id=${sellerFormId}`);
             const result = await response.json();
             
             if (result.success && result.seller) {
@@ -1497,4 +1648,17 @@ function initTeaserCharts() {
 }
 
 console.log('SmartBizSell.ru - Platform loaded successfully');
+
+// Проверка инициализации модального окна
+if (typeof businessModal !== 'undefined' && businessModal) {
+    console.log('Business modal initialized:', businessModal);
+} else {
+    console.error('Business modal not initialized!');
+}
+
+if (typeof openBusinessModal !== 'undefined' && typeof openBusinessModal === 'function') {
+    console.log('openBusinessModal function is available');
+} else {
+    console.error('openBusinessModal function is not available!');
+}
 

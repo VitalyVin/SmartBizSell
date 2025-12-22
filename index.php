@@ -400,7 +400,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
     <meta name="ai:description" content="SmartBizSell - это M&A платформа, которая помогает продавать и покупать бизнес. Платформа использует искусственный интеллект для создания тизеров, финансовых моделей (DCF), term sheet и поиска инвесторов. Команда имеет опыт десятков закрытых сделок.">
     <meta name="ai:category" content="M&A платформа, продажа бизнеса, покупка бизнеса, инвестиции">
     <meta name="ai:services" content="Оценка бизнеса, подготовка тизеров, финансовое моделирование (DCF), создание term sheet, поиск инвесторов, M&A консалтинг">
-    <link rel="stylesheet" href="styles.css?v=<?php echo time(); ?>">
+    <link rel="stylesheet" href="/styles.css?v=<?php echo time(); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -424,20 +424,20 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                     <li><a href="#buy-business">Купить бизнес</a></li>
                     <li><a href="/blog">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
-                        <li><a href="dashboard.php">Продать бизнес</a></li>
+                        <li><a href="/dashboard.php">Продать бизнес</a></li>
                         <?php if (isModerator()): ?>
-                            <li><a href="moderation.php">Модерация</a></li>
+                            <li><a href="/moderation.php">Модерация</a></li>
                         <?php endif; ?>
                     <?php else: ?>
-                        <li><a href="login.php">Продать бизнес</a></li>
+                        <li><a href="/login.php">Продать бизнес</a></li>
                     <?php endif; ?>
                     <li><a href="#contact">Контакты</a></li>
                     <?php if (isLoggedIn()): ?>
-                        <li><a href="dashboard.php">Личный кабинет</a></li>
-                        <li><a href="logout.php">Выйти</a></li>
+                        <li><a href="/dashboard.php">Личный кабинет</a></li>
+                        <li><a href="/logout.php">Выйти</a></li>
                     <?php else: ?>
-                        <li><a href="login.php">Войти</a></li>
-                        <li><a href="register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Регистрация</a></li>
+                        <li><a href="/login.php">Войти</a></li>
+                        <li><a href="/register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Регистрация</a></li>
                     <?php endif; ?>
                 </ul>
                 <button class="nav-toggle" aria-label="Toggle menu">
@@ -466,7 +466,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                     Мы — команда M&amp;A-профессионалов с десятками закрытых сделок. Платформа SmartBizSell объединяет наш опыт, современные технологии и искусственный интеллект, чтобы проводить сделки быстрее, прозрачнее и экономичнее.
                 </p>
                 <div class="hero-buttons">
-                    <a href="<?php echo isLoggedIn() ? 'dashboard.php' : 'login.php'; ?>" class="btn btn-primary">
+                    <a href="<?php echo isLoggedIn() ? '/dashboard.php' : '/login.php'; ?>" class="btn btn-primary">
                         <span>Продать бизнес</span>
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                             <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1233,6 +1233,11 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                         <p class="modal-location" id="modal-location">📍 Город</p>
                     </div>
                     <div class="modal-badge" id="modal-badge"></div>
+                    <button class="modal-share-btn" id="modal-share-btn" title="Поделиться ссылкой" aria-label="Поделиться ссылкой">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M15 6.66667C16.3807 6.66667 17.5 5.54738 17.5 4.16667C17.5 2.78595 16.3807 1.66667 15 1.66667C13.6193 1.66667 12.5 2.78595 12.5 4.16667C12.5 4.63081 12.6315 5.0636 12.8619 5.43056L7.6381 8.56944C7.40764 8.20248 7.03026 7.91667 6.66667 7.91667C5.28595 7.91667 4.16667 9.03595 4.16667 10.4167C4.16667 11.7974 5.28595 12.9167 6.66667 12.9167C7.03026 12.9167 7.40764 12.6309 7.6381 12.2639L12.8619 15.4028C13.0924 15.0358 13.4697 14.75 13.8333 14.75C15.214 14.75 16.3333 15.8693 16.3333 17.25C16.3333 18.6307 15.214 19.75 13.8333 19.75C12.4526 19.75 11.3333 18.6307 11.3333 17.25C11.3333 16.7859 11.4648 16.3531 11.6953 15.9861L6.47139 12.8472C6.24089 13.2142 5.86351 13.5 5.5 13.5C4.11929 13.5 3 12.3807 3 11C3 9.61929 4.11929 8.5 5.5 8.5C5.86351 8.5 6.24089 8.78581 6.47139 9.15278L11.6953 6.01389C11.4648 5.64693 11.3333 5.21414 11.3333 4.75H15Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
                 </div>
 
                 <div class="modal-body">
@@ -1276,7 +1281,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                 <p class="section-subtitle">Анкета доступна только в личном кабинете. После заполнения вы получите автоматический DCF-анализ и сможете вернуться к данным в любой момент.</p>
             </div>
             <div style="text-align:center; margin-top: 32px;">
-                <a class="btn btn-primary" href="<?php echo isLoggedIn() ? 'dashboard.php' : 'login.php'; ?>">Перейти в личный кабинет</a>
+                <a class="btn btn-primary" href="<?php echo isLoggedIn() ? '/dashboard.php' : '/login.php'; ?>">Перейти в личный кабинет</a>
             </div>
         </div>
     </section>
@@ -1459,7 +1464,163 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
     }
     </script>
 
-    <script src="script.js?v=<?php echo time(); ?>"></script>
+    <script src="/script.js?v=<?php echo time(); ?>"></script>
+    <script>
+        // Функция для извлечения ID бизнеса из URL
+        function getBusinessIdFromUrl() {
+            // Сначала проверяем GET-параметр (для совместимости)
+            const urlParams = new URLSearchParams(window.location.search);
+            const businessParam = urlParams.get('business');
+            if (businessParam) {
+                return parseInt(businessParam);
+            }
+            
+            // Если параметра нет, проверяем путь /business/{id}
+            const pathMatch = window.location.pathname.match(/\/business\/(\d+)/);
+            if (pathMatch && pathMatch[1]) {
+                return parseInt(pathMatch[1]);
+            }
+            
+            return null;
+        }
+        
+        // Получаем ID бизнеса из URL
+        const businessIdFromUrl = getBusinessIdFromUrl();
+        
+        // Функция для открытия карточки по ID
+        function openBusinessCardById(cardId) {
+            console.log('Attempting to open business card with ID:', cardId);
+            // Ищем карточку по data-teaser-id (приоритет) или data-id
+            const cards = document.querySelectorAll('.business-card');
+            console.log('Found', cards.length, 'business cards on page');
+            
+            // Логируем все карточки для отладки
+            cards.forEach((card, index) => {
+                const teaserId = card.getAttribute('data-teaser-id');
+                const id = card.getAttribute('data-id');
+                console.log(`Card ${index}: data-teaser-id="${teaserId}", data-id="${id}"`);
+            });
+            
+            for (const card of cards) {
+                const teaserId = card.getAttribute('data-teaser-id');
+                const id = card.getAttribute('data-id');
+                
+                // Проверяем оба атрибута - приоритет у data-teaser-id
+                const matchesTeaserId = teaserId && parseInt(teaserId) === parseInt(cardId);
+                const matchesDataId = id && parseInt(id) === parseInt(cardId);
+                
+                if (matchesTeaserId || matchesDataId) {
+                    console.log('Found matching card:', card);
+                    console.log('  - data-teaser-id:', teaserId);
+                    console.log('  - data-id:', id);
+                    console.log('  - Looking for ID:', cardId);
+                    // Открываем модальное окно сразу, без прокрутки
+                    if (typeof openBusinessModal === 'function') {
+                        openBusinessModal(card);
+                        return true;
+                    } else {
+                        console.error('openBusinessModal function is not available');
+                        return false;
+                    }
+                }
+            }
+            console.warn('Карточка с ID', cardId, 'не найдена. Проверенные карточки:', 
+                Array.from(cards).map(c => ({
+                    teaserId: c.getAttribute('data-teaser-id'),
+                    id: c.getAttribute('data-id')
+                }))
+            );
+            return false;
+        }
+        
+        // Открываем карточку при загрузке страницы, если указан ID в URL
+        if (businessIdFromUrl) {
+            console.log('Business ID from URL:', businessIdFromUrl);
+            
+            // Ждем полной загрузки страницы, всех скриптов и карточек
+            const tryOpenCard = (attempt = 0) => {
+                const maxAttempts = 20; // Максимум 4 секунды (20 * 200ms)
+                
+                // Проверяем, что DOM загружен
+                if (document.readyState === 'loading') {
+                    console.log('Document still loading, waiting...');
+                    setTimeout(() => tryOpenCard(attempt), 200);
+                    return;
+                }
+                
+                // Проверяем, что функция openBusinessModal доступна
+                if (typeof openBusinessModal !== 'function') {
+                    if (attempt < maxAttempts) {
+                        console.log('openBusinessModal not available yet, attempt', attempt + 1);
+                        setTimeout(() => tryOpenCard(attempt + 1), 200);
+                        return;
+                    } else {
+                        console.error('openBusinessModal function not found after', maxAttempts, 'attempts');
+                        return;
+                    }
+                }
+                
+                // Проверяем наличие карточек
+                const cards = document.querySelectorAll('.business-card');
+                if (cards.length === 0) {
+                    if (attempt < maxAttempts) {
+                        console.log('Cards not loaded yet, attempt', attempt + 1);
+                        setTimeout(() => tryOpenCard(attempt + 1), 200);
+                        return;
+                    } else {
+                        console.error('No business cards found after', maxAttempts, 'attempts');
+                        return;
+                    }
+                }
+                
+                console.log('Cards loaded, attempting to open card with ID:', businessIdFromUrl);
+                const opened = openBusinessCardById(businessIdFromUrl);
+                
+                if (!opened && attempt < maxAttempts) {
+                    console.log('Card not found, retrying... attempt', attempt + 1);
+                    setTimeout(() => tryOpenCard(attempt + 1), 200);
+                }
+            };
+            
+            // Запускаем попытки открытия карточки
+            if (document.readyState === 'complete') {
+                // Страница уже загружена
+                setTimeout(() => tryOpenCard(0), 500);
+            } else {
+                // Ждем полной загрузки страницы
+                window.addEventListener('load', () => {
+                    setTimeout(() => tryOpenCard(0), 500);
+                });
+                
+                // Также пробуем после DOMContentLoaded
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        setTimeout(() => tryOpenCard(0), 500);
+                    });
+                }
+            }
+        }
+        
+        // Обработка кнопок назад/вперед в браузере
+        window.addEventListener('popstate', (event) => {
+            console.log('Popstate event:', event.state);
+            if (event.state && event.state.businessId) {
+                // Открываем карточку при нажатии "назад"
+                openBusinessCardById(event.state.businessId);
+            } else {
+                // Проверяем URL на наличие /business/{id}
+                const businessId = getBusinessIdFromUrl();
+                if (businessId) {
+                    openBusinessCardById(businessId);
+                } else {
+                    // Закрываем модальное окно при нажатии "назад" без состояния
+                    if (typeof closeBusinessModal === 'function') {
+                        closeBusinessModal();
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>
 

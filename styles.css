@@ -1478,7 +1478,7 @@ section {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10001;
+    z-index: 10003; /* Выше всех элементов в header */
     transition: all 0.3s ease;
     color: var(--text-primary);
 }
@@ -1498,6 +1498,35 @@ section {
     margin-bottom: 32px;
     align-items: flex-start;
     position: relative;
+    padding-right: 70px; /* Место для кнопки "Поделиться" и кнопки закрытия */
+}
+
+.modal-share-btn {
+    position: absolute;
+    top: 0;
+    right: 50px; /* Смещаем влево, чтобы не перекрывать кнопку закрытия */
+    background: rgba(0, 0, 0, 0.05);
+    border: none;
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+    z-index: 10002; /* Выше badge, но ниже кнопки закрытия */
+}
+
+.modal-share-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: var(--text-primary);
+    transform: scale(1.05);
+}
+
+.modal-share-btn:active {
+    transform: scale(0.95);
 }
 
 .modal-icon-wrapper {
@@ -1518,6 +1547,7 @@ section {
 
 .modal-title-section {
     flex: 1;
+    min-width: 0; /* Позволяет тексту обрезаться при необходимости */
 }
 
 .modal-title {
@@ -1526,6 +1556,8 @@ section {
     margin-bottom: 8px;
     color: var(--text-primary);
     line-height: 1.2;
+    padding-right: 170px; /* Место для badge, кнопки "Поделиться" и кнопки закрытия */
+    word-wrap: break-word;
 }
 
 .modal-location {
@@ -1539,7 +1571,25 @@ section {
 .modal-badge {
     position: absolute;
     top: 0;
-    right: 0;
+    right: 100px; /* Смещаем влево, чтобы не перекрывать кнопку "Поделиться" */
+    z-index: 10001; /* Ниже кнопок, но выше контента */
+}
+
+.modal-badge .card-badge {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    margin: 0;
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #4FACFE 0%, #00F2FE 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
 }
 
 .modal-body {
@@ -2392,10 +2442,55 @@ section {
     .modal-header {
         flex-direction: column;
         gap: 16px;
+        padding-right: 0; /* Убираем отступ на мобильных */
+        padding-top: 50px; /* Место для кнопки закрытия */
+    }
+    
+    .modal-close {
+        top: 10px;
+        right: 10px;
+        width: 36px;
+        height: 36px;
+        z-index: 10002;
+    }
+    
+    .modal-share-btn {
+        position: absolute;
+        top: 10px;
+        right: 56px; /* Смещаем влево от кнопки закрытия */
+        width: 36px;
+        height: 36px;
+        z-index: 10001;
+    }
+    
+    .modal-badge {
+        position: absolute;
+        top: 10px;
+        right: 102px; /* Смещаем влево от кнопки "Поделиться" */
+        z-index: 10000;
+    }
+    
+    .modal-badge .card-badge {
+        font-size: 10px;
+        padding: 4px 10px;
     }
 
     .modal-title {
         font-size: 24px;
+        padding-right: 0; /* Убираем отступ на мобильных */
+    }
+    
+    .modal-title-section {
+        width: 100%;
+    }
+    
+    .modal-icon-wrapper {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .modal-icon {
+        font-size: 30px;
     }
 
     .financial-grid {
@@ -2452,6 +2547,47 @@ section {
 @media (max-width: 480px) {
     .container {
         padding: 0 16px;
+    }
+    
+    .modal-header {
+        padding-top: 45px;
+    }
+    
+    .modal-close {
+        top: 8px;
+        right: 8px;
+        width: 32px;
+        height: 32px;
+    }
+    
+    .modal-share-btn {
+        top: 8px;
+        right: 48px;
+        width: 32px;
+        height: 32px;
+    }
+    
+    .modal-badge {
+        top: 8px;
+        right: 88px;
+    }
+    
+    .modal-badge .card-badge {
+        font-size: 9px;
+        padding: 3px 8px;
+    }
+    
+    .modal-title {
+        font-size: 20px;
+    }
+    
+    .modal-icon-wrapper {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .modal-icon {
+        font-size: 25px;
     }
 
     .form-wrapper {
