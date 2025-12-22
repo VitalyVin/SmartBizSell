@@ -844,9 +844,62 @@ $statusColors = [
             
             if (!providerSelect || !providerStatus) return;
             
-            // Получаем текущий провайдер из PHP (через data-атрибут или скрытое поле)
-            const currentProvider = '<?php echo getCurrentAIProvider(); ?>';
-            if (currentProvider) {
+            // Функция для сохранения выбора в localStorage
+            function saveProviderToLocalStorage(provider) {
+                try {
+                    localStorage.setItem('ai_provider', provider);
+                    localStorage.setItem('ai_provider_timestamp', Date.now().toString());
+                } catch (e) {
+                    console.warn('Не удалось сохранить выбор провайдера в localStorage:', e);
+                }
+            }
+            
+            // Функция для получения выбора из localStorage
+            function getProviderFromLocalStorage() {
+                try {
+                    const saved = localStorage.getItem('ai_provider');
+                    const timestamp = localStorage.getItem('ai_provider_timestamp');
+                    // Проверяем, что выбор не старше 30 дней
+                    if (saved && timestamp && (Date.now() - parseInt(timestamp)) < 30 * 24 * 60 * 60 * 1000) {
+                        if (['together', 'alibaba'].includes(saved)) {
+                            return saved;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Не удалось прочитать выбор провайдера из localStorage:', e);
+                }
+                return null;
+            }
+            
+            // Получаем текущий провайдер: сначала из PHP (сессия), затем из localStorage
+            let currentProvider = '<?php echo getCurrentAIProvider(); ?>';
+            const savedProvider = getProviderFromLocalStorage();
+            
+            // Если в сессии нет выбора, но есть в localStorage, синхронизируем с сервером
+            if (currentProvider === 'together' && savedProvider && savedProvider !== 'together') {
+                // Восстанавливаем выбор из localStorage
+                currentProvider = savedProvider;
+                providerSelect.value = currentProvider;
+                updateProviderStatus(currentProvider);
+                
+                // Синхронизируем с сервером в фоне
+                fetch('set_ai_provider.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        provider: currentProvider
+                    })
+                }).catch(err => console.warn('Не удалось синхронизировать выбор провайдера:', err));
+            } else if (currentProvider) {
+                providerSelect.value = currentProvider;
+                updateProviderStatus(currentProvider);
+                // Сохраняем в localStorage для резервной копии
+                saveProviderToLocalStorage(currentProvider);
+            } else if (savedProvider) {
+                // Если нет в сессии, используем сохраненный выбор
+                currentProvider = savedProvider;
                 providerSelect.value = currentProvider;
                 updateProviderStatus(currentProvider);
             }
@@ -854,6 +907,9 @@ $statusColors = [
             // Обработчик изменения провайдера
             providerSelect.addEventListener('change', function() {
                 const selectedProvider = this.value;
+                
+                // Сразу сохраняем в localStorage
+                saveProviderToLocalStorage(selectedProvider);
                 
                 // Показываем индикатор загрузки
                 providerStatus.textContent = 'Сохранение...';
