@@ -346,6 +346,35 @@ function validateEmail($email) {
 }
 
 /**
+ * Проверяет и добавляет поле welcome_shown в таблицу users, если его нет
+ * 
+ * Поле используется для отслеживания показа приветственного окна новым пользователям.
+ * 
+ * @return bool true если поле добавлено или уже существует, false при ошибке
+ */
+function ensureUsersWelcomeField() {
+    try {
+        $pdo = getDBConnection();
+        
+        // Проверяем, существует ли поле welcome_shown
+        $stmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'welcome_shown'");
+        if ($stmt->rowCount() == 0) {
+            // Добавляем поле welcome_shown
+            $pdo->exec("
+                ALTER TABLE users 
+                ADD COLUMN welcome_shown TINYINT(1) DEFAULT 0 
+                COMMENT 'Флаг показа приветственного окна (0 - не показано, 1 - показано)'
+            ");
+        }
+        
+        return true;
+    } catch (PDOException $e) {
+        error_log("Error ensuring welcome_shown field: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
  * Проверяет и создает таблицу password_reset_tokens, если она не существует
  * 
  * Таблица используется для хранения токенов восстановления пароля.

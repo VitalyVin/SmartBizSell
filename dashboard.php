@@ -28,6 +28,43 @@ if (!$user) {
     redirectToLogin();
 }
 
+// Проверяем и добавляем поле welcome_shown, если его нет
+ensureUsersWelcomeField();
+
+// Проверяем, нужно ли показывать приветственное окно
+$showWelcomeModal = false;
+
+// Принудительный показ через параметр URL (для тестирования)
+if (isset($_GET['force_welcome'])) {
+    $showWelcomeModal = true;
+    error_log("Welcome modal forced via URL parameter");
+} else {
+    // Проверяем значение в БД
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("SELECT welcome_shown FROM users WHERE id = ?");
+        $stmt->execute([$user['id']]);
+        $userData = $stmt->fetch();
+        
+        error_log("User welcome_shown value: " . var_export($userData, true));
+        
+        // Показываем окно, если:
+        // 1. Поле не существует (NULL) - для старых пользователей
+        // 2. Поле равно 0 - для новых пользователей
+        if (!isset($userData['welcome_shown']) || $userData['welcome_shown'] == 0 || $userData['welcome_shown'] === null) {
+            $showWelcomeModal = true;
+            error_log("Welcome modal will be shown (welcome_shown is 0 or null)");
+        } else {
+            error_log("Welcome modal will NOT be shown (welcome_shown = " . $userData['welcome_shown'] . ")");
+        }
+    } catch (PDOException $e) {
+        error_log("Error checking welcome_shown: " . $e->getMessage());
+        // При ошибке лучше показать окно, чем молчать
+        $showWelcomeModal = true;
+        error_log("Welcome modal will be shown due to error");
+    }
+}
+
 /**
  * Получение всех анкет текущего пользователя из базы данных
  * Анкеты сортируются по дате создания (новые первыми)
@@ -1973,6 +2010,186 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 border-radius: 4px !important; /* Прямоугольная форма вместо круглой */
                 aspect-ratio: auto; /* Убираем квадратную форму */
                 justify-content: center;
+            }
+        }
+        
+        /* Стили для приветственного модального окна */
+        .welcome-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .welcome-modal-overlay.active {
+            display: flex;
+        }
+        
+        .welcome-modal {
+            background: white;
+            border-radius: 20px;
+            max-width: 640px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+        
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        
+        .welcome-modal__header {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            padding: 28px 32px;
+            border-radius: 20px 20px 0 0;
+        }
+        
+        .welcome-modal__logo {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        
+        .welcome-modal__lead {
+            margin: 0;
+            font-size: 16px;
+            line-height: 1.6;
+            opacity: 0.95;
+        }
+        
+        .welcome-modal__content {
+            padding: 32px;
+        }
+        
+        .welcome-modal__title {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 16px;
+            color: #1d1d1f;
+        }
+        
+        .welcome-modal__text {
+            margin: 0 0 16px;
+            font-size: 15px;
+            line-height: 1.7;
+            color: #3c3c43;
+        }
+        
+        .welcome-modal__steps {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 24px;
+        }
+        
+        .welcome-modal__steps li {
+            background: #f7f8fd;
+            border: 1px solid #e6e8f2;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+        
+        .welcome-modal__steps strong {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 700;
+            color: #1d1d1f;
+            font-size: 15px;
+        }
+        
+        .welcome-modal__steps li {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #3c3c43;
+        }
+        
+        .welcome-modal__benefits {
+            background: #f0f4ff;
+            border-left: 4px solid #667EEA;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+        
+        .welcome-modal__benefits strong {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+            color: #1d1d1f;
+        }
+        
+        .welcome-modal__button {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 18px rgba(102, 126, 234, 0.28);
+        }
+        
+        .welcome-modal__button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+        }
+        
+        .welcome-modal__button:active {
+            transform: translateY(0);
+        }
+        
+        .welcome-modal__note {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 16px;
+            text-align: center;
+        }
+        
+        .welcome-modal__note a {
+            color: #667EEA;
+            text-decoration: none;
+        }
+        
+        .welcome-modal__note a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 640px) {
+            .welcome-modal {
+                max-width: 100%;
+                border-radius: 16px;
+            }
+            
+            .welcome-modal__header,
+            .welcome-modal__content {
+                padding: 22px 20px;
+            }
+            
+            .welcome-modal__title {
+                font-size: 20px;
             }
         }
         .dashboard-stats {
@@ -8168,7 +8385,120 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             } else {
                 initMobileMenu();
             }
+            
+            // Показ приветственного модального окна
+            <?php if ($showWelcomeModal): ?>
+            console.log('Welcome modal should be shown');
+            (function() {
+                function initWelcomeModal() {
+                    const welcomeModal = document.getElementById('welcome-modal');
+                    const welcomeButton = document.getElementById('welcome-understand-btn');
+                    
+                    console.log('Welcome modal element:', welcomeModal);
+                    console.log('Welcome button element:', welcomeButton);
+                    
+                    if (welcomeModal && welcomeButton) {
+                        // Показываем модальное окно при загрузке страницы
+                        welcomeModal.classList.add('active');
+                        document.body.style.overflow = 'hidden';
+                        console.log('Welcome modal activated');
+                        
+                        // Обработчик кнопки "Все понятно"
+                        welcomeButton.addEventListener('click', function() {
+                            console.log('Welcome button clicked');
+                            // Отправляем запрос на сохранение флага welcome_shown
+                            fetch('mark_welcome_shown.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({})
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log('Welcome shown response:', data);
+                                if (data.success) {
+                                    // Закрываем модальное окно
+                                    welcomeModal.classList.remove('active');
+                                    document.body.style.overflow = '';
+                                } else {
+                                    console.error('Error marking welcome as shown:', data.error);
+                                    // Все равно закрываем модальное окно
+                                    welcomeModal.classList.remove('active');
+                                    document.body.style.overflow = '';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                // Все равно закрываем модальное окно
+                                welcomeModal.classList.remove('active');
+                                document.body.style.overflow = '';
+                            });
+                        });
+                    } else {
+                        console.error('Welcome modal or button not found in DOM');
+                    }
+                }
+                
+                // Инициализируем после полной загрузки DOM
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initWelcomeModal);
+                } else {
+                    // DOM уже загружен
+                    setTimeout(initWelcomeModal, 100);
+                }
+            })();
+            <?php else: ?>
+            console.log('Welcome modal should NOT be shown (showWelcomeModal = false)');
+            <?php endif; ?>
     </script>
+    
+    <?php if ($showWelcomeModal): ?>
+    <!-- Приветственное модальное окно -->
+    <!-- DEBUG: showWelcomeModal = <?php echo $showWelcomeModal ? 'true' : 'false'; ?> -->
+    <div id="welcome-modal" class="welcome-modal-overlay">
+        <div class="welcome-modal">
+            <div class="welcome-modal__header">
+                <div class="welcome-modal__logo">SmartBizSell</div>
+                <p class="welcome-modal__lead">Добро пожаловать! Мы поможем быстро подготовить материалы и найти инвесторов.</p>
+            </div>
+            <div class="welcome-modal__content">
+                <h1 class="welcome-modal__title">
+                    Здравствуйте<?php echo $user['full_name'] ? ', ' . htmlspecialchars($user['full_name'], ENT_QUOTES, 'UTF-8') : ''; ?>!
+                </h1>
+                <p class="welcome-modal__text">Спасибо за регистрацию в SmartBizSell. Вот как получить максимум пользы от платформы:</p>
+                <ul class="welcome-modal__steps">
+                    <li>
+                        <strong>1. Заполните анкету продавца</strong>
+                        Расскажите о бизнесе, финансах и целях сделки. Это основа для точной оценки и релевантных инвесторов.
+                    </li>
+                    <li>
+                        <strong>2. Получите материалы автоматически</strong>
+                        Платформа соберет тизер, DCF-модель и оценку по мультипликаторам. Вам останется лишь уточнить детали.
+                    </li>
+                    <li>
+                        <strong>3. Пройдите модерацию</strong>
+                        Мы быстро проверим материалы и дадим рекомендации, чтобы повысить шансы на сделку.
+                    </li>
+                    <li>
+                        <strong>4. Сформируйте Term Sheet и выходите к инвесторам</strong>
+                        Готовые документы и сопроводительные данные — чтобы начать переговоры без задержек.
+                    </li>
+                </ul>
+                <div class="welcome-modal__benefits">
+                    <strong>Что вы получаете:</strong>
+                    быстрее подготовку документов, прозрачную оценку, готовые материалы для инвесторов и сопровождение команды M&A практиков.
+                </div>
+                <button id="welcome-understand-btn" class="welcome-modal__button">
+                    Все понятно
+                </button>
+                <p class="welcome-modal__note">
+                    Если понадобится помощь — напишите на <a href="mailto:info@smartbizsell.ru">info@smartbizsell.ru</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </body>
 </html>
 <?php

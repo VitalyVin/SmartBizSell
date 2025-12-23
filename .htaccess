@@ -2,7 +2,7 @@
 RewriteEngine On
 
 # Явно пропускаем API-файлы по имени (работает с любым базовым путем)
-RewriteCond %{REQUEST_URI} (^|/)(view_teaser|get_asset_documents|get_seller_contacts|moderation_api|blog_api|set_ai_provider)\.php [NC]
+RewriteCond %{REQUEST_URI} (^|/)(view_teaser|get_asset_documents|get_seller_contacts|moderation_api|blog_api|set_ai_provider|mark_welcome_shown)\.php [NC]
 RewriteRule . - [L]
 
 # Пропускаем прямые запросы к существующим файлам (включая PHP, CSS, JS и т.д.)
