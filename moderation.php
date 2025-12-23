@@ -177,6 +177,15 @@ $statusColors = [
             margin: 0 auto;
             padding: 40px 20px;
         }
+        body.moderation-page {
+            background: #f5f5f7;
+            padding-top: 96px; /* компенсируем фиксированный navbar */
+        }
+        @media (max-width: 768px) {
+            body.moderation-page {
+                padding-top: 120px;
+            }
+        }
         .moderation-header {
             margin-bottom: 32px;
             background: white;
@@ -401,7 +410,7 @@ $statusColors = [
         }
     </style>
 </head>
-<body>
+<body class="moderation-page">
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container">
