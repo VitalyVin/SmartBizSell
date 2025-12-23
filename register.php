@@ -153,6 +153,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $success = true;
             
+            // Приветственное письмо (не блокируем поток при ошибке отправки)
+            try {
+                sendWelcomeEmail($email, $full_name);
+            } catch (Throwable $t) {
+                error_log('Welcome email send failed: ' . $t->getMessage());
+            }
+            
             // Редирект в личный кабинет
             // Выполняется сразу после успешной регистрации
             header('Location: dashboard.php');
