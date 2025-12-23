@@ -796,6 +796,8 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Анкета продавца - SmartBizSell</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="canonical" href="<?php echo BASE_URL; ?>/seller_form.php">
     <link rel="stylesheet" href="styles.css?v=<?php echo time(); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -168,6 +168,8 @@ $statusColors = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Модерация тизеров - SmartBizSell</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="canonical" href="<?php echo BASE_URL; ?>/moderation.php">
     <link rel="stylesheet" href="styles.css?v=<?php echo time(); ?>">
     <style>
         .moderation-container {
