@@ -311,6 +311,18 @@ function handlePut($pdo, $action) {
             $params['slug'] = $slug;
         }
         
+        // Если статус меняется на published, устанавливаем published_at
+        if (isset($data['status']) && $data['status'] === 'published') {
+            // Проверяем, есть ли уже published_at
+            $stmt = $pdo->prepare("SELECT published_at FROM blog_posts WHERE id = :id");
+            $stmt->execute(['id' => $id]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (empty($existing['published_at'])) {
+                $fields[] = "published_at = :published_at";
+                $params['published_at'] = date('Y-m-d H:i:s');
+            }
+        }
+        
         if (empty($fields)) {
             ob_clean();
             http_response_code(400);
@@ -318,6 +330,9 @@ function handlePut($pdo, $action) {
             ob_end_flush();
             return;
         }
+        
+        // Всегда обновляем updated_at
+        $fields[] = "updated_at = NOW()";
         
         $sql = "UPDATE blog_posts SET " . implode(', ', $fields) . " WHERE id = :id";
         $stmt = $pdo->prepare($sql);

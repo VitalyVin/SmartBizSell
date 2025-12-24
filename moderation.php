@@ -247,6 +247,28 @@ $statusColors = [
                 min-width: auto !important;
             }
         }
+        
+        /* Стили для табов */
+        .moderation-tab.active {
+            color: var(--primary-color) !important;
+            border-bottom-color: var(--primary-color) !important;
+        }
+        .moderation-tab-content {
+            display: none;
+        }
+        .moderation-tab-content.active {
+            display: block;
+        }
+        @media (max-width: 768px) {
+            .moderation-tabs {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .moderation-tab {
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+        }
         .moderation-header h1 {
             font-size: 32px;
             font-weight: 800;
@@ -436,10 +458,22 @@ $statusColors = [
 
     <div class="moderation-container">
         <div class="moderation-header">
-            <h1>Модерация тизеров</h1>
-            <p>Проверка и редактирование тизеров перед публикацией</p>
+            <h1>Модерация</h1>
+            <p>Управление тизерами и блогом</p>
         </div>
         
+        <!-- Табы для переключения между разделами -->
+        <div class="moderation-tabs" style="display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid rgba(0, 0, 0, 0.1);">
+            <button class="moderation-tab active" data-tab="teasers" style="padding: 12px 24px; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 16px; font-weight: 600; color: var(--text-secondary); transition: all 0.3s;">
+                Модерация тизеров
+            </button>
+            <button class="moderation-tab" data-tab="blog" style="padding: 12px 24px; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 16px; font-weight: 600; color: var(--text-secondary); transition: all 0.3s;">
+                Управление блогом
+            </button>
+        </div>
+        
+        <!-- Контент модерации тизеров -->
+        <div id="teasers-tab" class="moderation-tab-content active">
         <!-- Переключатель AI провайдера -->
         <div class="ai-provider-section" style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);">
             <div class="ai-provider-selector" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -632,6 +666,114 @@ $statusColors = [
                 <?php endif; ?>
             </div>
         <?php endif; ?>
+        </div>
+        <!-- Конец контента модерации тизеров -->
+        
+        <!-- Контент управления блогом -->
+        <div id="blog-tab" class="moderation-tab-content">
+            <div style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+                    <h2 style="margin: 0; font-size: 24px; font-weight: 700;">Статьи блога</h2>
+                    <button id="create-blog-post-btn" style="padding: 12px 24px; background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; white-space: nowrap;">
+                        + Создать статью
+                    </button>
+                </div>
+
+                <!-- Фильтры -->
+                <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <select id="blog-status-filter" style="padding: 10px 16px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; min-width: 150px;">
+                        <option value="all">Все статусы</option>
+                        <option value="draft">Черновики</option>
+                        <option value="published">Опубликовано</option>
+                        <option value="archived">Архив</option>
+                    </select>
+                    <input type="text" id="blog-search" placeholder="Поиск по заголовку..." style="flex: 1; min-width: 200px; padding: 10px 16px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px;">
+                </div>
+
+                <!-- Список статей -->
+                <div id="blog-posts-list" style="min-height: 200px;">
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        Загрузка статей...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Модальное окно для создания/редактирования статьи -->
+            <div id="blog-post-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 10000; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;">
+                <div style="background: white; border-radius: 20px; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
+                    <div style="position: sticky; top: 0; background: white; padding: 24px; border-bottom: 1px solid rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; z-index: 1;">
+                        <h3 id="blog-modal-title" style="margin: 0; font-size: 24px; font-weight: 700;">Создать статью</h3>
+                        <button id="close-blog-modal" style="background: none; border: none; font-size: 28px; cursor: pointer; color: var(--text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>
+                    </div>
+                    <form id="blog-post-form" style="padding: 24px;">
+                        <input type="hidden" id="blog-post-id" value="">
+                        
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Заголовок *</label>
+                            <input type="text" id="blog-post-title" required style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 16px; box-sizing: border-box;">
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Краткое описание (excerpt)</label>
+                            <textarea id="blog-post-excerpt" rows="3" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Содержание (HTML) *</label>
+                            <textarea id="blog-post-content" required rows="15" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; font-family: 'Courier New', monospace; resize: vertical; box-sizing: border-box;"></textarea>
+                            <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">Можно использовать HTML теги для форматирования</small>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Категория</label>
+                                <input type="text" id="blog-post-category" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Теги (через запятую)</label>
+                                <input type="text" id="blog-post-tags" placeholder="тег1, тег2, тег3" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">SEO заголовок</label>
+                            <input type="text" id="blog-post-meta-title" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">SEO описание</label>
+                            <textarea id="blog-post-meta-description" rows="2" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Ключевые слова</label>
+                            <input type="text" id="blog-post-keywords" placeholder="ключевое слово1, ключевое слово2" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+                        </div>
+
+                        <div style="margin-bottom: 24px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">Статус</label>
+                            <select id="blog-post-status" style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+                                <option value="draft">Черновик</option>
+                                <option value="published">Опубликовано</option>
+                                <option value="archived">Архив</option>
+                            </select>
+                        </div>
+
+                        <div id="blog-post-message" style="margin-bottom: 16px; padding: 12px; border-radius: 8px; display: none;"></div>
+
+                        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                            <button type="button" id="cancel-blog-post" style="padding: 12px 24px; background: white; color: var(--text-primary); border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
+                                Отмена
+                            </button>
+                            <button type="submit" style="padding: 12px 24px; background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
+                                Сохранить
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <!-- Конец контента управления блогом -->
     </div>
 
     <script>
@@ -970,6 +1112,322 @@ $statusColors = [
                 providerStatus.style.color = 'var(--text-secondary)';
             }
         })();
+        
+        // Управление табами
+        (function() {
+            document.querySelectorAll('.moderation-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const targetTab = this.dataset.tab;
+                    
+                    // Обновляем активные табы
+                    document.querySelectorAll('.moderation-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Показываем нужный контент
+                    document.querySelectorAll('.moderation-tab-content').forEach(c => c.classList.remove('active'));
+                    const targetContent = document.getElementById(targetTab + '-tab');
+                    if (targetContent) {
+                        targetContent.classList.add('active');
+                    }
+                    
+                    // Загружаем статьи, если переключились на блог
+                    if (targetTab === 'blog') {
+                        loadBlogPosts();
+                    }
+                });
+            });
+        })();
+        
+        // Управление блогом
+        let blogPosts = [];
+        
+        function loadBlogPosts() {
+            const status = document.getElementById('blog-status-filter')?.value || 'all';
+            const search = document.getElementById('blog-search')?.value || '';
+            
+            fetch(`blog_api.php?action=list&status=${status}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        blogPosts = data.posts || [];
+                        
+                        // Фильтрация по поиску
+                        if (search) {
+                            blogPosts = blogPosts.filter(post => 
+                                post.title.toLowerCase().includes(search.toLowerCase())
+                            );
+                        }
+                        
+                        renderBlogPosts();
+                    } else {
+                        const list = document.getElementById('blog-posts-list');
+                        if (list) {
+                            list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">Ошибка загрузки статей: ' + (data.message || 'Неизвестная ошибка') + '</div>';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading blog posts:', error);
+                    const list = document.getElementById('blog-posts-list');
+                    if (list) {
+                        list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--accent-color);">Ошибка загрузки статей</div>';
+                    }
+                });
+        }
+        
+        function renderBlogPosts() {
+            const list = document.getElementById('blog-posts-list');
+            if (!list) return;
+            
+            if (blogPosts.length === 0) {
+                list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">Статей не найдено</div>';
+                return;
+            }
+            
+            list.innerHTML = blogPosts.map(post => `
+                <div style="padding: 20px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background=''">
+                    <div style="flex: 1;">
+                        <h3 style="margin: 0 0 8px; font-size: 18px; font-weight: 700; color: var(--text-primary);">${escapeHtml(post.title)}</h3>
+                        ${post.excerpt ? `<p style="margin: 0 0 4px; color: var(--text-secondary); font-size: 14px; line-height: 1.5;">${escapeHtml(post.excerpt)}</p>` : ''}
+                        <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap;">
+                            <span>Статус: <strong style="color: ${getStatusColor(post.status)}">${getStatusLabel(post.status)}</strong></span>
+                            ${post.category ? `<span>Категория: ${escapeHtml(post.category)}</span>` : ''}
+                            <span>Создано: ${formatDate(post.created_at)}</span>
+                            ${post.published_at ? `<span>Опубликовано: ${formatDate(post.published_at)}</span>` : ''}
+                            ${post.views > 0 ? `<span>Просмотров: ${post.views}</span>` : ''}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                        <button onclick="editBlogPost(${post.id})" style="padding: 8px 16px; background: var(--primary-color); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+                            Редактировать
+                        </button>
+                        <button onclick="deleteBlogPost(${post.id})" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+                            Удалить
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function getStatusLabel(status) {
+            const labels = {
+                'draft': 'Черновик',
+                'published': 'Опубликовано',
+                'archived': 'Архив'
+            };
+            return labels[status] || status;
+        }
+        
+        function getStatusColor(status) {
+            const colors = {
+                'draft': '#FF9500',
+                'published': '#34C759',
+                'archived': '#86868B'
+            };
+            return colors[status] || '#86868B';
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return '—';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Создание статьи
+        const createBlogPostBtn = document.getElementById('create-blog-post-btn');
+        if (createBlogPostBtn) {
+            createBlogPostBtn.addEventListener('click', function() {
+                document.getElementById('blog-modal-title').textContent = 'Создать статью';
+                const form = document.getElementById('blog-post-form');
+                if (form) form.reset();
+                document.getElementById('blog-post-id').value = '';
+                document.getElementById('blog-post-status').value = 'draft';
+                document.getElementById('blog-post-message').style.display = 'none';
+                document.getElementById('blog-post-modal').style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+            });
+        }
+        
+        // Закрытие модального окна
+        const closeBlogModalBtn = document.getElementById('close-blog-modal');
+        const cancelBlogPostBtn = document.getElementById('cancel-blog-post');
+        
+        function closeBlogModal() {
+            document.getElementById('blog-post-modal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        
+        if (closeBlogModalBtn) {
+            closeBlogModalBtn.addEventListener('click', closeBlogModal);
+        }
+        if (cancelBlogPostBtn) {
+            cancelBlogPostBtn.addEventListener('click', closeBlogModal);
+        }
+        
+        // Закрытие при клике на overlay
+        const blogModal = document.getElementById('blog-post-modal');
+        if (blogModal) {
+            blogModal.addEventListener('click', function(e) {
+                if (e.target === blogModal) {
+                    closeBlogModal();
+                }
+            });
+        }
+        
+        // Редактирование статьи
+        window.editBlogPost = function(id) {
+            // Показываем модальное окно с индикатором загрузки
+            document.getElementById('blog-modal-title').textContent = 'Редактировать статью';
+            document.getElementById('blog-post-id').value = id;
+            document.getElementById('blog-post-message').style.display = 'block';
+            document.getElementById('blog-post-message').style.background = 'rgba(59, 130, 246, 0.1)';
+            document.getElementById('blog-post-message').style.border = '1px solid rgba(59, 130, 246, 0.3)';
+            document.getElementById('blog-post-message').style.color = '#1e40af';
+            document.getElementById('blog-post-message').textContent = 'Загрузка статьи...';
+            document.getElementById('blog-post-modal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            
+            // Загружаем полную статью через API
+            fetch(`blog_api.php?action=get&id=${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.post) {
+                        const post = data.post;
+                        document.getElementById('blog-post-title').value = post.title || '';
+                        document.getElementById('blog-post-excerpt').value = post.excerpt || '';
+                        document.getElementById('blog-post-content').value = post.content || '';
+                        document.getElementById('blog-post-category').value = post.category || '';
+                        document.getElementById('blog-post-tags').value = post.tags || '';
+                        document.getElementById('blog-post-meta-title').value = post.meta_title || '';
+                        document.getElementById('blog-post-meta-description').value = post.meta_description || '';
+                        document.getElementById('blog-post-keywords').value = post.keywords || '';
+                        document.getElementById('blog-post-status').value = post.status || 'draft';
+                        document.getElementById('blog-post-message').style.display = 'none';
+                    } else {
+                        document.getElementById('blog-post-message').style.background = '#f8d7da';
+                        document.getElementById('blog-post-message').style.border = '1px solid #f5c6cb';
+                        document.getElementById('blog-post-message').style.color = '#721c24';
+                        document.getElementById('blog-post-message').textContent = '✗ Ошибка загрузки статьи: ' + (data.message || 'Неизвестная ошибка');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading post:', error);
+                    document.getElementById('blog-post-message').style.background = '#f8d7da';
+                    document.getElementById('blog-post-message').style.border = '1px solid #f5c6cb';
+                    document.getElementById('blog-post-message').style.color = '#721c24';
+                    document.getElementById('blog-post-message').textContent = '✗ Ошибка загрузки статьи';
+                });
+        };
+        
+        // Удаление статьи
+        window.deleteBlogPost = function(id) {
+            if (!confirm('Вы уверены, что хотите удалить эту статью?')) return;
+            
+            fetch(`blog_api.php?action=delete&id=${id}`, { method: 'DELETE' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadBlogPosts();
+                    } else {
+                        alert('Ошибка удаления: ' + (data.message || 'Неизвестная ошибка'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting post:', error);
+                    alert('Ошибка удаления статьи');
+                });
+        };
+        
+        // Сохранение статьи
+        const blogPostForm = document.getElementById('blog-post-form');
+        if (blogPostForm) {
+            blogPostForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const postId = document.getElementById('blog-post-id').value;
+                const isEdit = !!postId;
+                
+                const data = {
+                    title: document.getElementById('blog-post-title').value,
+                    excerpt: document.getElementById('blog-post-excerpt').value,
+                    content: document.getElementById('blog-post-content').value,
+                    category: document.getElementById('blog-post-category').value,
+                    tags: document.getElementById('blog-post-tags').value,
+                    meta_title: document.getElementById('blog-post-meta-title').value,
+                    meta_description: document.getElementById('blog-post-meta-description').value,
+                    keywords: document.getElementById('blog-post-keywords').value,
+                    status: document.getElementById('blog-post-status').value
+                };
+                
+                const url = isEdit 
+                    ? `blog_api.php?action=update&id=${postId}`
+                    : 'blog_api.php?action=create';
+                const method = isEdit ? 'PUT' : 'POST';
+                
+                const messageDiv = document.getElementById('blog-post-message');
+                messageDiv.style.display = 'block';
+                messageDiv.style.background = 'rgba(59, 130, 246, 0.1)';
+                messageDiv.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+                messageDiv.style.color = '#1e40af';
+                messageDiv.textContent = 'Сохранение...';
+                
+                fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        messageDiv.style.background = '#d4edda';
+                        messageDiv.style.border = '1px solid #c3e6cb';
+                        messageDiv.style.color = '#155724';
+                        messageDiv.textContent = '✓ ' + (data.message || 'Статья сохранена');
+                        setTimeout(() => {
+                            closeBlogModal();
+                            loadBlogPosts();
+                        }, 1000);
+                    } else {
+                        messageDiv.style.background = '#f8d7da';
+                        messageDiv.style.border = '1px solid #f5c6cb';
+                        messageDiv.style.color = '#721c24';
+                        messageDiv.textContent = '✗ ' + (data.message || 'Ошибка сохранения');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving post:', error);
+                    messageDiv.style.background = '#f8d7da';
+                    messageDiv.style.border = '1px solid #f5c6cb';
+                    messageDiv.style.color = '#721c24';
+                    messageDiv.textContent = '✗ Ошибка сохранения статьи';
+                });
+            });
+        }
+        
+        // Фильтры и поиск
+        const blogStatusFilter = document.getElementById('blog-status-filter');
+        const blogSearch = document.getElementById('blog-search');
+        
+        if (blogStatusFilter) {
+            blogStatusFilter.addEventListener('change', loadBlogPosts);
+        }
+        
+        if (blogSearch) {
+            let searchTimeout;
+            blogSearch.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    loadBlogPosts();
+                }, 500);
+            });
+        }
     </script>
     
     <script src="script.js?v=<?php echo time(); ?>"></script>
