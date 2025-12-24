@@ -217,6 +217,140 @@ $pageDescription = "Полезные статьи о продаже и поку�
             margin-bottom: 16px;
             color: var(--text-primary);
         }
+        /* Обеспечиваем правильное отображение навигации */
+        .navbar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 1000 !important;
+            background: var(--blur-bg) !important;
+            backdrop-filter: saturate(180%) blur(20px) !important;
+            -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
+            border-bottom: 1px solid var(--blur-border) !important;
+        }
+        .nav-content {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            padding: 16px 0 !important;
+        }
+        .nav-menu {
+            display: flex !important;
+            list-style: none !important;
+            gap: 32px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .nav-menu li {
+            list-style: none !important;
+        }
+        .nav-menu a {
+            color: var(--text-primary) !important;
+            text-decoration: none !important;
+            font-weight: 500 !important;
+            font-size: 15px !important;
+            transition: color 0.3s ease !important;
+            position: relative !important;
+        }
+        .nav-menu a:hover {
+            color: var(--primary-color) !important;
+        }
+        .nav-menu a::after {
+            content: '' !important;
+            position: absolute !important;
+            bottom: -4px !important;
+            left: 0 !important;
+            width: 0 !important;
+            height: 2px !important;
+            background: var(--primary-color) !important;
+            transition: width 0.3s ease !important;
+        }
+        .nav-menu a:hover::after {
+            width: 100% !important;
+        }
+        .logo {
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            font-size: 22px !important;
+            font-weight: 800 !important;
+            text-decoration: none !important;
+            color: var(--text-primary) !important;
+        }
+        .logo:hover {
+            text-decoration: none !important;
+        }
+        .nav-toggle {
+            display: none !important;
+        }
+        @media (max-width: 768px) {
+            .blog-container {
+                padding: 100px 16px 60px;
+            }
+            .blog-header h1 {
+                font-size: 32px;
+            }
+            .blog-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            .nav-toggle {
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 4px !important;
+                background: none !important;
+                border: none !important;
+                cursor: pointer !important;
+                padding: 8px !important;
+            }
+            .nav-toggle span {
+                width: 24px !important;
+                height: 2px !important;
+                background: var(--text-primary) !important;
+                transition: all 0.3s ease !important;
+            }
+            .nav-toggle.active span:nth-child(1) {
+                transform: rotate(45deg) translate(7px, 7px);
+            }
+            .nav-toggle.active span:nth-child(2) {
+                opacity: 0;
+            }
+            .nav-toggle.active span:nth-child(3) {
+                transform: rotate(-45deg) translate(7px, -7px);
+            }
+            .nav-menu {
+                position: fixed !important;
+                top: 70px !important;
+                left: 0 !important;
+                right: 0 !important;
+                flex-direction: column !important;
+                background: var(--blur-bg) !important;
+                backdrop-filter: saturate(180%) blur(20px) !important;
+                -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
+                padding: 20px !important;
+                gap: 16px !important;
+                transform: translateX(-100%) !important;
+                transition: transform 0.3s ease !important;
+                border-bottom: 1px solid var(--blur-border) !important;
+                z-index: 1001 !important;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+            }
+            .nav-menu.active {
+                transform: translateX(0) !important;
+            }
+            .nav-menu li {
+                width: 100%;
+            }
+            .nav-menu a {
+                display: block !important;
+                padding: 12px 0 !important;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+            }
+            .nav-menu a::after {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -229,20 +363,31 @@ $pageDescription = "Полезные статьи о продаже и поку�
                     <span class="logo-text">SmartBizSell.ru</span>
                 </a>
                 <ul class="nav-menu">
-                    <li><a href="/#features">Возможности</a></li>
                     <li><a href="/#how-it-works">Как это работает</a></li>
                     <li><a href="/#buy-business">Купить бизнес</a></li>
-                    <li><a href="/blog" style="color: #667EEA; font-weight: 600;">Блог</a></li>
+                    <li><a href="/blog">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
-                        <li><a href="dashboard.php">Продать бизнес</a></li>
-                        <li><a href="dashboard.php">Личный кабинет</a></li>
-                        <li><a href="logout.php">Выйти</a></li>
+                        <li><a href="/dashboard.php">Продать бизнес</a></li>
+                        <?php if (isModerator()): ?>
+                            <li><a href="/moderation.php">Модерация</a></li>
+                        <?php endif; ?>
                     <?php else: ?>
-                        <li><a href="login.php">Продать бизнес</a></li>
-                        <li><a href="login.php">Войти</a></li>
-                        <li><a href="register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Регистрация</a></li>
+                        <li><a href="/login.php">Продать бизнес</a></li>
+                    <?php endif; ?>
+                    <li><a href="/#contact">Контакты</a></li>
+                    <?php if (isLoggedIn()): ?>
+                        <li><a href="/dashboard.php">Личный кабинет</a></li>
+                        <li><a href="/logout.php">Выйти</a></li>
+                    <?php else: ?>
+                        <li><a href="/login.php">Войти</a></li>
+                        <li><a href="/register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Регистрация</a></li>
                     <?php endif; ?>
                 </ul>
+                <button class="nav-toggle" aria-label="Toggle menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
             </div>
         </div>
     </nav>
@@ -339,6 +484,26 @@ $pageDescription = "Полезные статьи о продаже и поку�
     </script>
 
     <script src="script.js?v=<?php echo time(); ?>"></script>
+    <script>
+        // Обработка скролла для навигации (как на главной странице)
+        (function() {
+            const navbar = document.querySelector('.navbar');
+            if (!navbar) return;
+            
+            let lastScroll = 0;
+            window.addEventListener('scroll', () => {
+                const currentScroll = window.pageYOffset;
+                
+                if (currentScroll > 50) {
+                    navbar.classList.add('scrolled');
+                } else {
+                    navbar.classList.remove('scrolled');
+                }
+                
+                lastScroll = currentScroll;
+            });
+        })();
+    </script>
 </body>
 </html>
 

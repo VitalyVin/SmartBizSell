@@ -196,6 +196,15 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
         .nav-toggle {
             display: none !important;
         }
+        .nav-toggle.active span:nth-child(1) {
+            transform: rotate(45deg) translate(7px, 7px) !important;
+        }
+        .nav-toggle.active span:nth-child(2) {
+            opacity: 0 !important;
+        }
+        .nav-toggle.active span:nth-child(3) {
+            transform: rotate(-45deg) translate(7px, -7px) !important;
+        }
         @media (max-width: 768px) {
             .nav-toggle {
                 display: flex !important;
@@ -220,15 +229,28 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
                 flex-direction: column !important;
                 background: var(--blur-bg) !important;
                 backdrop-filter: saturate(180%) blur(20px) !important;
+                -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
                 padding: 20px !important;
                 gap: 16px !important;
                 transform: translateX(-100%) !important;
                 transition: transform 0.3s ease !important;
                 border-bottom: 1px solid var(--blur-border) !important;
                 z-index: 1001 !important;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
             }
             .nav-menu.active {
                 transform: translateX(0) !important;
+            }
+            .nav-menu li {
+                width: 100%;
+            }
+            .nav-menu a {
+                display: block !important;
+                padding: 12px 0 !important;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+            }
+            .nav-menu a::after {
+                display: none !important;
             }
         }
         .blog-post-container {
