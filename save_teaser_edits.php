@@ -135,13 +135,33 @@ function sanitizeTeaserHtml(string $html): string
     // Разрешенные атрибуты
     $allowedAttributes = [
         'class', 'id', 'data-chart', 'data-chart-id', 'data-chart-ready',
-        'data-variant', 'aria-hidden', 'href', 'target' // href и target для ссылок
+        'data-variant', 'aria-hidden', 'href', 'target', 'style' // style для графиков ApexCharts
     ];
     
     // Функция для рекурсивной очистки элементов
     $cleanNode = function($node) use (&$cleanNode, $allowedTags, $allowedAttributes) {
         if ($node->nodeType === XML_ELEMENT_NODE) {
             $tagName = strtolower($node->nodeName);
+            
+            // Специальная обработка для контейнеров графиков - сохраняем их полностью
+            $isChartContainer = false;
+            if ($node->hasAttribute('data-chart') || 
+                ($node->hasAttribute('class') && stripos($node->getAttribute('class'), 'teaser-chart') !== false)) {
+                $isChartContainer = true;
+            }
+            
+            // Если это контейнер графика, сохраняем его как есть (но проверяем дочерние элементы)
+            if ($isChartContainer && $tagName === 'div') {
+                // Обрабатываем дочерние элементы, но не удаляем сам контейнер
+                $children = [];
+                foreach ($node->childNodes as $child) {
+                    $children[] = $child;
+                }
+                foreach ($children as $child) {
+                    $cleanNode($child);
+                }
+                return;
+            }
             
             // Если тег не разрешен, заменяем его содержимым
             if (!in_array($tagName, $allowedTags)) {
@@ -150,14 +170,20 @@ function sanitizeTeaserHtml(string $html): string
                 while ($node->firstChild) {
                     $fragment->appendChild($node->firstChild);
                 }
-                $node->parentNode->replaceChild($fragment, $node);
+                if ($node->parentNode) {
+                    $node->parentNode->replaceChild($fragment, $node);
+                }
                 return;
             }
             
-            // Удаляем неразрешенные атрибуты
+            // Удаляем неразрешенные атрибуты (кроме важных для графиков)
             $attributesToRemove = [];
             foreach ($node->attributes as $attr) {
                 $attrName = strtolower($attr->nodeName);
+                // Сохраняем все data-* атрибуты для графиков
+                if (strpos($attrName, 'data-') === 0) {
+                    continue; // Пропускаем все data-* атрибуты
+                }
                 if (!in_array($attrName, $allowedAttributes)) {
                     $attributesToRemove[] = $attr;
                 }

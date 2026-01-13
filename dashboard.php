@@ -6776,25 +6776,35 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }
 
                 // Карточки - параграфы, списки, футеры
-                const cardParagraphs = teaserResult.querySelectorAll('.teaser-card p:not(.teaser-card__subtitle)');
+                // Исключаем карточки с графиками из редактирования
+                const cardParagraphs = teaserResult.querySelectorAll('.teaser-card:not(.teaser-chart-card) p:not(.teaser-card__subtitle):not(.teaser-chart__note)');
                 cardParagraphs.forEach(p => {
-                    p.contentEditable = 'true';
-                    p.classList.add('teaser-editable');
-                    editableElements.push(p);
+                    // Проверяем, что элемент не находится внутри контейнера графика
+                    if (!p.closest('.teaser-chart')) {
+                        p.contentEditable = 'true';
+                        p.classList.add('teaser-editable');
+                        editableElements.push(p);
+                    }
                 });
 
-                const cardListItems = teaserResult.querySelectorAll('.teaser-card li');
+                const cardListItems = teaserResult.querySelectorAll('.teaser-card:not(.teaser-chart-card) li');
                 cardListItems.forEach(li => {
-                    li.contentEditable = 'true';
-                    li.classList.add('teaser-editable');
-                    editableElements.push(li);
+                    // Проверяем, что элемент не находится внутри контейнера графика
+                    if (!li.closest('.teaser-chart')) {
+                        li.contentEditable = 'true';
+                        li.classList.add('teaser-editable');
+                        editableElements.push(li);
+                    }
                 });
 
                 const cardFooters = teaserResult.querySelectorAll('.teaser-card__footer');
                 cardFooters.forEach(footer => {
-                    footer.contentEditable = 'true';
-                    footer.classList.add('teaser-editable');
-                    editableElements.push(footer);
+                    // Проверяем, что элемент не находится внутри контейнера графика
+                    if (!footer.closest('.teaser-chart-card')) {
+                        footer.contentEditable = 'true';
+                        footer.classList.add('teaser-editable');
+                        editableElements.push(footer);
+                    }
                 });
 
                 // Показываем кнопки сохранения/отмены
@@ -6827,9 +6837,13 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     teaserResult.innerHTML = originalTeaserHtml;
                     // Переинициализируем графики, если они были
                     if (typeof initTeaserCharts === 'function') {
-                        initTeaserCharts();
+                        setTimeout(() => {
+                            initTeaserCharts();
+                        }, 100);
                     }
                 }
+                // Примечание: переинициализацию графиков при сохранении делаем в saveTeaserEdits,
+                // чтобы избежать конфликтов и множественных инициализаций
 
                 // Скрываем кнопки сохранения/отмены
                 if (editTeaserBtn) editTeaserBtn.style.display = 'inline-flex';
@@ -6854,8 +6868,38 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     return;
                 }
 
-                // Собираем HTML из редактируемых элементов
-                const editedHtml = teaserResult.innerHTML;
+                // Клонируем элемент, чтобы не изменять оригинал
+                const clonedResult = teaserResult.cloneNode(true);
+                
+                // Очищаем контейнеры графиков от SVG элементов, оставляя только data-chart атрибут
+                // Это необходимо, чтобы графики правильно переинициализировались после сохранения
+                const chartContainers = clonedResult.querySelectorAll('.teaser-chart[data-chart]');
+                chartContainers.forEach(container => {
+                    // Сохраняем data-chart атрибут
+                    const chartData = container.getAttribute('data-chart');
+                    const chartId = container.getAttribute('data-chart-id');
+                    const containerId = container.id;
+                    
+                    // Очищаем контейнер от SVG элементов, созданных ApexCharts
+                    container.innerHTML = '';
+                    
+                    // Восстанавливаем атрибуты
+                    if (chartData) {
+                        container.setAttribute('data-chart', chartData);
+                    }
+                    if (chartId) {
+                        container.setAttribute('data-chart-id', chartId);
+                    }
+                    if (containerId) {
+                        container.id = containerId;
+                    }
+                    
+                    // Удаляем data-chart-ready, чтобы график переинициализировался
+                    container.removeAttribute('data-chart-ready');
+                });
+
+                // Собираем HTML из клонированного элемента
+                const editedHtml = clonedResult.innerHTML;
 
                 // Валидация: проверяем, что есть контент
                 if (!editedHtml || editedHtml.trim().length === 0) {
@@ -6891,12 +6935,65 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                         saveTeaserEditsBtn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
                     }
 
-                    // Обновляем оригинальный HTML для следующего редактирования
-                    originalTeaserHtml = editedHtml;
-
                     // Выходим из режима редактирования
+                    disableTeaserEditMode(false);
+
+                    // Обновляем оригинальный HTML для следующего редактирования
+                    originalTeaserHtml = teaserResult.innerHTML;
+
+                    // Переинициализируем графики после сохранения
+                    // Сначала уничтожаем существующие графики, затем создаем новые
+                    const reinitCharts = () => {
+                        if (typeof ApexCharts === 'undefined' || typeof initTeaserCharts !== 'function') {
+                            console.warn('ApexCharts or initTeaserCharts not available');
+                            return;
+                        }
+                        
+                        const containers = teaserResult.querySelectorAll('.teaser-chart[data-chart]');
+                        if (containers.length === 0) {
+                            console.warn('No chart containers found for reinitialization');
+                            return;
+                        }
+                        
+                        console.log('Reinitializing', containers.length, 'chart(s)');
+                        
+                        // Сначала уничтожаем все существующие графики
+                        containers.forEach(container => {
+                            const chartId = container.id || container.getAttribute('data-chart-id');
+                            if (chartId) {
+                                const existingChart = ApexCharts.exec(chartId);
+                                if (existingChart) {
+                                    existingChart.destroy();
+                                }
+                            }
+                            
+                            // Очищаем контейнер
+                            container.innerHTML = '';
+                            
+                            // Удаляем data-chart-ready для переинициализации
+                            container.removeAttribute('data-chart-ready');
+                            
+                            // Убеждаемся, что data-chart атрибут сохранен
+                            if (!container.getAttribute('data-chart')) {
+                                console.error('Chart container missing data-chart attribute after save');
+                            }
+                        });
+                        
+                        // Затем инициализируем графики заново
+                        initTeaserCharts();
+                    };
+                    
+                    // Первая попытка через 300ms
+                    setTimeout(reinitCharts, 300);
+                    
+                    // Вторая попытка через 800ms (на случай, если первая не сработала)
+                    setTimeout(reinitCharts, 800);
+                    
+                    // Третья попытка через 1500ms (последняя попытка)
+                    setTimeout(reinitCharts, 1500);
+
+                    // Восстанавливаем кнопку
                     setTimeout(() => {
-                        disableTeaserEditMode(false);
                         if (saveTeaserEditsBtn) {
                             saveTeaserEditsBtn.textContent = originalText;
                             saveTeaserEditsBtn.style.background = '';
