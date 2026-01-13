@@ -683,11 +683,6 @@ if (isset($_GET['form_id'])) {
     $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
     $stmt->execute([$formId, $_SESSION['user_id']]);
     $existingForm = $stmt->fetch();
-                    } else {
-    // Загружаем последний черновик если нет form_id
-    $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE user_id = ? AND status = 'draft' ORDER BY updated_at DESC LIMIT 1");
-    $stmt->execute([$_SESSION['user_id']]);
-    $existingForm = $stmt->fetch();
     if ($existingForm) {
         $formId = $existingForm['id'];
     }

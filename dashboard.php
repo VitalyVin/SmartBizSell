@@ -4448,6 +4448,11 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             Продолжить заполнение
                         </a>
                         <a href="export_form_json.php?id=<?php echo $form['id']; ?>" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px;">📥 JSON</a>
+                        <button type="button" class="btn btn-danger delete-draft-btn" 
+                                data-form-id="<?php echo $form['id']; ?>"
+                                style="padding: 8px 16px; font-size: 12px; background: #FF3B30; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                            🗑️ Удалить
+                        </button>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -8806,6 +8811,77 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             <?php else: ?>
             console.log('Welcome modal should NOT be shown (showWelcomeModal = false)');
             <?php endif; ?>
+    </script>
+    
+    <script>
+        // Обработчик удаления черновиков
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.delete-draft-btn').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const formId = this.getAttribute('data-form-id');
+                    const row = this.closest('.table-row');
+                    const formName = row ? row.querySelector('strong')?.textContent.trim() || 'черновик' : 'черновик';
+                    
+                    if (!confirm(`Вы уверены, что хотите удалить черновик "${formName}"? Это действие нельзя отменить.`)) {
+                        return;
+                    }
+                    
+                    // Отключаем кнопку на время запроса
+                    this.disabled = true;
+                    const originalText = this.textContent;
+                    this.textContent = 'Удаление...';
+                    
+                    fetch('delete_draft.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ form_id: formId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Удаляем строку из таблицы с анимацией
+                            if (row) {
+                                // Сохраняем ссылку на контейнер до удаления строки
+                                const draftsContainer = row.closest('.forms-table');
+                                
+                                row.style.transition = 'opacity 0.3s';
+                                row.style.opacity = '0';
+                                setTimeout(() => {
+                                    row.remove();
+                                    
+                                    // Проверяем, остались ли черновики
+                                    if (draftsContainer) {
+                                        const remainingRows = draftsContainer.querySelectorAll('.table-row');
+                                        if (remainingRows.length === 0) {
+                                            // Если черновиков не осталось, скрываем всю секцию
+                                            draftsContainer.style.transition = 'opacity 0.3s';
+                                            draftsContainer.style.opacity = '0';
+                                            setTimeout(() => {
+                                                draftsContainer.remove();
+                                            }, 300);
+                                        }
+                                    }
+                                }, 300);
+                            }
+                        } else {
+                            alert('Ошибка при удалении: ' + (data.message || 'Неизвестная ошибка'));
+                            this.disabled = false;
+                            this.textContent = originalText;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting draft:', error);
+                        alert('Ошибка при удалении черновика. Попробуйте обновить страницу.');
+                        this.disabled = false;
+                        this.textContent = originalText;
+                    });
+                });
+            });
+        });
     </script>
     
     <?php if ($showWelcomeModal): ?>
