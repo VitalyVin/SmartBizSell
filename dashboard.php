@@ -3433,6 +3433,43 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             min-height: 80px;
             box-shadow: inset 0 0 25px rgba(15,23,42,0.03);
         }
+        /* Стили для режима редактирования тизера */
+        .teaser-result.teaser-edit-mode {
+            border: 2px solid rgba(99,102,241,0.5);
+            background: rgba(255,255,255,0.95);
+            box-shadow: 0 0 0 4px rgba(99,102,241,0.1), inset 0 0 25px rgba(15,23,42,0.03);
+        }
+        .teaser-editable {
+            position: relative;
+            outline: none;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+            padding: 2px 4px;
+            margin: -2px -4px;
+        }
+        .teaser-editable:hover {
+            background: rgba(99,102,241,0.08);
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+        }
+        .teaser-editable:focus {
+            background: rgba(99,102,241,0.12);
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.4);
+            outline: none;
+        }
+        .teaser-editable::before {
+            content: "✎";
+            position: absolute;
+            left: -20px;
+            top: 2px;
+            font-size: 12px;
+            color: rgba(99,102,241,0.6);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+        .teaser-edit-mode .teaser-editable:hover::before {
+            opacity: 1;
+        }
         .teaser-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -3794,6 +3831,16 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         .teaser-actions .btn-secondary:hover {
             border-color: rgba(99,102,241,0.4);
             color: var(--teaser-highlight);
+        }
+        /* Стили для кнопок редактирования */
+        #teaser-edit-controls {
+            display: none;
+            flex-direction: row;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        #teaser-edit-controls.show {
+            display: flex;
         }
         .teaser-hero {
             display: grid;
@@ -4302,9 +4349,9 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     <strong>✓ Анкета Term Sheet успешно отправлена!</strong> Теперь вы можете перейти к его генерации.
                 </div>
             <?php else: ?>
-                <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
-                    <strong>✓ Анкета успешно отправлена!</strong> Команда SmartBizSell изучит информацию и свяжется с вами.
-                </div>
+            <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
+                <strong>✓ Анкета успешно отправлена!</strong> Команда SmartBizSell изучит информацию и свяжется с вами.
+            </div>
             <?php endif; ?>
         <?php endif; ?>
         
@@ -5012,6 +5059,17 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     </button>
                     <?php if ($savedTeaserHtml && $teaserValidation['valid'] && !empty($latestForm)): ?>
                         <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <button type="button" class="btn btn-secondary" id="edit-teaser-btn" style="display: inline-flex;">
+                                Редактировать тизер
+                            </button>
+                            <div id="teaser-edit-controls" style="display: none; gap: 8px; flex-direction: row;">
+                                <button type="button" class="btn btn-primary" id="save-teaser-edits-btn" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);">
+                                    Сохранить изменения
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="cancel-teaser-edits-btn">
+                                    Отменить
+                    </button>
+                            </div>
                             <button type="button" class="btn btn-primary" id="submit-teaser-moderation" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">
                                 Отправить на модерацию
                             </button>
@@ -5908,6 +5966,10 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 termSheetResult: document.getElementById('term-sheet-result'),
                 termSheetProgress: document.getElementById('term-sheet-progress'),
                 termSheetProgressBar: document.getElementById('term-sheet-progress-bar'),
+                editTeaserBtn: document.getElementById('edit-teaser-btn'),
+                saveTeaserEditsBtn: document.getElementById('save-teaser-edits-btn'),
+                cancelTeaserEditsBtn: document.getElementById('cancel-teaser-edits-btn'),
+                teaserEditControls: document.getElementById('teaser-edit-controls'),
             });
 
             /**
@@ -6679,6 +6741,179 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 `;
             };
 
+            /**
+             * Режим редактирования тизера
+             */
+            let isTeaserEditMode = false;
+            let originalTeaserHtml = null;
+            let editableElements = [];
+
+            /**
+             * Включает режим редактирования тизера
+             */
+            const enableTeaserEditMode = () => {
+                const elements = getTeaserElements();
+                const { teaserResult, editTeaserBtn, teaserEditControls, saveTeaserEditsBtn, cancelTeaserEditsBtn, teaserSubmitModerationBtn } = elements;
+                
+                if (!teaserResult) {
+                    console.error('Teaser result element not found');
+                    return;
+                }
+
+                // Сохраняем оригинальный HTML
+                originalTeaserHtml = teaserResult.innerHTML;
+                isTeaserEditMode = true;
+
+                // Находим все редактируемые элементы
+                editableElements = [];
+                
+                // Hero блок - описание
+                const heroDescription = teaserResult.querySelector('.teaser-hero__description');
+                if (heroDescription) {
+                    heroDescription.contentEditable = 'true';
+                    heroDescription.classList.add('teaser-editable');
+                    editableElements.push(heroDescription);
+                }
+
+                // Карточки - параграфы, списки, футеры
+                const cardParagraphs = teaserResult.querySelectorAll('.teaser-card p:not(.teaser-card__subtitle)');
+                cardParagraphs.forEach(p => {
+                    p.contentEditable = 'true';
+                    p.classList.add('teaser-editable');
+                    editableElements.push(p);
+                });
+
+                const cardListItems = teaserResult.querySelectorAll('.teaser-card li');
+                cardListItems.forEach(li => {
+                    li.contentEditable = 'true';
+                    li.classList.add('teaser-editable');
+                    editableElements.push(li);
+                });
+
+                const cardFooters = teaserResult.querySelectorAll('.teaser-card__footer');
+                cardFooters.forEach(footer => {
+                    footer.contentEditable = 'true';
+                    footer.classList.add('teaser-editable');
+                    editableElements.push(footer);
+                });
+
+                // Показываем кнопки сохранения/отмены
+                if (editTeaserBtn) editTeaserBtn.style.display = 'none';
+                if (teaserEditControls) teaserEditControls.style.display = 'flex';
+                if (teaserSubmitModerationBtn) teaserSubmitModerationBtn.disabled = true;
+
+                // Добавляем визуальные индикаторы
+                teaserResult.classList.add('teaser-edit-mode');
+            };
+
+            /**
+             * Выключает режим редактирования тизера
+             */
+            const disableTeaserEditMode = (restoreOriginal = false) => {
+                const elements = getTeaserElements();
+                const { teaserResult, editTeaserBtn, teaserEditControls, teaserSubmitModerationBtn } = elements;
+                
+                isTeaserEditMode = false;
+
+                // Убираем contentEditable
+                editableElements.forEach(el => {
+                    el.contentEditable = 'false';
+                    el.classList.remove('teaser-editable');
+                });
+                editableElements = [];
+
+                // Восстанавливаем оригинальный HTML, если нужно
+                if (restoreOriginal && originalTeaserHtml && teaserResult) {
+                    teaserResult.innerHTML = originalTeaserHtml;
+                    // Переинициализируем графики, если они были
+                    if (typeof initTeaserCharts === 'function') {
+                        initTeaserCharts();
+                    }
+                }
+
+                // Скрываем кнопки сохранения/отмены
+                if (editTeaserBtn) editTeaserBtn.style.display = 'inline-flex';
+                if (teaserEditControls) teaserEditControls.style.display = 'none';
+                if (teaserSubmitModerationBtn) teaserSubmitModerationBtn.disabled = false;
+
+                // Убираем визуальные индикаторы
+                if (teaserResult) teaserResult.classList.remove('teaser-edit-mode');
+
+                originalTeaserHtml = null;
+            };
+
+            /**
+             * Сохраняет отредактированный HTML тизера
+             */
+            const saveTeaserEdits = async () => {
+                const elements = getTeaserElements();
+                const { teaserResult, saveTeaserEditsBtn } = elements;
+                
+                if (!teaserResult || !currentFormId) {
+                    alert('Ошибка: не удалось сохранить изменения.');
+                    return;
+                }
+
+                // Собираем HTML из редактируемых элементов
+                const editedHtml = teaserResult.innerHTML;
+
+                // Валидация: проверяем, что есть контент
+                if (!editedHtml || editedHtml.trim().length === 0) {
+                    alert('Ошибка: тизер не может быть пустым.');
+                    return;
+                }
+
+                const originalText = saveTeaserEditsBtn ? saveTeaserEditsBtn.textContent : 'Сохранить';
+                if (saveTeaserEditsBtn) {
+                    saveTeaserEditsBtn.disabled = true;
+                    saveTeaserEditsBtn.textContent = 'Сохранение...';
+                }
+
+                try {
+                    const response = await fetch('save_teaser_edits.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            form_id: currentFormId,
+                            html: editedHtml
+                        }),
+                    });
+
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || 'Не удалось сохранить изменения.');
+                    }
+
+                    // Показываем успешное сообщение
+                    if (saveTeaserEditsBtn) {
+                        saveTeaserEditsBtn.textContent = '✓ Сохранено';
+                        saveTeaserEditsBtn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
+                    }
+
+                    // Обновляем оригинальный HTML для следующего редактирования
+                    originalTeaserHtml = editedHtml;
+
+                    // Выходим из режима редактирования
+                    setTimeout(() => {
+                        disableTeaserEditMode(false);
+                        if (saveTeaserEditsBtn) {
+                            saveTeaserEditsBtn.textContent = originalText;
+                            saveTeaserEditsBtn.style.background = '';
+                            saveTeaserEditsBtn.disabled = false;
+                        }
+                    }, 1500);
+
+                } catch (error) {
+                    console.error('Error saving teaser edits:', error);
+                    alert('Ошибка: ' + error.message);
+                    if (saveTeaserEditsBtn) {
+                        saveTeaserEditsBtn.disabled = false;
+                        saveTeaserEditsBtn.textContent = originalText;
+                    }
+                }
+            };
+
             const initTeaserGenerator = () => {
                 const elements = getTeaserElements();
                 const { teaserBtn, teaserStatus, teaserResult, teaserSubmitModerationBtn } = elements;
@@ -6727,6 +6962,29 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 
                 if (teaserSubmitModerationBtn) {
                     teaserSubmitModerationBtn.addEventListener('click', handleTeaserSubmitModeration);
+                }
+
+                // Обработчики для редактирования тизера
+                const { editTeaserBtn, saveTeaserEditsBtn, cancelTeaserEditsBtn } = elements;
+                if (editTeaserBtn) {
+                    editTeaserBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        enableTeaserEditMode();
+                    });
+                }
+                if (saveTeaserEditsBtn) {
+                    saveTeaserEditsBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        saveTeaserEdits();
+                    });
+                }
+                if (cancelTeaserEditsBtn) {
+                    cancelTeaserEditsBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        if (confirm('Отменить все изменения? Все несохраненные правки будут потеряны.')) {
+                            disableTeaserEditMode(true);
+                        }
+                    });
                 }
             };
 
