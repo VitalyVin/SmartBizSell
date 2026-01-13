@@ -56,11 +56,11 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         exit;
     }
 
-    $requestPayload = json_decode(file_get_contents('php://input') ?: '[]', true);
-    if (!is_array($requestPayload)) {
-        $requestPayload = [];
-    }
-    $action = $requestPayload['action'] ?? 'teaser';
+$requestPayload = json_decode(file_get_contents('php://input') ?: '[]', true);
+if (!is_array($requestPayload)) {
+    $requestPayload = [];
+}
+$action = $requestPayload['action'] ?? 'teaser';
 
     // Получаем API ключ в зависимости от выбранного провайдера
     $provider = getCurrentAIProvider();
@@ -74,15 +74,15 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
             exit;
         }
     } else {
-        $apiKey = TOGETHER_API_KEY;
-        if (empty($apiKey)) {
+$apiKey = TOGETHER_API_KEY;
+if (empty($apiKey)) {
             ob_clean();
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'API-ключ together.ai не настроен.']);
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'API-ключ together.ai не настроен.']);
             ob_end_flush();
-            exit;
+    exit;
         }
-    }
+}
 
     $pdo = getDBConnection();
 
@@ -108,22 +108,22 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         }
     } else {
         // Если form_id не указан, используем последнюю отправленную анкету
-        $stmt = $pdo->prepare("
-            SELECT *
-            FROM seller_forms
-            WHERE user_id = ?
-              AND status IN ('submitted','review','approved')
-            ORDER BY submitted_at DESC, updated_at DESC
-            LIMIT 1
-        ");
-        $stmt->execute([$user['id']]);
-        $form = $stmt->fetch();
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM seller_forms
+        WHERE user_id = ?
+          AND status IN ('submitted','review','approved')
+        ORDER BY submitted_at DESC, updated_at DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$user['id']]);
+    $form = $stmt->fetch();
 
-        if (!$form) {
+    if (!$form) {
             ob_clean();
-            echo json_encode(['success' => false, 'message' => 'Нет отправленных анкет для формирования тизера.']);
+        echo json_encode(['success' => false, 'message' => 'Нет отправленных анкет для формирования тизера.']);
             ob_end_flush();
-            exit;
+        exit;
         }
     }
 
@@ -248,7 +248,7 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         if (!function_exists('buildTeaserPayload')) {
             throw new RuntimeException('Function buildTeaserPayload not found');
         }
-        $formPayload = buildTeaserPayload($form);
+    $formPayload = buildTeaserPayload($form);
         error_log('buildTeaserPayload completed');
         
         // Создаем маскированную версию payload для тизера
@@ -259,9 +259,9 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         }
         $maskedPayload = buildMaskedTeaserPayload($formPayload);
         error_log('buildMaskedTeaserPayload completed');
-        
-        // Получаем данные DCF модели для графика
-        // Используем упрощенную функцию для извлечения данных напрямую из формы
+    
+    // Получаем данные DCF модели для графика
+    // Используем упрощенную функцию для извлечения данных напрямую из формы
         if (!function_exists('extractDCFDataForChart')) {
             throw new RuntimeException('Function extractDCFDataForChart not found');
         }
@@ -270,37 +270,37 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
             error_log('Warning: $form is empty or not an array before extractDCFDataForChart');
             $dcfData = null;
         } else {
-            $dcfData = extractDCFDataForChart($form);
+    $dcfData = extractDCFDataForChart($form);
         }
         error_log('extractDCFDataForChart completed');
 
-        if ($action === 'investors') {
+    if ($action === 'investors') {
             // Для инвесторов используем маскированные данные
             $investorPool = buildInvestorPool($maskedPayload, $apiKey);
-            if (empty($investorPool)) {
+        if (empty($investorPool)) {
                 ob_clean();
-                echo json_encode(['success' => false, 'message' => 'Не найдены подходящие инвесторы.']);
+            echo json_encode(['success' => false, 'message' => 'Не найдены подходящие инвесторы.']);
                 ob_end_flush();
-                exit;
-            }
+            exit;
+        }
 
-            $html = renderInvestorSection($investorPool);
-            $snapshot = [
-                'html' => $html,
-                'generated_at' => date('c'),
-            ];
-            persistInvestorSnapshot($form, $formPayload, $snapshot);
+        $html = renderInvestorSection($investorPool);
+        $snapshot = [
+            'html' => $html,
+            'generated_at' => date('c'),
+        ];
+        persistInvestorSnapshot($form, $formPayload, $snapshot);
 
             // Очищаем буфер вывода перед отправкой JSON
             ob_clean();
-            echo json_encode([
-                'success' => true,
-                'html' => $html,
-                'generated_at' => $snapshot['generated_at'],
-            ]);
+        echo json_encode([
+            'success' => true,
+            'html' => $html,
+            'generated_at' => $snapshot['generated_at'],
+        ]);
             ob_end_flush();
-            exit;
-        }
+        exit;
+    }
 
         // Используем маскированные данные для генерации тизера
         if (!function_exists('buildTeaserPrompt')) {
@@ -347,7 +347,7 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         if (!function_exists('parseTeaserResponse')) {
             throw new RuntimeException('Function parseTeaserResponse not found');
         }
-        $teaserData = parseTeaserResponse($rawResponse);
+    $teaserData = parseTeaserResponse($rawResponse);
         error_log('parseTeaserResponse completed');
         
         if (empty($teaserData) || !is_array($teaserData)) {
@@ -371,8 +371,8 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         }
         $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
         error_log('ensureProductsLocalized completed');
-        
-        // Генерируем краткое описание для hero блока из overview summary
+    
+    // Генерируем краткое описание для hero блока из overview summary
         // Используем маскированные данные
         if (!function_exists('buildHeroDescription')) {
             throw new RuntimeException('Function buildHeroDescription not found');
@@ -395,25 +395,25 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
             throw new RuntimeException('Function persistTeaserSnapshot not found');
         }
         error_log('Saving teaser snapshot...');
-        $snapshot = persistTeaserSnapshot($form, $formPayload, [
-            'html' => $html,
-            'hero_description' => $heroDescription,
-            'generated_at' => date('c'),
-            'model' => TOGETHER_MODEL,
-        ]);
+    $snapshot = persistTeaserSnapshot($form, $formPayload, [
+        'html' => $html,
+        'hero_description' => $heroDescription,
+        'generated_at' => date('c'),
+        'model' => TOGETHER_MODEL,
+    ]);
         error_log('persistTeaserSnapshot completed');
 
         // Запись в published_teasers создается только при нажатии кнопки "Отправить на модерацию"
         // через submit_teaser_moderation.php, а не автоматически после обновления тизера
 
         ob_clean();
-        echo json_encode([
-            'success' => true,
-            'html' => $html,
-            'generated_at' => $snapshot['generated_at'] ?? null,
-        ]);
+    echo json_encode([
+        'success' => true,
+        'html' => $html,
+        'generated_at' => $snapshot['generated_at'] ?? null,
+    ]);
         ob_end_flush();
-    } catch (Exception $e) {
+} catch (Exception $e) {
         $errorMessage = $e->getMessage();
         $errorTrace = $e->getTraceAsString();
         $errorFile = $e->getFile();
@@ -440,7 +440,7 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
             header('Content-Type: application/json; charset=utf-8');
         }
         ob_clean();
-        http_response_code(500);
+    http_response_code(500);
         echo json_encode([
             'success' => false, 
             'message' => $userMessage,
@@ -475,7 +475,7 @@ if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
         ]);
         ob_end_flush();
         exit;
-    }
+}
 } // Конец проверки TEASER_FUNCTIONS_ONLY
 
 /**
@@ -564,10 +564,20 @@ function buildTeaserPayload(array $form): array
                 $data[$key] = $value;
             }
         }
+        
+        // Преобразуем массив регионов в строку для обратной совместимости
+        if (isset($data['presence_regions']) && is_array($data['presence_regions'])) {
+            $data['presence_regions'] = implode(', ', array_filter(array_map('trim', $data['presence_regions'])));
+        }
 
         $data['production'] = !empty($form['production_volumes']) ? (json_decode($form['production_volumes'], true) ?: []) : [];
         $data['financial']  = !empty($form['financial_results']) ? (json_decode($form['financial_results'], true) ?: []) : [];
         $data['balance']    = !empty($form['balance_indicators']) ? (json_decode($form['balance_indicators'], true) ?: []) : [];
+    }
+    
+    // Преобразуем массив регионов в строку для обратной совместимости (если данные из data_json)
+    if (isset($data['presence_regions']) && is_array($data['presence_regions'])) {
+        $data['presence_regions'] = implode(', ', array_filter(array_map('trim', $data['presence_regions'])));
     }
 
     $data['_meta'] = [
@@ -764,7 +774,7 @@ function parseTeaserResponse(string $text): array
     }
 
     $clean = trim($clean);
-    
+
     // Если строка пустая, возвращаем fallback
     if (empty($clean)) {
         error_log("Empty response from AI");
@@ -842,7 +852,7 @@ function parseTeaserResponse(string $text): array
     $errorCode = json_last_error();
     $textPreview = mb_substr($clean, 0, 500, 'UTF-8');
     error_log("Failed to parse teaser JSON. Error code: $errorCode, Message: $errorMsg. Text preview: $textPreview");
-    
+
     return [
         'overview' => [
             'title' => 'Резюме',
@@ -1467,7 +1477,7 @@ function extractDCFDataForChart(array $form): ?array
     try {
         // Устанавливаем флаг, чтобы dashboard.php не выполнял HTML вывод
         if (!defined('DCF_API_MODE')) {
-            define('DCF_API_MODE', true);
+        define('DCF_API_MODE', true);
         }
         
         // Проверяем, определена ли функция calculateUserDCF
@@ -1875,7 +1885,7 @@ function normalizeTeaserData(array $data, array $payload): array
     if (empty($operationsModel) || $operationsModel === $placeholder || trim($operationsModel) === '') {
         $operationsModel = buildOperationsModel($payload);
     }
-    
+
     $data['company_profile'] = [
         'industry' => $data['company_profile']['industry'] ?? ($payload['products_services'] ?? $placeholder),
         'established' => $data['company_profile']['established'] ?? ($payload['production_area'] ? 'Бизнес с развитой инфраструктурой' : $placeholder),
@@ -1916,7 +1926,7 @@ function normalizeTeaserData(array $data, array $payload): array
     $capexUnit = detectFinancialUnit($payload['financial']['fixed_assets_acquisition']['unit'] ?? '');
     $capexValue = $capexRaw !== null ? convertFinancialToMillions($capexRaw, $capexUnit) : null;
     $capexText = $capexValue !== null ? number_format($capexValue, 0, '.', ' ') . ' млн ₽' : 'Низкая CAPEX-нагрузка.';
-    
+
     $data['financials'] = [
         'revenue' => $data['financials']['revenue'] ?? $revenueText,
         'ebitda' => $data['financials']['ebitda'] ?? $profitText,
@@ -2261,7 +2271,7 @@ function buildSalesChannelsText(array $payload): string
         if (mb_strtolower($offline, 'UTF-8') === 'да' || mb_strtolower($offline, 'UTF-8') === 'yes') {
             $channels[] = 'Оффлайн';
         } else {
-            $channels[] = 'Оффлайн: ' . $offline;
+        $channels[] = 'Оффлайн: ' . $offline;
         }
     }
 
@@ -2272,7 +2282,7 @@ function buildSalesChannelsText(array $payload): string
         if (mb_strtolower($online, 'UTF-8') === 'да' || mb_strtolower($online, 'UTF-8') === 'yes') {
             $channels[] = 'Онлайн';
         } else {
-            $channels[] = 'Онлайн: ' . $online;
+        $channels[] = 'Онлайн: ' . $online;
         }
     }
 
@@ -2283,7 +2293,7 @@ function buildSalesChannelsText(array $payload): string
         if (mb_strtolower($contract, 'UTF-8') === 'да' || mb_strtolower($contract, 'UTF-8') === 'yes') {
             $channels[] = 'Контрактное производство';
         } else {
-            $channels[] = 'Контрактное производство: ' . $contract;
+        $channels[] = 'Контрактное производство: ' . $contract;
         }
     }
 

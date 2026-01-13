@@ -183,6 +183,9 @@ function buildDraftPayload(array $source): array
             // Специальная обработка для deal_goal: сохраняем массив как JSON
             if ($field === 'deal_goal' && is_array($source[$field])) {
                 $payload[$field] = json_encode($source[$field], JSON_UNESCAPED_UNICODE);
+            } elseif ($field === 'presence_regions' && is_array($source[$field])) {
+                // Сохраняем массив регионов как массив в JSON (для черновиков)
+                $payload[$field] = array_map('trim', array_filter($source[$field]));
             } else {
                 $payload[$field] = normalizeDraftValue($source[$field]);
             }
@@ -324,6 +327,20 @@ function hydrateFormFromDb(array $form): void
     foreach ($mapping as $postKey => $column) {
         $_POST[$postKey] = $form[$column] ?? '';
     }
+    
+    // Преобразуем строку регионов в массив для чекбоксов (если это строка)
+    // Если уже массив - оставляем как есть
+    if (isset($_POST['presence_regions'])) {
+        if (is_string($_POST['presence_regions']) && !empty($_POST['presence_regions'])) {
+            // Строка - преобразуем в массив
+            $_POST['presence_regions'] = array_map('trim', explode(',', $_POST['presence_regions']));
+            $_POST['presence_regions'] = array_filter($_POST['presence_regions']); // Убираем пустые значения
+        } elseif (is_array($_POST['presence_regions'])) {
+            // Уже массив - очищаем и оставляем как есть
+            $_POST['presence_regions'] = array_map('trim', $_POST['presence_regions']);
+            $_POST['presence_regions'] = array_filter($_POST['presence_regions']); // Убираем пустые значения
+        }
+    }
 
 
     // Преобразование значений для совместимости
@@ -372,6 +389,20 @@ function hydrateFormFromDb(array $form): void
                     } else {
                         $_POST[$key] = $value;
                     }
+                }
+            }
+            
+            // Преобразуем строку регионов в массив для чекбоксов (если это строка из data_json)
+            // Если уже массив - оставляем как есть
+            if (isset($_POST['presence_regions'])) {
+                if (is_string($_POST['presence_regions']) && !empty($_POST['presence_regions'])) {
+                    // Строка - преобразуем в массив
+                    $_POST['presence_regions'] = array_map('trim', explode(',', $_POST['presence_regions']));
+                    $_POST['presence_regions'] = array_filter($_POST['presence_regions']); // Убираем пустые значения
+                } elseif (is_array($_POST['presence_regions'])) {
+                    // Уже массив - очищаем и оставляем как есть
+                    $_POST['presence_regions'] = array_map('trim', $_POST['presence_regions']);
+                    $_POST['presence_regions'] = array_filter($_POST['presence_regions']); // Убираем пустые значения
                 }
             }
         }
@@ -487,6 +518,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!preg_match('/^\d{10}$|^\d{12}$/', $companyInnDigits)) {
             $errors['company_inn'] = 'ИНН должен содержать 10 или 12 цифр';
         }
+        // Регионы присутствия - необязательное поле, валидация убрана
         if (!isset($_POST['agree'])) {
             $errors['agree'] = 'Необходимо согласие на обработку данных';
         }
@@ -562,7 +594,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dealSubject = sanitizeInput($_POST['deal_share_range'] ?? '');
                 $assetDisclosure = sanitizeInput($_POST['asset_disclosure'] ?? '');
                 $companyDescription = sanitizeInput($_POST['company_description'] ?? '');
-                $presenceRegions = sanitizeInput($_POST['presence_regions'] ?? '');
+                // Обработка регионов присутствия (может быть массивом или строкой)
+                // Поле необязательное, поэтому если не выбрано - будет пустая строка
+                $presenceRegions = '';
+                if (isset($_POST['presence_regions']) && is_array($_POST['presence_regions']) && !empty($_POST['presence_regions'])) {
+                    // Новый формат - массив из чекбоксов, объединяем через запятую
+                    $presenceRegions = implode(', ', array_filter(array_map('trim', $_POST['presence_regions'])));
+                } elseif (isset($_POST['presence_regions']) && !empty($_POST['presence_regions'])) {
+                    // Старый формат - строка (для обратной совместимости)
+                    $presenceRegions = sanitizeInput($_POST['presence_regions']);
+                }
                 $productsServices = sanitizeInput($_POST['products_services'] ?? '');
                 $companyBrands = sanitizeInput($_POST['company_brands'] ?? '');
                 $ownProduction = sanitizeInput($_POST['own_production'] ?? '');
@@ -875,7 +916,7 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     </div>
                 </div>
 
-                <form class="seller-form" method="POST" action="seller_form.php">
+                <form class="seller-form" method="POST" action="seller_form.php" novalidate>
                     <input type="hidden" name="form_id" value="<?php echo htmlspecialchars($formId ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                     <input type="hidden" name="save_draft_flag" value="0" id="save-draft-flag">
                     <div class="form-actions" style="margin-bottom:24px; text-align:right;">
@@ -980,51 +1021,82 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             <textarea id="company_description" name="company_description" rows="4"<?php echo requiredAttr('company_description'); ?>><?php echo htmlspecialchars($_POST['company_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('presence_regions'); ?>">
-                            <label for="presence_regions">Регионы присутствия:</label>
-                            <select id="presence_regions" name="presence_regions"<?php echo requiredAttr('presence_regions'); ?> class="form-control">
-                                <option value="">-- Выберите регион --</option>
-                                <option value="Вся РФ" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Вся РФ') ? 'selected' : ''; ?>>Вся РФ</option>
-                                <option value="Москва" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Москва') ? 'selected' : ''; ?>>Москва</option>
-                                <option value="Санкт-Петербург" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Санкт-Петербург') ? 'selected' : ''; ?>>Санкт-Петербург</option>
-                                <option value="Московская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Московская область') ? 'selected' : ''; ?>>Московская область</option>
-                                <option value="Ленинградская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ленинградская область') ? 'selected' : ''; ?>>Ленинградская область</option>
-                                <option value="Краснодарский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Краснодарский край') ? 'selected' : ''; ?>>Краснодарский край</option>
-                                <option value="Свердловская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Свердловская область') ? 'selected' : ''; ?>>Свердловская область</option>
-                                <option value="Республика Татарстан" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Татарстан') ? 'selected' : ''; ?>>Республика Татарстан</option>
-                                <option value="Новосибирская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Новосибирская область') ? 'selected' : ''; ?>>Новосибирская область</option>
-                                <option value="Нижегородская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Нижегородская область') ? 'selected' : ''; ?>>Нижегородская область</option>
-                                <option value="Ростовская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ростовская область') ? 'selected' : ''; ?>>Ростовская область</option>
-                                <option value="Челябинская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Челябинская область') ? 'selected' : ''; ?>>Челябинская область</option>
-                                <option value="Самарская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Самарская область') ? 'selected' : ''; ?>>Самарская область</option>
-                                <option value="Красноярский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Красноярский край') ? 'selected' : ''; ?>>Красноярский край</option>
-                                <option value="Воронежская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Воронежская область') ? 'selected' : ''; ?>>Воронежская область</option>
-                                <option value="Пермский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Пермский край') ? 'selected' : ''; ?>>Пермский край</option>
-                                <option value="Волгоградская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Волгоградская область') ? 'selected' : ''; ?>>Волгоградская область</option>
-                                <option value="Республика Башкортостан" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Башкортостан') ? 'selected' : ''; ?>>Республика Башкортостан</option>
-                                <option value="Омская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Омская область') ? 'selected' : ''; ?>>Омская область</option>
-                                <option value="Тюменская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тюменская область') ? 'selected' : ''; ?>>Тюменская область</option>
-                                <option value="Кемеровская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Кемеровская область') ? 'selected' : ''; ?>>Кемеровская область</option>
-                                <option value="Иркутская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Иркутская область') ? 'selected' : ''; ?>>Иркутская область</option>
-                                <option value="Республика Дагестан" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Дагестан') ? 'selected' : ''; ?>>Республика Дагестан</option>
-                                <option value="Ставропольский край" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ставропольский край') ? 'selected' : ''; ?>>Ставропольский край</option>
-                                <option value="Белгородская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Белгородская область') ? 'selected' : ''; ?>>Белгородская область</option>
-                                <option value="Курская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Курская область') ? 'selected' : ''; ?>>Курская область</option>
-                                <option value="Липецкая область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Липецкая область') ? 'selected' : ''; ?>>Липецкая область</option>
-                                <option value="Тульская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тульская область') ? 'selected' : ''; ?>>Тульская область</option>
-                                <option value="Калужская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Калужская область') ? 'selected' : ''; ?>>Калужская область</option>
-                                <option value="Ярославская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ярославская область') ? 'selected' : ''; ?>>Ярославская область</option>
-                                <option value="Тверская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тверская область') ? 'selected' : ''; ?>>Тверская область</option>
-                                <option value="Владимирская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Владимирская область') ? 'selected' : ''; ?>>Владимирская область</option>
-                                <option value="Рязанская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Рязанская область') ? 'selected' : ''; ?>>Рязанская область</option>
-                                <option value="Тамбовская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Тамбовская область') ? 'selected' : ''; ?>>Тамбовская область</option>
-                                <option value="Пензенская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Пензенская область') ? 'selected' : ''; ?>>Пензенская область</option>
-                                <option value="Ульяновская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Ульяновская область') ? 'selected' : ''; ?>>Ульяновская область</option>
-                                <option value="Саратовская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Саратовская область') ? 'selected' : ''; ?>>Саратовская область</option>
-                                <option value="Астраханская область" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Астраханская область') ? 'selected' : ''; ?>>Астраханская область</option>
-                                <option value="Республика Крым" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Республика Крым') ? 'selected' : ''; ?>>Республика Крым</option>
-                                <option value="Севастополь" <?php echo (isset($_POST['presence_regions']) && $_POST['presence_regions'] === 'Севастополь') ? 'selected' : ''; ?>>Севастополь</option>
-                            </select>
+                        <div class="form-group">
+                            <label>Регионы присутствия:</label>
+                            <?php
+                            // Список всех регионов
+                            $allRegions = [
+                                'Вся РФ',
+                                'Москва',
+                                'Санкт-Петербург',
+                                'Московская область',
+                                'Ленинградская область',
+                                'Краснодарский край',
+                                'Свердловская область',
+                                'Республика Татарстан',
+                                'Новосибирская область',
+                                'Нижегородская область',
+                                'Ростовская область',
+                                'Челябинская область',
+                                'Самарская область',
+                                'Красноярский край',
+                                'Воронежская область',
+                                'Пермский край',
+                                'Волгоградская область',
+                                'Республика Башкортостан',
+                                'Омская область',
+                                'Тюменская область',
+                                'Кемеровская область',
+                                'Иркутская область',
+                                'Республика Дагестан',
+                                'Ставропольский край',
+                                'Белгородская область',
+                                'Курская область',
+                                'Липецкая область',
+                                'Тульская область',
+                                'Калужская область',
+                                'Ярославская область',
+                                'Тверская область',
+                                'Владимирская область',
+                                'Рязанская область',
+                                'Тамбовская область',
+                                'Пензенская область',
+                                'Ульяновская область',
+                                'Саратовская область',
+                                'Астраханская область',
+                                'Республика Крым',
+                                'Севастополь'
+                            ];
+                            
+                            // Определяем выбранные регионы
+                            $selectedRegions = [];
+                            if (isset($_POST['presence_regions'])) {
+                                if (is_array($_POST['presence_regions'])) {
+                                    // Новый формат - массив из чекбоксов
+                                    $selectedRegions = array_map('trim', $_POST['presence_regions']);
+                                } else {
+                                    // Старый формат - строка, разбиваем по запятой
+                                    $selectedRegions = array_map('trim', explode(',', $_POST['presence_regions']));
+                                }
+                            }
+                            $selectedRegions = array_filter($selectedRegions); // Убираем пустые значения
+                            ?>
+                            <div class="regions-checkboxes" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 8px; max-height: 300px; overflow-y: auto; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa;">
+                                <?php foreach ($allRegions as $region): ?>
+                                    <?php
+                                    $checked = in_array(trim($region), $selectedRegions, true) ? 'checked' : '';
+                                    $regionEscaped = htmlspecialchars($region, ENT_QUOTES, 'UTF-8');
+                                    ?>
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 0; user-select: none;">
+                                        <input type="checkbox" 
+                                               name="presence_regions[]" 
+                                               value="<?php echo $regionEscaped; ?>" 
+                                               <?php echo $checked; ?>
+                                               style="cursor: pointer; width: 18px; height: 18px; margin: 0;">
+                                        <span style="font-size: 14px;"><?php echo $regionEscaped; ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
 
                         <div class="form-group<?php echo requiredClass('products_services'); ?>">
@@ -1853,6 +1925,73 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                    onlineSalesRadios.forEach(radio => radio.addEventListener('change', toggleOnlineFields));
                    toggleOnlineFields(); // Инициализация
+
+                   // Скролл к первой ошибке при загрузке страницы, если есть ошибки валидации
+                   <?php if (!empty($errors)): ?>
+                   document.addEventListener('DOMContentLoaded', function() {
+                       // Ищем первую ошибку валидации
+                       const firstError = document.querySelector('.error-message');
+                       const firstErrorField = document.querySelector('.form-group.has-error');
+                       const targetElement = firstError || firstErrorField;
+                       
+                       if (targetElement) {
+                           setTimeout(() => {
+                               targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                               // Подсвечиваем поле с ошибкой
+                               if (firstErrorField) {
+                                   firstErrorField.style.border = '2px solid #FF3B30';
+                                   firstErrorField.style.borderRadius = '8px';
+                                   firstErrorField.style.padding = '12px';
+                                   setTimeout(() => {
+                                       firstErrorField.style.border = '';
+                                       firstErrorField.style.padding = '';
+                                   }, 5000);
+                               }
+                           }, 300);
+                       }
+                   });
+                   <?php endif; ?>
+
+                   // Валидация регионов присутствия при отправке формы
+                   const sellerForm = document.querySelector('form');
+                   if (sellerForm) {
+                       // Отслеживаем, какая кнопка была нажата
+                       let clickedButton = null;
+                       sellerForm.addEventListener('click', function(e) {
+                           if (e.target.type === 'submit' || e.target.closest('button[type="submit"]')) {
+                               clickedButton = e.target.type === 'submit' ? e.target : e.target.closest('button[type="submit"]');
+                               console.log('Button clicked:', clickedButton.name, clickedButton.value);
+                           }
+                       });
+                       
+                       sellerForm.addEventListener('submit', function(e) {
+                           console.log('Form submit event triggered');
+                           
+                           // Определяем, какая кнопка была нажата
+                           let isDraftSave = false;
+                           if (e.submitter) {
+                               // Современные браузеры
+                               isDraftSave = e.submitter.name === 'save_draft' || 
+                                           e.submitter.getAttribute('formnovalidate') !== null;
+                               console.log('Using e.submitter, isDraftSave:', isDraftSave);
+                           } else if (clickedButton) {
+                               // Fallback для старых браузеров
+                               isDraftSave = clickedButton.name === 'save_draft' || 
+                                           clickedButton.getAttribute('formnovalidate') !== null;
+                               console.log('Using clickedButton, isDraftSave:', isDraftSave);
+                           } else {
+                               // Если не удалось определить, проверяем наличие скрытого поля
+                               const saveDraftFlag = document.querySelector('input[name="save_draft_flag"]');
+                               isDraftSave = saveDraftFlag && saveDraftFlag.value === '1';
+                               console.log('Using saveDraftFlag, isDraftSave:', isDraftSave);
+                           }
+                           
+                           // Регионы присутствия - необязательное поле, валидация убрана
+                           console.log('Form submit allowed, isDraftSave:', isDraftSave);
+                           // Сбрасываем отслеживание кнопки
+                           clickedButton = null;
+                       });
+                   }
 
                    // Динамическое добавление строк в таблицу объемов производства
                    const addProductionRowBtn = document.getElementById('add_production_row');
