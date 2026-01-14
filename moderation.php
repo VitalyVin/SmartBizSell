@@ -171,6 +171,7 @@ $statusColors = [
     <meta name="robots" content="noindex, nofollow">
     <link rel="canonical" href="<?php echo BASE_URL; ?>/moderation.php">
     <link rel="stylesheet" href="styles.css?v=<?php echo time(); ?>">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
     <style>
         .moderation-container {
             max-width: 1400px;
@@ -511,6 +512,14 @@ $statusColors = [
         </div>
 
         <?php if ($teaserId && $currentTeaser): ?>
+            <!-- Информация об активе -->
+            <div style="margin-bottom: 24px; padding: 16px; background: rgba(0, 0, 0, 0.02); border-radius: 8px;">
+                <h2 style="margin: 0 0 8px;"><?php echo htmlspecialchars($currentTeaser['asset_name'] ?? 'Актив', ENT_QUOTES, 'UTF-8'); ?></h2>
+                <div style="font-size: 14px; color: var(--text-secondary);">
+                    Продавец: <?php echo htmlspecialchars($currentTeaser['seller_name'] ?? 'Не указан', ENT_QUOTES, 'UTF-8'); ?>
+                </div>
+            </div>
+            
             <!-- Редактор тизера -->
             <div class="editor-container">
                 <div class="editor-panel">
@@ -582,6 +591,21 @@ $statusColors = [
                                 Снять с публикации
                             </button>
                             <?php endif; ?>
+                        </div>
+                        
+                        <div style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; padding: 16px; background: rgba(0, 122, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 122, 255, 0.2);">
+                            <a href="view_form.php?id=<?php echo $currentTeaser['seller_form_id']; ?>" 
+                               class="btn btn-secondary" 
+                               target="_blank"
+                               style="display: inline-flex; align-items: center; gap: 8px;">
+                                📋 Просмотреть анкету
+                            </a>
+                            <a href="dashboard.php?form_id=<?php echo $currentTeaser['seller_form_id']; ?>" 
+                               class="btn btn-secondary" 
+                               target="_blank"
+                               style="display: inline-flex; align-items: center; gap: 8px;">
+                                📊 Просмотреть финансовую модель (DCF)
+                            </a>
                         </div>
                     </form>
                 </div>
@@ -782,8 +806,18 @@ $statusColors = [
         const preview = document.getElementById('teaser-preview');
         
         if (editor && preview) {
+            let chartInitTimeout;
             editor.addEventListener('input', function() {
                 preview.innerHTML = this.value;
+                
+                // Переинициализируем графики после обновления HTML
+                // Используем debounce, чтобы не вызывать слишком часто
+                clearTimeout(chartInitTimeout);
+                chartInitTimeout = setTimeout(function() {
+                    if (typeof initTeaserCharts === 'function') {
+                        initTeaserCharts();
+                    }
+                }, 500);
             });
         }
         
@@ -1431,6 +1465,21 @@ $statusColors = [
     </script>
     
     <script src="script.js?v=<?php echo time(); ?>"></script>
+    <script>
+        // Инициализация графиков в предпросмотре тизера
+        document.addEventListener('DOMContentLoaded', function() {
+            // Проверяем, есть ли контейнер предпросмотра с тизером
+            const previewContainer = document.getElementById('teaser-preview');
+            if (previewContainer) {
+                // Инициализируем графики после небольшой задержки для рендеринга DOM
+                setTimeout(function() {
+                    if (typeof initTeaserCharts === 'function') {
+                        initTeaserCharts();
+                    }
+                }, 300);
+            }
+        });
+    </script>
 </body>
 </html>
 

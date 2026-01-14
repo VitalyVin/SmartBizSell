@@ -119,11 +119,18 @@ $selectedFormId = isset($_GET['form_id']) ? (int)$_GET['form_id'] : null;
 $selectedForm = null;
 
 if ($selectedFormId) {
-    // Проверяем, что анкета принадлежит пользователю
-    foreach ($forms as $form) {
-        if ($form['id'] == $selectedFormId) {
-            $selectedForm = $form;
-            break;
+    if (isModerator()) {
+        // Модераторы могут просматривать DCF для любой анкеты
+        $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ?");
+        $stmt->execute([$selectedFormId]);
+        $selectedForm = $stmt->fetch();
+    } else {
+        // Обычные пользователи - только свои анкеты
+        foreach ($forms as $form) {
+            if ($form['id'] == $selectedFormId) {
+                $selectedForm = $form;
+                break;
+            }
         }
     }
 }
@@ -1369,13 +1376,32 @@ $savedInvestorTimestamp = null;
 // Загружаем полные данные выбранной анкеты для работы с инструментами
 $latestForm = null;
 if ($selectedForm) {
-    $latestFormStmt = $pdo->prepare("
-    SELECT *
-    FROM seller_forms
-        WHERE id = ? AND user_id = ?
-    ");
-    $latestFormStmt->execute([$selectedForm['id'], $user['id']]);
-    $latestForm = $latestFormStmt->fetch();
+    // Если $selectedForm уже загружен с полными данными (например, для модератора),
+    // используем его напрямую, иначе загружаем из БД
+    if (isset($selectedForm['data_json']) || isset($selectedForm['financial_results'])) {
+        // Уже загружены полные данные
+        $latestForm = $selectedForm;
+    } else {
+        // Нужно загрузить полные данные
+        if (isModerator()) {
+            // Модераторы могут загружать любые анкеты
+            $latestFormStmt = $pdo->prepare("
+                SELECT *
+                FROM seller_forms
+                WHERE id = ?
+            ");
+            $latestFormStmt->execute([$selectedForm['id']]);
+        } else {
+            // Обычные пользователи - только свои анкеты
+            $latestFormStmt = $pdo->prepare("
+                SELECT *
+                FROM seller_forms
+                WHERE id = ? AND user_id = ?
+            ");
+            $latestFormStmt->execute([$selectedForm['id'], $user['id']]);
+        }
+        $latestForm = $latestFormStmt->fetch();
+    }
 }
 
 /**

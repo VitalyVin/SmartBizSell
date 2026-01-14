@@ -35,11 +35,19 @@ if ($formId <= 0) {
 
 /**
  * Загружаем анкету пользователя из базы данных
- * Проверяем, что анкета принадлежит текущему пользователю (защита от несанкционированного доступа)
+ * Проверяем права доступа: модераторы могут просматривать любые анкеты,
+ * обычные пользователи - только свои
  */
 $pdo = getDBConnection();
-$stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-$stmt->execute([$formId, $user['id']]);
+if (isModerator()) {
+    // Модераторы могут просматривать любые анкеты
+    $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ?");
+    $stmt->execute([$formId]);
+} else {
+    // Обычные пользователи - только свои анкеты
+    $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+    $stmt->execute([$formId, $user['id']]);
+}
 $form = $stmt->fetch();
 
 if (!$form) {
