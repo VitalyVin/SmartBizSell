@@ -446,6 +446,7 @@ $statusColors = [
                     <li><a href="index.php">Главная</a></li>
                     <li><a href="dashboard.php">Личный кабинет</a></li>
                     <li><a href="moderation.php">Модерация</a></li>
+                    <li><a href="users_list.php">Пользователи</a></li>
                     <li><a href="logout.php">Выйти</a></li>
                 </ul>
                 <button class="nav-toggle" aria-label="Toggle menu">

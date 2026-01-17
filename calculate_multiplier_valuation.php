@@ -101,12 +101,13 @@ try {
 
     if ($requestedFormId) {
         // Загружаем конкретную анкету по ID, если она принадлежит пользователю
+        $effectiveUserId = getEffectiveUserId();
         $stmt = $pdo->prepare("
             SELECT *
             FROM seller_forms
             WHERE id = ? AND user_id = ?
         ");
-        $stmt->execute([$requestedFormId, $user['id']]);
+        $stmt->execute([$requestedFormId, $effectiveUserId]);
         $form = $stmt->fetch();
         
         if (!$form) {
@@ -115,6 +116,7 @@ try {
         }
     } else {
         // Если form_id не указан, используем последнюю отправленную анкету
+        $effectiveUserId = getEffectiveUserId();
         $stmt = $pdo->prepare("
             SELECT *
             FROM seller_forms
@@ -123,7 +125,7 @@ try {
             ORDER BY submitted_at DESC, updated_at DESC
             LIMIT 1
         ");
-        $stmt->execute([$user['id']]);
+        $stmt->execute([$effectiveUserId]);
         $form = $stmt->fetch();
 
         if (!$form) {
@@ -170,13 +172,14 @@ try {
     ];
     
     $updatedDataJson = json_encode($dataJson, JSON_UNESCAPED_UNICODE);
+    $effectiveUserId = getEffectiveUserId();
     $updateStmt = $pdo->prepare("
         UPDATE seller_forms 
         SET data_json = ?, 
             updated_at = NOW()
         WHERE id = ? AND user_id = ?
     ");
-    $updateStmt->execute([$updatedDataJson, $form['id'], $user['id']]);
+    $updateStmt->execute([$updatedDataJson, $form['id'], $effectiveUserId]);
     
     echo json_encode([
         'success' => true,

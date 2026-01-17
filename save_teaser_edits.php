@@ -41,8 +41,9 @@ if (!$editedHtml || trim($editedHtml) === '') {
 
 try {
     // Проверяем, что анкета принадлежит текущему пользователю
+    $effectiveUserId = getEffectiveUserId();
     $stmt = $pdo->prepare("SELECT id, data_json FROM seller_forms WHERE id = ? AND user_id = ?");
-    $stmt->execute([$formId, $user['id']]);
+    $stmt->execute([$formId, $effectiveUserId]);
     $form = $stmt->fetch();
     
     if (!$form) {

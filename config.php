@@ -1681,6 +1681,112 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
     throw new RuntimeException($lastError ?: 'Не удалось получить ответ от API');
 }
 
+/**
+ * Получает ID пользователя, от имени которого работает модератор (если есть)
+ * 
+ * @return int|null ID пользователя или null, если impersonation не активен
+ */
+function getImpersonatedUserId(): ?int
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return null;
+    }
+    
+    if (isset($_SESSION['impersonate_user_id'])) {
+        return (int)$_SESSION['impersonate_user_id'];
+    }
+    
+    return null;
+}
+
+/**
+ * Получает эффективный ID пользователя для операций
+ * Если модератор работает в режиме impersonation, возвращает ID клиента
+ * Иначе возвращает ID текущего пользователя
+ * 
+ * @return int|null ID пользователя или null, если пользователь не авторизован
+ */
+function getEffectiveUserId(): ?int
+{
+    $impersonatedId = getImpersonatedUserId();
+    if ($impersonatedId !== null) {
+        return $impersonatedId;
+    }
+    
+    if (isLoggedIn()) {
+        return (int)$_SESSION['user_id'];
+    }
+    
+    return null;
+}
+
+/**
+ * Проверяет, работает ли модератор от имени другого пользователя
+ * 
+ * @return bool true если активен режим impersonation, false иначе
+ */
+function isImpersonating(): bool
+{
+    return getImpersonatedUserId() !== null;
+}
+
+/**
+ * Устанавливает режим impersonation для модератора
+ * 
+ * @param int $userId ID пользователя, от имени которого будет работать модератор
+ * @return bool true при успехе, false при ошибке
+ */
+function setImpersonation(int $userId): bool
+{
+    // Проверяем, что текущий пользователь - модератор
+    if (!isModerator()) {
+        error_log("Attempt to set impersonation by non-moderator user");
+        return false;
+    }
+    
+    // Проверяем существование пользователя
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_active = 1");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            error_log("Attempt to impersonate non-existent or inactive user: $userId");
+            return false;
+        }
+    } catch (PDOException $e) {
+        error_log("Error checking user for impersonation: " . $e->getMessage());
+        return false;
+    }
+    
+    // Устанавливаем impersonation в сессию
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        initSession();
+    }
+    
+    $_SESSION['impersonate_user_id'] = (int)$userId;
+    return true;
+}
+
+/**
+ * Отключает режим impersonation
+ * 
+ * @return bool true при успехе
+ */
+function clearImpersonation(): bool
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return true;
+    }
+    
+    if (isset($_SESSION['impersonate_user_id'])) {
+        unset($_SESSION['impersonate_user_id']);
+    }
+    
+    return true;
+}
+
 // Инициализация сессии при подключении файла
 initSession();
 

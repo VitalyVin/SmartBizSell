@@ -48,12 +48,12 @@ if (!$formId) {
 }
 
 $pdo = getDBConnection();
-$userId = $_SESSION['user_id'];
+$effectiveUserId = getEffectiveUserId();
 
 try {
     // Проверяем существование формы и её принадлежность пользователю
     $stmt = $pdo->prepare("SELECT id, status, user_id FROM seller_forms WHERE id = ? AND user_id = ?");
-    $stmt->execute([$formId, $userId]);
+    $stmt->execute([$formId, $effectiveUserId]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$form) {
@@ -77,7 +77,7 @@ try {
     
     // Удаляем форму
     $stmt = $pdo->prepare("DELETE FROM seller_forms WHERE id = ? AND user_id = ? AND status = 'draft'");
-    $stmt->execute([$formId, $userId]);
+    $stmt->execute([$formId, $effectiveUserId]);
     
     if ($stmt->rowCount() > 0) {
         echo json_encode([

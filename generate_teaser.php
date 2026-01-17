@@ -92,12 +92,13 @@ if (empty($apiKey)) {
 
     if ($requestedFormId) {
         // Загружаем конкретную анкету по ID, если она принадлежит пользователю
+        $effectiveUserId = getEffectiveUserId();
         $stmt = $pdo->prepare("
             SELECT *
             FROM seller_forms
             WHERE id = ? AND user_id = ?
         ");
-        $stmt->execute([$requestedFormId, $user['id']]);
+        $stmt->execute([$requestedFormId, $effectiveUserId]);
         $form = $stmt->fetch();
         
         if (!$form) {
@@ -108,6 +109,7 @@ if (empty($apiKey)) {
         }
     } else {
         // Если form_id не указан, используем последнюю отправленную анкету
+    $effectiveUserId = getEffectiveUserId();
     $stmt = $pdo->prepare("
         SELECT *
         FROM seller_forms
@@ -116,7 +118,7 @@ if (empty($apiKey)) {
         ORDER BY submitted_at DESC, updated_at DESC
         LIMIT 1
     ");
-    $stmt->execute([$user['id']]);
+    $stmt->execute([$effectiveUserId]);
     $form = $stmt->fetch();
 
     if (!$form) {

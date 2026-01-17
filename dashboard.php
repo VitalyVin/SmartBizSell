@@ -42,8 +42,9 @@ if (isset($_GET['force_welcome'])) {
     // Проверяем значение в БД
     try {
         $pdo = getDBConnection();
+        $effectiveUserId = getEffectiveUserId();
         $stmt = $pdo->prepare("SELECT welcome_shown FROM users WHERE id = ?");
-        $stmt->execute([$user['id']]);
+        $stmt->execute([$effectiveUserId]);
         $userData = $stmt->fetch();
         
         error_log("User welcome_shown value: " . var_export($userData, true));
@@ -71,13 +72,14 @@ if (isset($_GET['force_welcome'])) {
  */
 try {
     $pdo = getDBConnection();
+    $effectiveUserId = getEffectiveUserId();
     $stmt = $pdo->prepare("
         SELECT id, asset_name, status, created_at, updated_at, submitted_at 
         FROM seller_forms 
         WHERE user_id = ? 
         ORDER BY created_at DESC
     ");
-    $stmt->execute([$user['id']]);
+    $stmt->execute([$effectiveUserId]);
     $forms = $stmt->fetchAll();
     
     // Загружаем информацию о модерации тизеров для каждой формы
@@ -119,13 +121,13 @@ $selectedFormId = isset($_GET['form_id']) ? (int)$_GET['form_id'] : null;
 $selectedForm = null;
 
 if ($selectedFormId) {
-    if (isModerator()) {
-        // Модераторы могут просматривать DCF для любой анкеты
+    if (isModerator() && !isImpersonating()) {
+        // Модераторы (не в режиме impersonation) могут просматривать DCF для любой анкеты
         $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ?");
         $stmt->execute([$selectedFormId]);
         $selectedForm = $stmt->fetch();
     } else {
-        // Обычные пользователи - только свои анкеты
+        // Обычные пользователи или модераторы в режиме impersonation - только свои анкеты
         foreach ($forms as $form) {
             if ($form['id'] == $selectedFormId) {
                 $selectedForm = $form;
@@ -175,13 +177,14 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     
+    $effectiveUserId = getEffectiveUserId();
     $stmt = $pdo->prepare("
         SELECT id, buyer_name, seller_name, asset_name, status, created_at, updated_at, submitted_at 
         FROM term_sheet_forms 
         WHERE user_id = ? 
         ORDER BY created_at DESC
     ");
-    $stmt->execute([$user['id']]);
+    $stmt->execute([$effectiveUserId]);
     $termSheets = $stmt->fetchAll();
 } catch (PDOException $e) {
     error_log("Error fetching term sheets: " . $e->getMessage());
@@ -1383,8 +1386,8 @@ if ($selectedForm) {
         $latestForm = $selectedForm;
     } else {
         // Нужно загрузить полные данные
-        if (isModerator()) {
-            // Модераторы могут загружать любые анкеты
+        if (isModerator() && !isImpersonating()) {
+            // Модераторы (не в режиме impersonation) могут загружать любые анкеты
             $latestFormStmt = $pdo->prepare("
                 SELECT *
                 FROM seller_forms
@@ -1392,13 +1395,14 @@ if ($selectedForm) {
             ");
             $latestFormStmt->execute([$selectedForm['id']]);
         } else {
-            // Обычные пользователи - только свои анкеты
+            // Обычные пользователи или модераторы в режиме impersonation - только свои анкеты
+            $effectiveUserId = getEffectiveUserId();
             $latestFormStmt = $pdo->prepare("
                 SELECT *
                 FROM seller_forms
                 WHERE id = ? AND user_id = ?
             ");
-            $latestFormStmt->execute([$selectedForm['id'], $user['id']]);
+            $latestFormStmt->execute([$selectedForm['id'], $effectiveUserId]);
         }
         $latestForm = $latestFormStmt->fetch();
     }
@@ -4334,6 +4338,40 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1"></script>
 </head>
 <body>
+    <?php if (isModerator() && isImpersonating()): 
+        $impersonatedUserId = getImpersonatedUserId();
+        $impersonatedUser = null;
+        if ($impersonatedUserId) {
+            try {
+                $impersonatedUserStmt = $pdo->prepare("SELECT email, full_name FROM users WHERE id = ?");
+                $impersonatedUserStmt->execute([$impersonatedUserId]);
+                $impersonatedUser = $impersonatedUserStmt->fetch();
+            } catch (PDOException $e) {
+                error_log("Error fetching impersonated user: " . $e->getMessage());
+            }
+        }
+    ?>
+    <div style="background: linear-gradient(135deg, #FF9500 0%, #FF6B00 100%); color: white; padding: 16px 20px; text-align: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 1; min-width: 200px;">
+                <strong>⚠️ Режим помощи клиенту</strong>
+                <?php if ($impersonatedUser): ?>
+                    <span style="opacity: 0.9; margin-left: 8px;">
+                        Вы работаете от имени: <?php echo htmlspecialchars($impersonatedUser['email'], ENT_QUOTES, 'UTF-8'); ?>
+                        <?php if (!empty($impersonatedUser['full_name'])): ?>
+                            (<?php echo htmlspecialchars($impersonatedUser['full_name'], ENT_QUOTES, 'UTF-8'); ?>)
+                        <?php endif; ?>
+                    </span>
+                <?php endif; ?>
+            </div>
+            <a href="clear_impersonation.php?redirect=dashboard.php" 
+               style="background: white; color: #FF9500; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; white-space: nowrap;"
+               onclick="return confirm('Выйти из режима помощи клиенту?');">
+                Выйти из режима помощи
+            </a>
+        </div>
+    </div>
+    <?php endif; ?>
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container">
@@ -5575,7 +5613,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             ORDER BY submitted_at DESC, updated_at DESC 
                             LIMIT 1
                         ");
-                        $stmt->execute([$user['id']]);
+                        $effectiveUserId = getEffectiveUserId();
+                        $stmt->execute([$effectiveUserId]);
                         $hasGeneratedTermSheet = $stmt->fetch();
                         ?>
                         <?php if ($hasGeneratedTermSheet): ?>
@@ -5607,7 +5646,8 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             ORDER BY submitted_at DESC, updated_at DESC 
                             LIMIT 1
                         ");
-                        $stmt->execute([$user['id']]);
+                        $effectiveUserId = getEffectiveUserId();
+                        $stmt->execute([$effectiveUserId]);
                         $aiTermSheet = $stmt->fetch();
                         if ($aiTermSheet && !empty($aiTermSheet['data_json'])) {
                             $termSheetData = json_decode($aiTermSheet['data_json'], true);

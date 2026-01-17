@@ -56,8 +56,9 @@ try {
     }
     
     // Проверяем, что анкета принадлежит пользователю
+    $effectiveUserId = getEffectiveUserId();
     $stmt = $pdo->prepare("SELECT id, user_id FROM seller_forms WHERE id = ? AND user_id = ?");
-    $stmt->execute([$sellerFormId, $user['id']]);
+    $stmt->execute([$sellerFormId, $effectiveUserId]);
     $form = $stmt->fetch();
     
     if (!$form) {

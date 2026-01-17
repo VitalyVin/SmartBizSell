@@ -44,8 +44,9 @@ if ($formId <= 0) {
 // Загрузка анкеты из базы данных
 // Проверяем, что анкета принадлежит текущему пользователю (защита от несанкционированного доступа)
 $pdo = getDBConnection();
+$effectiveUserId = getEffectiveUserId();
 $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-$stmt->execute([$formId, $user['id']]);
+$stmt->execute([$formId, $effectiveUserId]);
 $form = $stmt->fetch();
 
 if (!$form) {

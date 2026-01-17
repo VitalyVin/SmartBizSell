@@ -187,7 +187,7 @@ function buildDraftPayload(array $source): array
                 // Сохраняем массив регионов как массив в JSON (для черновиков)
                 $payload[$field] = array_map('trim', array_filter($source[$field]));
             } else {
-                $payload[$field] = normalizeDraftValue($source[$field]);
+            $payload[$field] = normalizeDraftValue($source[$field]);
             }
         }
     }
@@ -351,8 +351,8 @@ function hydrateFormFromDb(array $form): void
             $_POST['deal_goal'] = $_POST['deal_goal'];
         } else {
             // Старый формат: одиночное значение (для обратной совместимости)
-            if ($_POST['deal_goal'] === 'cash-out') $_POST['deal_goal'] = 'cash_out';
-            if ($_POST['deal_goal'] === 'cash-in') $_POST['deal_goal'] = 'cash_in';
+    if ($_POST['deal_goal'] === 'cash-out') $_POST['deal_goal'] = 'cash_out';
+    if ($_POST['deal_goal'] === 'cash-in') $_POST['deal_goal'] = 'cash_in';
         }
     }
     $_POST['production_land_ownership'] = $form['production_land_ownership'] ?? '';
@@ -387,7 +387,7 @@ function hydrateFormFromDb(array $form): void
                             $_POST[$key] = $value; // Строка для обратной совместимости
                         }
                     } else {
-                        $_POST[$key] = $value;
+                    $_POST[$key] = $value;
                     }
                 }
             }
@@ -459,7 +459,7 @@ function hydrateFormFromDb(array $form): void
 
     if (!isset($_POST['balance']) || empty($_POST['balance'])) {
         error_log("INIT BALANCE - creating default structure");
-            $balanceItems = ['fixed_assets', 'inventory', 'receivables', 'payables', 'loans', 'cash', 'net_assets'];
+        $balanceItems = ['fixed_assets', 'inventory', 'receivables', 'payables', 'loans', 'cash', 'net_assets'];
         $_POST['balance'] = [];
         foreach ($balanceItems as $item) {
             $_POST['balance'][$item] = [
@@ -489,8 +489,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Загружаем существующую форму, если указан form_id
     $formId = isset($_POST['form_id']) ? (int)$_POST['form_id'] : null;
     if ($formId) {
+        $effectiveUserId = getEffectiveUserId();
         $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-        $stmt->execute([$formId, $_SESSION['user_id']]);
+        $stmt->execute([$formId, $effectiveUserId]);
         $existingForm = $stmt->fetch();
     }
 
@@ -565,13 +566,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Статус всегда 'draft', остальные поля не заполняются
                 if ($formId && $existingForm) {
                     // Обновление существующего черновика
+                    $effectiveUserId = getEffectiveUserId();
                     $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
-                    $stmt->execute([$asset_name, $companyInnDigits, $dataJson, $formId, $_SESSION['user_id']]);
+                    $stmt->execute([$asset_name, $companyInnDigits, $dataJson, $formId, $effectiveUserId]);
                     error_log("DRAFT UPDATED - form_id: $formId");
                 } else {
                     // Создание нового черновика
+                    $effectiveUserId = getEffectiveUserId();
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, company_inn, data_json, status) VALUES (?, ?, ?, ?, 'draft')");
-                    $stmt->execute([$_SESSION['user_id'], $asset_name, $companyInnDigits, $dataJson]);
+                    $stmt->execute([$effectiveUserId, $asset_name, $companyInnDigits, $dataJson]);
                     $formId = $pdo->lastInsertId();
                     error_log("DRAFT INSERTED - new form_id: $formId");
                 }
@@ -666,7 +669,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $mainClients, $salesShare, $personnelCount, $companyWebsite, $additionalInfo,
                         $financialResultsVat, $financialSource,
                         $productionVolumes, $financialResults, $balanceIndicators, $dataJson,
-                        $formId, $_SESSION['user_id']
+                        $formId, getEffectiveUserId()
                     ]);
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (
@@ -683,8 +686,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         production_volumes, financial_results, balance_indicators, data_json,
                         status, submitted_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
+                            $effectiveUserId = getEffectiveUserId();
                             $stmt->execute([
-                        $_SESSION['user_id'], $asset_name, $companyInnDigits, $dealSubject, $dealPurpose, $assetDisclosure,
+                        $effectiveUserId, $asset_name, $companyInnDigits, $dealSubject, $dealPurpose, $assetDisclosure,
                         $companyDescription, $presenceRegions, $productsServices, $companyBrands,
                         $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
                         $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
@@ -700,16 +704,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Для финальной отправки - редирект в кабинет
-                header('Location: dashboard.php?success=1');
-                exit;
+                            header('Location: dashboard.php?success=1');
+                            exit;
             }
-        } catch (PDOException $e) {
-            error_log("Error saving form: " . $e->getMessage());
+                        } catch (PDOException $e) {
+                            error_log("Error saving form: " . $e->getMessage());
             if ($isDraftSave) {
                 $errors['general'] = 'Ошибка сохранения черновика: ' . $e->getMessage();
             } else {
-                $errors['general'] = 'Ошибка сохранения анкеты. Попробуйте позже.';
-            }
+                            $errors['general'] = 'Ошибка сохранения анкеты. Попробуйте позже.';
+                        }
         }
     }
 }
@@ -721,8 +725,9 @@ $draftMessage = false;
 
 if (isset($_GET['form_id'])) {
     $formId = (int)$_GET['form_id'];
+    $effectiveUserId = getEffectiveUserId();
     $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-    $stmt->execute([$formId, $_SESSION['user_id']]);
+    $stmt->execute([$formId, $effectiveUserId]);
     $existingForm = $stmt->fetch();
     if ($existingForm) {
         $formId = $existingForm['id'];
