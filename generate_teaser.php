@@ -26,6 +26,266 @@
 require_once 'config.php';
 require_once __DIR__ . '/investor_utils.php';
 
+/**
+ * Класс для детального логирования процесса генерации тизеров
+ */
+class TeaserLogger
+{
+    private $logFile = null;
+    private $logDir = null;
+    private $sessionStartTime = null;
+    private $formId = null;
+    
+    /**
+     * Начинает сессию логирования для конкретного form_id
+     */
+    public function startSession($formId): void
+    {
+        $this->formId = $formId;
+        $this->sessionStartTime = microtime(true);
+        
+        // Создаем директорию для логов, если её нет
+        $this->logDir = __DIR__ . '/logs/teaser';
+        if (!is_dir($this->logDir)) {
+            mkdir($this->logDir, 0755, true);
+        }
+        
+        // Создаем имя файла с timestamp
+        $timestamp = date('Y-m-d_H-i-s');
+        $this->logFile = $this->logDir . '/teaser_' . $timestamp . '.log';
+        
+        // Открываем файл для записи
+        $this->log("========================================");
+        $this->log("Teaser Generation Started");
+        $this->log("Form ID: " . ($formId ?? 'unknown'));
+        $this->log("Timestamp: " . date('Y-m-d H:i:s'));
+        $this->log("========================================");
+    }
+    
+    /**
+     * Логирует этап процесса с данными
+     */
+    public function logStep(string $stepName, $data = null, string $level = 'INFO'): void
+    {
+        $stepStartTime = microtime(true);
+        
+        $this->log("Step: " . $stepName, $level);
+        
+        if ($data !== null) {
+            if (is_array($data)) {
+                // Логируем структуру массива (ключи, размеры, ключевые поля)
+                $summary = $this->summarizeArray($data);
+                if (!empty($summary)) {
+                    $this->log("Input/Output: " . $summary, $level);
+                }
+            } else {
+                $this->log("Data: " . (string)$data, $level);
+            }
+        }
+        
+        if ($this->sessionStartTime !== null) {
+            $duration = round(microtime(true) - $stepStartTime, 3);
+            $this->log("Duration: " . $duration . "s", $level);
+        }
+    }
+    
+    /**
+     * Логирует ошибку с деталями исключения
+     */
+    public function logError(string $message, $exception = null): void
+    {
+        $this->log("ERROR: " . $message, 'ERROR');
+        
+        if ($exception instanceof Exception || $exception instanceof Throwable) {
+            $this->log("Error Type: " . get_class($exception), 'ERROR');
+            $this->log("Error Message: " . $exception->getMessage(), 'ERROR');
+            $this->log("Error File: " . $exception->getFile() . ":" . $exception->getLine(), 'ERROR');
+            
+            // Логируем trace, но ограничиваем его размер
+            $trace = $exception->getTraceAsString();
+            if (strlen($trace) > 2000) {
+                $trace = substr($trace, 0, 2000) . "... (truncated)";
+            }
+            $this->log("Error Trace: " . $trace, 'ERROR');
+        }
+    }
+    
+    /**
+     * Специальный метод для логирования DCF данных
+     */
+    public function logDCF($dcfData): void
+    {
+        if ($dcfData === null) {
+            $this->log("DCF Data: null", 'WARNING');
+            return;
+        }
+        
+        if (!is_array($dcfData)) {
+            $this->log("DCF Data: invalid type (" . gettype($dcfData) . ")", 'WARNING');
+            return;
+        }
+        
+        // Логируем структуру результата
+        $resultKeys = array_keys($dcfData);
+        $this->log("DCF Result Structure: keys=[" . implode(', ', $resultKeys) . "]", 'INFO');
+        
+        // Проверяем наличие ошибки
+        if (isset($dcfData['error'])) {
+            $this->log("DCF Error: " . ($dcfData['error'] ?? 'unknown'), 'ERROR');
+            return;
+        }
+        
+        $rowsCount = isset($dcfData['rows']) && is_array($dcfData['rows']) ? count($dcfData['rows']) : 0;
+        $this->log("DCF Data: rows_count=" . $rowsCount, 'INFO');
+        
+        // Если rows_count=0, логируем детали для диагностики
+        if ($rowsCount === 0) {
+            $this->log("DCF Data: WARNING - rows_count=0. This means DCF calculation returned data but with empty rows array.", 'WARNING');
+            $this->log("DCF Data: Available keys in result: " . implode(', ', $resultKeys), 'WARNING');
+            
+            // Логируем другие поля, которые могут быть в результате
+            if (isset($dcfData['columns'])) {
+                $columnsCount = is_array($dcfData['columns']) ? count($dcfData['columns']) : 0;
+                $this->log("DCF Data: columns_count=" . $columnsCount, 'WARNING');
+            }
+            if (isset($dcfData['warnings'])) {
+                $warnings = is_array($dcfData['warnings']) ? $dcfData['warnings'] : [];
+                $this->log("DCF Data: warnings=" . json_encode($warnings), 'WARNING');
+            }
+            if (isset($dcfData['valuation'])) {
+                $this->log("DCF Data: valuation exists but rows are empty", 'WARNING');
+            }
+        }
+        
+        if (isset($dcfData['rows']) && is_array($dcfData['rows']) && $rowsCount > 0) {
+            // Логируем доступные метрики
+            $labels = [];
+            foreach ($dcfData['rows'] as $row) {
+                if (isset($row['label'])) {
+                    $labels[] = $row['label'];
+                }
+            }
+            $this->log("DCF Metrics: " . implode(', ', $labels), 'INFO');
+            
+            // Логируем детали для выручки и прибыли
+            $revenueRow = null;
+            $profitRow = null;
+            foreach ($dcfData['rows'] as $row) {
+                if (isset($row['label'])) {
+                    $label = trim($row['label']);
+                    if ($label === 'Выручка') {
+                        $revenueRow = $row;
+                    } elseif ($label === 'Прибыль от продаж') {
+                        $profitRow = $row;
+                    }
+                }
+            }
+            
+            if ($revenueRow) {
+                $this->logDCFRow('Revenue', $revenueRow);
+            } else {
+                $this->log("DCF Revenue Row: not found", 'WARNING');
+            }
+            
+            if ($profitRow) {
+                $this->logDCFRow('Profit', $profitRow);
+            } else {
+                $this->log("DCF Profit Row: not found", 'WARNING');
+            }
+        } elseif (!isset($dcfData['rows'])) {
+            $this->log("DCF Data: WARNING - 'rows' key is missing in DCF result", 'WARNING');
+        }
+    }
+    
+    /**
+     * Логирует детали строки DCF данных
+     */
+    private function logDCFRow(string $rowType, array $row): void
+    {
+        if (!isset($row['values']) || !is_array($row['values'])) {
+            $this->log("DCF " . $rowType . " Row: values not available", 'WARNING');
+            return;
+        }
+        
+        $values = $row['values'];
+        $keys = array_keys($values);
+        $nonNullCount = 0;
+        $periodCounts = ['fact' => 0, 'forecast' => 0];
+        
+        foreach ($values as $key => $value) {
+            if ($value !== null && is_numeric($value)) {
+                $nonNullCount++;
+                if (in_array($key, ['2022', '2023', '2024', '2025'])) {
+                    $periodCounts['fact']++;
+                } elseif (in_array($key, ['P1', 'P2', 'P3', 'P4', 'P5'])) {
+                    $periodCounts['forecast']++;
+                }
+            }
+        }
+        
+        $this->log("DCF " . $rowType . " Row: values_keys=[" . implode(', ', $keys) . "], non_null_count=" . $nonNullCount . ", fact_periods=" . $periodCounts['fact'] . ", forecast_periods=" . $periodCounts['forecast'], 'INFO');
+    }
+    
+    /**
+     * Завершает сессию логирования
+     */
+    public function endSession(): void
+    {
+        if ($this->sessionStartTime !== null) {
+            $totalDuration = round(microtime(true) - $this->sessionStartTime, 3);
+            $this->log("Total Duration: " . $totalDuration . "s", 'INFO');
+        }
+        
+        $this->log("========================================");
+        $this->log("Teaser Generation Completed");
+        $this->log("========================================");
+    }
+    
+    /**
+     * Метод для записи в лог-файл
+     */
+    public function log(string $message, string $level = 'INFO'): void
+    {
+        if ($this->logFile === null) {
+            return; // Сессия не начата
+        }
+        
+        $timestamp = date('Y-m-d H:i:s.v');
+        $logLine = "[" . $timestamp . "] [" . $level . "] " . $message . PHP_EOL;
+        
+        file_put_contents($this->logFile, $logLine, FILE_APPEND | LOCK_EX);
+    }
+    
+    /**
+     * Создает краткое описание массива для логирования
+     */
+    private function summarizeArray(array $data): string
+    {
+        $keys = array_keys($data);
+        $summary = "keys=[" . implode(', ', $keys) . "]";
+        
+        // Добавляем размеры для больших массивов
+        $size = strlen(json_encode($data));
+        if ($size > 1024) {
+            $summary .= ", size=" . round($size / 1024, 2) . "KB";
+        }
+        
+        // Добавляем ключевые поля, если они есть
+        $keyFields = ['form_id', 'id', 'asset_name', 'rows_count', 'payload_size'];
+        $keyValues = [];
+        foreach ($keyFields as $field) {
+            if (isset($data[$field])) {
+                $keyValues[] = $field . "=" . (is_scalar($data[$field]) ? $data[$field] : gettype($data[$field]));
+            }
+        }
+        if (!empty($keyValues)) {
+            $summary .= ", " . implode(', ', $keyValues);
+        }
+        
+        return $summary;
+    }
+}
+
 // Если мы в режиме загрузки только функций (для dashboard.php), не выполняем основной код
 if (!defined('TEASER_FUNCTIONS_ONLY') || !TEASER_FUNCTIONS_ONLY) {
     // Отключаем вывод ошибок PHP в ответ, чтобы не ломать JSON
@@ -244,13 +504,35 @@ if (empty($apiKey)) {
 
     // Обертываем весь код генерации в try-catch для перехвата всех ошибок
     try {
+        // Инициализация системы логирования
+        $logger = new TeaserLogger();
+        $logger->startSession($form['id'] ?? 'unknown');
+        $logger->logStep('start', ['form_id' => $form['id'] ?? 'unknown', 'action' => $action ?? 'teaser']);
+        
         error_log('Teaser generation started for form_id: ' . ($form['id'] ?? 'unknown'));
         
         // Проверяем, что функция существует
         if (!function_exists('buildTeaserPayload')) {
             throw new RuntimeException('Function buildTeaserPayload not found');
         }
-    $formPayload = buildTeaserPayload($form);
+        
+        // Логируем входные данные формы (структуру, без полных дампов)
+        $formInputSummary = [
+            'form_id' => $form['id'] ?? null,
+            'has_financial_data' => !empty($form['financial_results']) || !empty($form['balance_indicators']) || !empty($form['data_json']),
+            'form_keys' => array_keys($form),
+        ];
+        $logger->logStep('buildTeaserPayload', ['input' => $formInputSummary]);
+        
+        $formPayload = buildTeaserPayload($form);
+        
+        // Логируем выходной payload (структуру и размер)
+        $payloadSummary = [
+            'payload_keys' => array_keys($formPayload),
+            'payload_size' => round(strlen(json_encode($formPayload)) / 1024, 2) . 'KB',
+        ];
+        $logger->logStep('buildTeaserPayload', ['output' => $payloadSummary]);
+        
         error_log('buildTeaserPayload completed');
         
         // Создаем маскированную версию payload для тизера
@@ -260,6 +542,7 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function buildMaskedTeaserPayload not found');
         }
         $maskedPayload = buildMaskedTeaserPayload($formPayload);
+        $logger->logStep('buildMaskedTeaserPayload', ['masked_payload_keys' => array_keys($maskedPayload)]);
         error_log('buildMaskedTeaserPayload completed');
     
     // Получаем данные DCF модели для графика
@@ -267,12 +550,44 @@ if (empty($apiKey)) {
         if (!function_exists('extractDCFDataForChart')) {
             throw new RuntimeException('Function extractDCFDataForChart not found');
         }
+        
         // Проверяем, что $form не пустой перед вызовом функции
         if (empty($form) || !is_array($form)) {
             error_log('Warning: $form is empty or not an array before extractDCFDataForChart');
             $dcfData = null;
+            $logger->logStep('extractDCFDataForChart', ['error' => 'Form is empty or not an array'], 'WARNING');
         } else {
-    $dcfData = extractDCFDataForChart($form);
+            // Логируем финансовые данные в форме перед вызовом extractDCFDataForChart
+            $hasFinancialResults = !empty($form['financial_results']);
+            $hasBalanceIndicators = !empty($form['balance_indicators']);
+            $hasFinancialInJson = false;
+            $financialDataInJson = null;
+            if (!empty($form['data_json'])) {
+                $formData = json_decode($form['data_json'], true);
+                if (is_array($formData)) {
+                    $hasFinancialInJson = !empty($formData['financial']);
+                    if ($hasFinancialInJson) {
+                        $financialDataInJson = is_array($formData['financial']) ? array_keys($formData['financial']) : ['non-array'];
+                    }
+                }
+            }
+            
+            $logger->logStep('extractDCFDataForChart', [
+                'input' => [
+                    'form_id' => $form['id'] ?? 'unknown',
+                    'has_form' => !empty($form) && is_array($form),
+                    'financial_data_check' => [
+                        'financial_results' => $hasFinancialResults ? 'yes' : 'no',
+                        'balance_indicators' => $hasBalanceIndicators ? 'yes' : 'no',
+                        'data_json_financial' => $hasFinancialInJson ? 'yes' : 'no',
+                        'financial_keys_in_json' => $financialDataInJson,
+                    ],
+                ],
+            ]);
+            
+            $dcfData = extractDCFDataForChart($form, $logger);
+            // Детальное логирование DCF данных
+            $logger->logDCF($dcfData);
         }
         error_log('extractDCFDataForChart completed');
 
@@ -309,6 +624,7 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function buildTeaserPrompt not found');
         }
         $prompt = buildTeaserPrompt($maskedPayload);
+        $logger->logStep('buildTeaserPrompt', ['prompt_length' => strlen($prompt), 'prompt_size' => round(strlen($prompt) / 1024, 2) . 'KB']);
         error_log('buildTeaserPrompt completed, prompt length: ' . strlen($prompt));
         
         if (empty($prompt)) {
@@ -326,10 +642,14 @@ if (empty($apiKey)) {
         }
         
         try {
+            $apiStartTime = microtime(true);
             $rawResponse = callAICompletions($prompt, $apiKey, 3); // 3 попытки с retry
+            $apiDuration = round(microtime(true) - $apiStartTime, 3);
+            $logger->logStep('callAICompletions', ['response_length' => strlen($rawResponse), 'response_size' => round(strlen($rawResponse) / 1024, 2) . 'KB', 'duration' => $apiDuration . 's']);
             error_log('AI API call completed, response length: ' . strlen($rawResponse));
         } catch (RuntimeException $e) {
             // Логируем детали ошибки для отладки
+            $logger->logError('API call failed', $e);
             error_log('API call failed: ' . $e->getMessage());
             throw $e;
         }
@@ -340,6 +660,7 @@ if (empty($apiKey)) {
         
         // Проверяем, что ответ не слишком короткий (может быть обрезан)
         if (strlen($rawResponse) < 50) {
+            $logger->logStep('callAICompletions', ['warning' => 'Very short response from AI'], 'WARNING');
             error_log('Warning: Very short response from AI: ' . substr($rawResponse, 0, 100));
         }
         
@@ -350,6 +671,15 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function parseTeaserResponse not found');
         }
     $teaserData = parseTeaserResponse($rawResponse);
+        
+        // Логируем структуру полученных данных от AI
+        $teaserDataSummary = [
+            'blocks' => array_keys($teaserData),
+            'has_overview' => !empty($teaserData['overview']),
+            'has_financials' => !empty($teaserData['financials']),
+            'has_products' => !empty($teaserData['products']),
+        ];
+        $logger->logStep('parseTeaserResponse', ['output' => $teaserDataSummary]);
         error_log('parseTeaserResponse completed');
         
         if (empty($teaserData) || !is_array($teaserData)) {
@@ -360,18 +690,21 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function normalizeTeaserData not found');
         }
         $teaserData = normalizeTeaserData($teaserData, $maskedPayload);
+        $logger->logStep('normalizeTeaserData', ['blocks_after_normalization' => array_keys($teaserData)]);
         error_log('normalizeTeaserData completed');
         
         if (!function_exists('ensureOverviewWithAi')) {
             throw new RuntimeException('Function ensureOverviewWithAi not found');
         }
         $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey);
+        $logger->logStep('ensureOverviewWithAi', ['has_overview_summary' => !empty($teaserData['overview']['summary'])]);
         error_log('ensureOverviewWithAi completed');
         
         if (!function_exists('ensureProductsLocalized')) {
             throw new RuntimeException('Function ensureProductsLocalized not found');
         }
         $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
+        $logger->logStep('ensureProductsLocalized', ['has_products' => !empty($teaserData['products'])]);
         error_log('ensureProductsLocalized completed');
     
     // Генерируем краткое описание для hero блока из overview summary
@@ -380,6 +713,7 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function buildHeroDescription not found');
         }
         $heroDescription = buildHeroDescription($teaserData, $maskedPayload);
+        $logger->logStep('buildHeroDescription', ['hero_description_length' => strlen($heroDescription ?? '')]);
         error_log('buildHeroDescription completed');
         
         // Используем маскированное название актива для рендеринга
@@ -389,6 +723,7 @@ if (empty($apiKey)) {
         }
         error_log('Rendering teaser HTML...');
         $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData);
+        $logger->logStep('renderTeaserHtml', ['html_length' => strlen($html), 'html_size' => round(strlen($html) / 1024, 2) . 'KB']);
         error_log('renderTeaserHtml completed, HTML length: ' . strlen($html));
 
         // Сохраняем snapshot с исходными данными (не маскированными)
@@ -403,7 +738,11 @@ if (empty($apiKey)) {
         'generated_at' => date('c'),
         'model' => TOGETHER_MODEL,
     ]);
+        $logger->logStep('persistTeaserSnapshot', ['snapshot_created' => !empty($snapshot), 'generated_at' => $snapshot['generated_at'] ?? null]);
         error_log('persistTeaserSnapshot completed');
+        
+        // Завершаем сессию логирования
+        $logger->endSession();
 
         // Запись в published_teasers создается только при нажатии кнопки "Отправить на модерацию"
         // через submit_teaser_moderation.php, а не автоматически после обновления тизера
@@ -416,6 +755,12 @@ if (empty($apiKey)) {
     ]);
         ob_end_flush();
 } catch (Exception $e) {
+        // Логируем ошибку в систему логирования, если она была инициализирована
+        if (isset($logger)) {
+            $logger->logError('Teaser generation error', $e);
+            $logger->endSession();
+        }
+        
         $errorMessage = $e->getMessage();
         $errorTrace = $e->getTraceAsString();
         $errorFile = $e->getFile();
@@ -453,6 +798,12 @@ if (empty($apiKey)) {
         ob_end_flush();
         exit;
     } catch (Throwable $e) {
+        // Логируем ошибку в систему логирования, если она была инициализирована
+        if (isset($logger)) {
+            $logger->logError('Fatal error in teaser generation', $e);
+            $logger->endSession();
+        }
+        
         $errorMessage = $e->getMessage();
         $errorTrace = $e->getTraceAsString();
         $errorFile = $e->getFile();
@@ -1463,15 +1814,30 @@ function extractNumericValue(string $raw): ?float
  * Использует те же алгоритмы, что и calculateUserDCF, но упрощенно - только для графика
  * 
  * @param array $form Данные формы из БД
+ * @param TeaserLogger|null $logger Опциональный логгер для записи в файл
  * @return array|null Структура данных DCF (rows, columns) или null при ошибке
  */
-function extractDCFDataForChart(array $form): ?array
+function extractDCFDataForChart(array $form, ?TeaserLogger $logger = null): ?array
 {
+    // Сохраняем form_id в локальную переменную до любых операций
+    $formId = $form['id'] ?? 'unknown';
+    
+    if ($logger) {
+        $logger->log("extractDCFDataForChart called for form_id={$formId}", 'INFO');
+    }
+    
     // Проверяем, что $form не пустой и является массивом
     if (empty($form) || !is_array($form)) {
+        if ($logger) {
+            $logger->log("Invalid form data provided for form_id={$formId}: empty=" . (empty($form) ? 'yes' : 'no') . ", is_array=" . (is_array($form) ? 'yes' : 'no'), 'WARNING');
+        }
         error_log('extractDCFDataForChart: Invalid form data provided');
         return null;
     }
+    
+    // ВАЖНО: Сохраняем копию $form в локальной переменной перед include
+    // чтобы она не была изменена внутри dashboard.php
+    $localForm = $form;
     
     // Используем output buffering для безопасного подключения dashboard.php
     ob_start();
@@ -1491,15 +1857,66 @@ function extractDCFDataForChart(array $form): ?array
             }
         }
         
-        // Если функция доступна и $form валиден, вызываем её
-        if (function_exists('calculateUserDCF') && !empty($form) && is_array($form)) {
-            $dcfData = calculateUserDCF($form);
-            if (isset($dcfData['error'])) {
-                error_log('DCF calculation returned error: ' . ($dcfData['error'] ?? 'unknown'));
-                $dcfData = null; // Игнорируем ошибки DCF для графика
+        // Если функция доступна и $localForm валиден, вызываем её
+        // Используем $localForm вместо $form, чтобы не зависеть от изменений в dashboard.php
+        if (function_exists('calculateUserDCF') && !empty($localForm) && is_array($localForm)) {
+            if ($logger) {
+                $logger->log("Calling calculateUserDCF for form_id=" . ($localForm['id'] ?? 'unknown'), 'INFO');
+            }
+            
+            $dcfData = calculateUserDCF($localForm);
+            
+            // Детальное логирование результата calculateUserDCF
+            if ($dcfData === null) {
+                if ($logger) {
+                    $logger->log("calculateUserDCF returned null", 'WARNING');
+                }
+            } elseif (is_array($dcfData)) {
+                $resultKeys = array_keys($dcfData);
+                if ($logger) {
+                    $logger->log("calculateUserDCF returned array with keys: " . implode(', ', $resultKeys), 'INFO');
+                }
+                
+                if (isset($dcfData['error'])) {
+                    $errorMsg = $dcfData['error'] ?? 'unknown';
+                    if ($logger) {
+                        $logger->log("DCF calculation returned error: " . $errorMsg, 'ERROR');
+                    }
+                    $dcfData = null; // Игнорируем ошибки DCF для графика
+                } elseif (isset($dcfData['rows'])) {
+                    $rowsCount = is_array($dcfData['rows']) ? count($dcfData['rows']) : 0;
+                    if ($logger) {
+                        $logger->log("DCF calculation returned rows_count=" . $rowsCount, 'INFO');
+                    }
+                    
+                    if ($rowsCount === 0) {
+                        if ($logger) {
+                            $logger->log("WARNING - rows_count=0. DCF data structure: " . json_encode($resultKeys), 'WARNING');
+                            $dcfDataWithoutRows = array_diff_key($dcfData, ['rows' => true]);
+                            $logger->log("Full DCF result (without rows): " . json_encode($dcfDataWithoutRows), 'WARNING');
+                        }
+                    }
+                } else {
+                    if ($logger) {
+                        $logger->log("WARNING - DCF result has no 'rows' key. Available keys: " . implode(', ', $resultKeys), 'WARNING');
+                    }
+                }
+            } else {
+                if ($logger) {
+                    $logger->log("calculateUserDCF returned non-array: " . gettype($dcfData), 'WARNING');
+                }
             }
         } else {
-            error_log('extractDCFDataForChart: calculateUserDCF not available or form is invalid');
+            if ($logger) {
+                // Детальное логирование причины, почему условие не выполнилось
+                // Используем $localForm вместо $form
+                $hasFunction = function_exists('calculateUserDCF');
+                $formIdCheck = $localForm['id'] ?? 'unknown';
+                $isEmpty = empty($localForm);
+                $isArray = is_array($localForm);
+                
+                $logger->log("calculateUserDCF check failed for form_id={$formIdCheck}: function_exists=" . ($hasFunction ? 'yes' : 'no') . ", empty_form=" . ($isEmpty ? 'yes' : 'no') . ", is_array=" . ($isArray ? 'yes' : 'no'), 'WARNING');
+            }
         }
     } catch (Exception $e) {
         error_log('DCF calculation error in teaser: ' . $e->getMessage());
