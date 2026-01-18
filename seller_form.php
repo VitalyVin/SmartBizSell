@@ -566,6 +566,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Статус всегда 'draft', остальные поля не заполняются
                 if ($formId && $existingForm) {
                     // Обновление существующего черновика
+                    // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
+                    // чтобы не потерять их при сохранении формы
+                    $currentDataJson = [];
+                    if (!empty($existingForm['data_json'])) {
+                        $decoded = json_decode($existingForm['data_json'], true);
+                        if (is_array($decoded)) {
+                            $currentDataJson = $decoded;
+                        }
+                    }
+                    
+                    // Объединяем текущие данные с новыми данными формы
+                    // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
+                    $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
+                    foreach ($preservedFields as $field) {
+                        if (isset($currentDataJson[$field])) {
+                            $draftPayload[$field] = $currentDataJson[$field];
+                        }
+                    }
+                    
+                    // Обновляем data_json с сохранением важных полей
+                    $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                    
                     $effectiveUserId = getEffectiveUserId();
                     $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
                     $stmt->execute([$asset_name, $companyInnDigits, $dataJson, $formId, $effectiveUserId]);
@@ -643,6 +665,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $balanceIndicators = isset($_POST['balance']) ? json_encode($_POST['balance'], JSON_UNESCAPED_UNICODE) : null;
 
                 if ($formId && $existingForm) {
+                    // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
+                    // чтобы не потерять их при финальной отправке формы
+                    $currentDataJson = [];
+                    if (!empty($existingForm['data_json'])) {
+                        $decoded = json_decode($existingForm['data_json'], true);
+                        if (is_array($decoded)) {
+                            $currentDataJson = $decoded;
+                        }
+                    }
+                    
+                    // Объединяем текущие данные с новыми данными формы
+                    // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
+                    $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
+                    foreach ($preservedFields as $field) {
+                        if (isset($currentDataJson[$field])) {
+                            $draftPayload[$field] = $currentDataJson[$field];
+                        }
+                    }
+                    
+                    // Обновляем data_json с сохранением важных полей
+                    $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                    
                     $stmt = $pdo->prepare("UPDATE seller_forms SET
                         asset_name = ?, company_inn = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
                         company_description = ?, presence_regions = ?, products_services = ?, company_brands = ?,

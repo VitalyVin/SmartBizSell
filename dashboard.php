@@ -1389,8 +1389,8 @@ if ($selectedForm) {
         if (isModerator() && !isImpersonating()) {
             // Модераторы (не в режиме impersonation) могут загружать любые анкеты
             $latestFormStmt = $pdo->prepare("
-                SELECT *
-                FROM seller_forms
+    SELECT *
+    FROM seller_forms
                 WHERE id = ?
             ");
             $latestFormStmt->execute([$selectedForm['id']]);
@@ -7790,14 +7790,37 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
              */
             const saveFinalPrice = async (price) => {
                 try {
+                    // Получаем form_id из URL или из элемента страницы
+                    const urlParams = new URLSearchParams(window.location.search);
+                    let formId = urlParams.get('form_id');
+                    
+                    // Если form_id не в URL, пытаемся найти его в элементах страницы
+                    if (!formId) {
+                        const formIdElement = document.querySelector('[data-form-id]');
+                        if (formIdElement) {
+                            formId = formIdElement.dataset.formId;
+                        }
+                    }
+                    
+                    const requestBody = {
+                        final_price: parseFloat(price)
+                    };
+                    
+                    // Если form_id найден, добавляем его в запрос
+                    if (formId) {
+                        requestBody.form_id = parseInt(formId);
+                    }
+                    
                     const response = await fetch('save_price_data.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
-                        body: JSON.stringify({
-                            final_price: parseFloat(price)
-                        })
+                        body: JSON.stringify(requestBody)
                     });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
                     
                     const result = await response.json();
                     if (!result.success) {
@@ -7809,6 +7832,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                     return result.final_price_updated_at || new Date().toISOString();
                 } catch (error) {
                     console.error('Error saving final price:', error);
+                    throw error; // Пробрасываем ошибку дальше
                 }
             };
             
@@ -7908,68 +7932,132 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 }
                 calculateBtn.addEventListener('click', handleMultiplierValuation);
                 
+                // Загружаем сохраненные данные ПЕРЕД инициализацией обработчиков
+                loadSavedPriceData();
+                
+                // Инициализируем обработчики для сохранения финальной цены
+                initFinalPriceHandlers();
+            };
+            
+            /**
+             * Инициализация обработчиков для сохранения финальной цены
+             * Может вызываться повторно, если секция показывается динамически
+             */
+            const initFinalPriceHandlers = () => {
                 // Добавляем обработчик для сохранения финальной цены
                 const finalPriceInput = document.getElementById('final-price-input');
                 const confirmPriceBtn = document.getElementById('confirm-price-btn');
                 
-                if (finalPriceInput && confirmPriceBtn) {
-                    // Обработчик для кнопки "Подтвердить"
-                    confirmPriceBtn.addEventListener('click', async () => {
-                        const price = finalPriceInput.value;
-                        if (!price || parseFloat(price) <= 0) {
-                            alert('Пожалуйста, введите корректную цену');
-                            return;
-                        }
+                if (!finalPriceInput || !confirmPriceBtn) {
+                    // Элементы еще не загружены, попробуем позже
+                    return;
+                }
+                
+                // Убираем старые обработчики, если они были добавлены ранее
+                const newConfirmBtn = confirmPriceBtn.cloneNode(true);
+                confirmPriceBtn.parentNode.replaceChild(newConfirmBtn, confirmPriceBtn);
+                const newFinalPriceInput = finalPriceInput.cloneNode(true);
+                finalPriceInput.parentNode.replaceChild(newFinalPriceInput, finalPriceInput);
+                
+                // Получаем обновленные ссылки на элементы
+                const updatedFinalPriceInput = document.getElementById('final-price-input');
+                const updatedConfirmPriceBtn = document.getElementById('confirm-price-btn');
+                
+                if (updatedFinalPriceInput && updatedConfirmPriceBtn) {
+                    // Автосохранение при потере фокуса, если значение изменилось
+                    let lastSavedPrice = typeof savedFinalPrice !== 'undefined' ? savedFinalPrice : null;
+                    let isSaving = false;
+                    
+                    const savePrice = async (priceValue, updateLastSaved = true) => {
+                        if (isSaving) return;
                         
-                        // Сохраняем оригинальный текст кнопки до изменения
-                        const originalText = confirmPriceBtn.textContent;
-                        
-                        // Блокируем кнопку на время сохранения
-                        confirmPriceBtn.disabled = true;
-                        confirmPriceBtn.textContent = 'Сохранение...';
-                        
+                        isSaving = true;
                         try {
-                            const updatedAt = await saveFinalPrice(price);
-                            const priceValue = parseFloat(price);
+                            const updatedAt = await saveFinalPrice(priceValue);
                             
-                            // Обновляем дату и время последнего изменения
+                            if (updateLastSaved) {
+                                lastSavedPrice = priceValue;
+                            }
+                            
                             if (updatedAt) {
                                 updateFinalPriceTimestamp(updatedAt);
                             } else {
                                 updateFinalPriceTimestamp(new Date().toISOString());
                             }
                             
-                            // Обновляем цену в hero block
                             updateHeroPrice(priceValue);
-                            
-                            // Показываем успешное сообщение
-                            confirmPriceBtn.textContent = '✓ Сохранено';
-                            confirmPriceBtn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
-                            
-                            setTimeout(() => {
-                                confirmPriceBtn.textContent = originalText;
-                                confirmPriceBtn.style.background = '';
-                                confirmPriceBtn.disabled = false;
-                            }, 2000);
+                            return updatedAt;
                         } catch (error) {
                             console.error('Error saving price:', error);
-                            alert('Ошибка при сохранении цены. Попробуйте снова.');
-                            confirmPriceBtn.disabled = false;
-                            confirmPriceBtn.textContent = originalText;
+                            throw error;
+                        } finally {
+                            isSaving = false;
+                        }
+                    };
+                    
+                    // Обработчик для кнопки "Подтвердить"
+                    updatedConfirmPriceBtn.addEventListener('click', async () => {
+                        const price = updatedFinalPriceInput.value;
+                        console.log('Confirm price button clicked, price value:', price);
+                        
+                        if (!price || parseFloat(price) <= 0) {
+                            alert('Пожалуйста, введите корректную цену');
+                            return;
+                        }
+                        
+                        const priceValue = parseFloat(price);
+                        console.log('Parsed price value:', priceValue);
+                        
+                        // Сохраняем оригинальный текст кнопки до изменения
+                        const originalText = updatedConfirmPriceBtn.textContent;
+                        
+                        // Блокируем кнопку на время сохранения
+                        updatedConfirmPriceBtn.disabled = true;
+                        updatedConfirmPriceBtn.textContent = 'Сохранение...';
+                        
+                        try {
+                            console.log('Calling savePrice with value:', priceValue);
+                            await savePrice(priceValue);
+                            console.log('Price saved successfully');
+                            
+                            // Показываем успешное сообщение
+                            updatedConfirmPriceBtn.textContent = '✓ Сохранено';
+                            updatedConfirmPriceBtn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
+                            
+                            setTimeout(() => {
+                                updatedConfirmPriceBtn.textContent = originalText;
+                                updatedConfirmPriceBtn.style.background = '';
+                                updatedConfirmPriceBtn.disabled = false;
+                            }, 2000);
+                        } catch (error) {
+                            console.error('Error in confirm button handler:', error);
+                            alert('Ошибка при сохранении цены: ' + (error.message || 'Неизвестная ошибка'));
+                            updatedConfirmPriceBtn.disabled = false;
+                            updatedConfirmPriceBtn.textContent = originalText;
+                        }
+                    });
+                    
+                    // Автосохранение при потере фокуса, если значение изменилось
+                    updatedFinalPriceInput.addEventListener('blur', async () => {
+                        const currentPrice = parseFloat(updatedFinalPriceInput.value);
+                        // Сохраняем только если значение изменилось и оно валидное
+                        if (currentPrice > 0 && currentPrice !== lastSavedPrice) {
+                            try {
+                                await savePrice(currentPrice);
+                            } catch (error) {
+                                console.error('Error auto-saving price:', error);
+                            }
                         }
                     });
                     
                     // Также сохраняем при нажатии Enter
-                    finalPriceInput.addEventListener('keypress', (e) => {
+                    updatedFinalPriceInput.addEventListener('keypress', (e) => {
                         if (e.key === 'Enter') {
                             e.preventDefault();
-                            confirmPriceBtn.click();
+                            updatedConfirmPriceBtn.click();
                         }
                     });
                 }
-                
-                // Загружаем сохраненные данные при инициализации
-                loadSavedPriceData();
             };
 
             window.handleTeaserGenerate = handleTeaserGenerate;

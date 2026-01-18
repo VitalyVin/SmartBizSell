@@ -389,6 +389,24 @@ if (empty($apiKey)) {
         }
     }
 
+    // Логируем содержимое data_json сразу после загрузки формы из БД для диагностики
+    if (!empty($form['data_json'])) {
+        $formDataJson = json_decode($form['data_json'], true);
+        if (is_array($formDataJson)) {
+            $dataJsonKeys = array_keys($formDataJson);
+            error_log('generate_teaser.php: form loaded from DB - data_json contains keys: ' . implode(', ', array_slice($dataJsonKeys, 0, 30)));
+            if (isset($formDataJson['final_price'])) {
+                error_log('generate_teaser.php: form loaded from DB - data_json contains final_price=' . $formDataJson['final_price']);
+            } else {
+                error_log('generate_teaser.php: form loaded from DB - data_json does NOT contain final_price');
+            }
+        } else {
+            error_log('generate_teaser.php: form loaded from DB - data_json is not a valid JSON array');
+        }
+    } else {
+        error_log('generate_teaser.php: form loaded from DB - data_json is empty or null');
+    }
+
     /**
      * Проверяет, заполнены ли все обязательные поля анкеты
      * 
@@ -509,6 +527,38 @@ if (empty($apiKey)) {
         $logger->startSession($form['id'] ?? 'unknown');
         $logger->logStep('start', ['form_id' => $form['id'] ?? 'unknown', 'action' => $action ?? 'teaser']);
         
+        // ВАЖНО: Перезагружаем форму из БД непосредственно перед генерацией тизера,
+        // чтобы получить самую свежую версию data_json (включая обновленную final_price)
+        // Это гарантирует, что если пользователь изменил цену после загрузки страницы,
+        // но до генерации тизера, то новая цена будет использована
+        $formId = $form['id'];
+        $effectiveUserId = getEffectiveUserId();
+        $refreshStmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+        $refreshStmt->execute([$formId, $effectiveUserId]);
+        $refreshedForm = $refreshStmt->fetch();
+        if ($refreshedForm) {
+            $form = $refreshedForm; // Используем свежую версию формы с актуальным data_json
+            $logger->log('Form refreshed from DB before teaser generation to get latest data_json', 'INFO');
+        }
+        
+        // Логируем содержимое data_json сразу после перезагрузки формы из БД для диагностики
+        if (!empty($form['data_json'])) {
+            $formDataJson = json_decode($form['data_json'], true);
+            if (is_array($formDataJson)) {
+                $dataJsonKeys = array_keys($formDataJson);
+                $logger->log('Form loaded from DB - data_json contains keys: ' . implode(', ', array_slice($dataJsonKeys, 0, 30)), 'INFO');
+                if (isset($formDataJson['final_price'])) {
+                    $logger->log('Form loaded from DB - data_json contains final_price=' . $formDataJson['final_price'], 'INFO');
+                } else {
+                    $logger->log('Form loaded from DB - data_json does NOT contain final_price', 'WARNING');
+                }
+            } else {
+                $logger->log('Form loaded from DB - data_json is not a valid JSON array', 'WARNING');
+            }
+        } else {
+            $logger->log('Form loaded from DB - data_json is empty or null', 'WARNING');
+        }
+        
         error_log('Teaser generation started for form_id: ' . ($form['id'] ?? 'unknown'));
         
         // Проверяем, что функция существует
@@ -523,8 +573,8 @@ if (empty($apiKey)) {
             'form_keys' => array_keys($form),
         ];
         $logger->logStep('buildTeaserPayload', ['input' => $formInputSummary]);
-        
-        $formPayload = buildTeaserPayload($form);
+
+    $formPayload = buildTeaserPayload($form);
         
         // Логируем выходной payload (структуру и размер)
         $payloadSummary = [
@@ -722,7 +772,7 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function renderTeaserHtml not found');
         }
         error_log('Rendering teaser HTML...');
-        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData);
+        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData, $logger);
         $logger->logStep('renderTeaserHtml', ['html_length' => strlen($html), 'html_size' => round(strlen($html) / 1024, 2) . 'KB']);
         error_log('renderTeaserHtml completed, HTML length: ' . strlen($html));
 
@@ -737,7 +787,7 @@ if (empty($apiKey)) {
         'hero_description' => $heroDescription,
         'generated_at' => date('c'),
         'model' => TOGETHER_MODEL,
-    ]);
+    ], $logger);
         $logger->logStep('persistTeaserSnapshot', ['snapshot_created' => !empty($snapshot), 'generated_at' => $snapshot['generated_at'] ?? null]);
         error_log('persistTeaserSnapshot completed');
         
@@ -848,6 +898,15 @@ function buildTeaserPayload(array $form): array
         }
     }
 
+    // Логируем содержимое data_json формы для диагностики
+    $dataKeys = array_keys($data);
+    error_log('buildTeaserPayload: form data_json contains keys: ' . implode(', ', array_slice($dataKeys, 0, 30)));
+    if (isset($data['final_price'])) {
+        error_log('buildTeaserPayload: form data_json contains final_price=' . $data['final_price']);
+    } else {
+        error_log('buildTeaserPayload: form data_json does NOT contain final_price');
+    }
+
     // Добавляем финальную цену продажи из data_json, если она есть
     // Обеспечиваем, что цена доступна в обоих полях для совместимости
     if (isset($data['final_price']) && $data['final_price'] > 0) {
@@ -855,6 +914,12 @@ function buildTeaserPayload(array $form): array
     } elseif (isset($data['final_selling_price']) && $data['final_selling_price'] > 0) {
         // Если есть только final_selling_price, копируем в final_price для совместимости
         $data['final_price'] = $data['final_selling_price'];
+    }
+    
+    // ВАЖНО: Сохраняем исходный data_json в payload, чтобы renderHeroBlock мог прочитать final_price
+    // даже если он не был скопирован в верхний уровень $data
+    if (!empty($form['data_json'])) {
+        $data['_original_data_json'] = $form['data_json'];
     }
     
     // Логируем наличие цены для отладки
@@ -995,6 +1060,10 @@ function buildMaskedTeaserPayload(array $payload): array
             }
         }
     }
+    
+    // ВАЖНО: Сохраняем final_price и _original_data_json в маскированном payload
+    // чтобы renderHeroBlock мог прочитать цену даже после маскирования
+    // Эти поля не содержат названия актива, поэтому их можно безопасно сохранить
     
     return $maskedPayload;
 }
@@ -1220,10 +1289,10 @@ function parseTeaserResponse(string $text): array
  * На этом этапе уже всё нормализовано — остаётся собрать карточки, графики
  * и вспомогательные блоки (кнопки, подсказки, подписи и т.п.).
  */
-function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null): string
+function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null, ?TeaserLogger $logger = null): string
 {
     // Рендерим hero блок в начале
-    $heroHtml = renderHeroBlock($assetName, $data, $payload, $dcfData);
+    $heroHtml = renderHeroBlock($assetName, $data, $payload, $dcfData, $logger);
     
     $blocks = [];
 
@@ -1877,12 +1946,12 @@ function extractDCFDataForChart(array $form, ?TeaserLogger $logger = null): ?arr
                     $logger->log("calculateUserDCF returned array with keys: " . implode(', ', $resultKeys), 'INFO');
                 }
                 
-                if (isset($dcfData['error'])) {
+            if (isset($dcfData['error'])) {
                     $errorMsg = $dcfData['error'] ?? 'unknown';
                     if ($logger) {
                         $logger->log("DCF calculation returned error: " . $errorMsg, 'ERROR');
                     }
-                    $dcfData = null; // Игнорируем ошибки DCF для графика
+                $dcfData = null; // Игнорируем ошибки DCF для графика
                 } elseif (isset($dcfData['rows'])) {
                     $rowsCount = is_array($dcfData['rows']) ? count($dcfData['rows']) : 0;
                     if ($logger) {
@@ -3419,7 +3488,7 @@ function buildHeroDescription(array $teaserData, array $payload): string
  * @param array|null $dcfData Данные DCF модели
  * @return string HTML код hero блока
  */
-function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?array $dcfData = null): string
+function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?array $dcfData = null, ?TeaserLogger $logger = null): string
 {
     // Получаем описание из hero_description или из overview
     $heroDescription = '';
@@ -3560,14 +3629,26 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
         $finalPrice = null;
         
         // Проверяем все возможные источники цены предложения продавца
-        // 1. Прямо из payload
+        // 1. Прямо из payload (верхний уровень)
         if (isset($payload['final_price']) && $payload['final_price'] > 0) {
             $finalPrice = (float)$payload['final_price'];
         } elseif (isset($payload['final_selling_price']) && $payload['final_selling_price'] > 0) {
             $finalPrice = (float)$payload['final_selling_price'];
         }
         
-        // 2. Из data_json
+        // 2. Из _original_data_json (сохраненный data_json из формы)
+        if ($finalPrice === null && !empty($payload['_original_data_json'])) {
+            $formDataJson = is_string($payload['_original_data_json']) ? json_decode($payload['_original_data_json'], true) : $payload['_original_data_json'];
+            if (is_array($formDataJson)) {
+                if (isset($formDataJson['final_price']) && $formDataJson['final_price'] > 0) {
+                    $finalPrice = (float)$formDataJson['final_price'];
+                } elseif (isset($formDataJson['final_selling_price']) && $formDataJson['final_selling_price'] > 0) {
+                    $finalPrice = (float)$formDataJson['final_selling_price'];
+                }
+            }
+        }
+        
+        // 3. Из data_json (для обратной совместимости)
         if ($finalPrice === null && !empty($payload['data_json'])) {
             $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
             if (is_array($formDataJson)) {
@@ -3581,11 +3662,47 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
         
         // Показываем цену предложения продавца, если она есть
         if ($finalPrice !== null && $finalPrice > 0) {
+            if ($logger) {
+                $logger->log("renderHeroBlock: Found final_price=" . $finalPrice . ", adding to hero stats", 'INFO');
+            }
+            error_log('renderHeroBlock: Found final_price=' . $finalPrice . ', adding to hero stats');
             $heroStats[] = [
                 'label' => 'ЦЕНА',
                 'value' => number_format($finalPrice, 0, '.', ' ') . ' млн Р',
                 'caption' => 'Цена предложения Продавца',
             ];
+        } else {
+            $warningMsg = 'renderHeroBlock: WARNING - final_price not found or invalid. payload top-level keys: ' . implode(', ', array_slice(array_keys($payload), 0, 20));
+            if ($logger) {
+                $logger->log($warningMsg, 'WARNING');
+            }
+            error_log($warningMsg);
+            
+            if (isset($payload['_original_data_json'])) {
+                $testJson = is_string($payload['_original_data_json']) ? json_decode($payload['_original_data_json'], true) : $payload['_original_data_json'];
+                if (is_array($testJson)) {
+                    $jsonKeysMsg = 'renderHeroBlock: _original_data_json keys: ' . implode(', ', array_slice(array_keys($testJson), 0, 20));
+                    $finalPriceMsg = 'renderHeroBlock: _original_data_json final_price=' . ($testJson['final_price'] ?? 'NOT SET');
+                    if ($logger) {
+                        $logger->log($jsonKeysMsg, 'WARNING');
+                        $logger->log($finalPriceMsg, 'WARNING');
+                    }
+                    error_log($jsonKeysMsg);
+                    error_log($finalPriceMsg);
+                } else {
+                    $typeMsg = 'renderHeroBlock: _original_data_json is not an array: ' . gettype($testJson);
+                    if ($logger) {
+                        $logger->log($typeMsg, 'WARNING');
+                    }
+                    error_log($typeMsg);
+                }
+            } else {
+                $noJsonMsg = 'renderHeroBlock: _original_data_json not present in payload';
+                if ($logger) {
+                    $logger->log($noJsonMsg, 'WARNING');
+                }
+                error_log($noJsonMsg);
+            }
         }
         // Enterprise Value НЕ показываем, если есть цена предложения продавца
         // (убрали elseif, чтобы не показывать EV, если нет цены предложения продавца)
@@ -4367,17 +4484,49 @@ function looksLikeStructuredDump(string $text): bool
  *                       - 'model': модель AI, использованная для генерации
  * @return array Возвращает переданный snapshot
  */
-function persistTeaserSnapshot(array $form, array $payload, array $snapshot): array
+function persistTeaserSnapshot(array $form, array $payload, array $snapshot, ?TeaserLogger $logger = null): array
 {
-    $payload['teaser_snapshot'] = $snapshot;
-
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    try {
+        $pdo = getDBConnection();
+        
+        // Сначала читаем текущий data_json из БД
+        $stmt = $pdo->prepare("SELECT data_json FROM seller_forms WHERE id = ?");
+        $stmt->execute([$form['id']]);
+        $row = $stmt->fetch();
+        
+        // Декодируем текущий data_json
+        $currentDataJson = [];
+        if (!empty($row['data_json'])) {
+            $decoded = json_decode($row['data_json'], true);
+            if (is_array($decoded)) {
+                $currentDataJson = $decoded;
+            }
+        }
+        
+        // Логируем сохранение final_price для диагностики
+        if (isset($currentDataJson['final_price'])) {
+            if ($logger) {
+                $logger->log("persistTeaserSnapshot: Preserving final_price=" . $currentDataJson['final_price'] . " for form_id=" . $form['id'], 'INFO');
+            }
+            error_log('persistTeaserSnapshot: Preserving final_price=' . $currentDataJson['final_price'] . ' for form_id=' . $form['id']);
+        } else {
+            if ($logger) {
+                $logger->log("persistTeaserSnapshot: WARNING - final_price not found in currentDataJson for form_id=" . $form['id'], 'WARNING');
+            }
+            error_log('persistTeaserSnapshot: WARNING - final_price not found in currentDataJson for form_id=' . $form['id']);
+        }
+        
+        // Обновляем только teaser_snapshot, сохраняя все остальные поля
+        // Это важно, чтобы не потерять final_price, multiplier_valuation и другие поля
+        $currentDataJson['teaser_snapshot'] = $snapshot;
+        
+        // Сохраняем обновленный data_json обратно
+        $json = json_encode($currentDataJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
+            error_log('Failed to encode data_json in persistTeaserSnapshot');
         return $snapshot;
     }
 
-    try {
-        $pdo = getDBConnection();
         $stmt = $pdo->prepare("UPDATE seller_forms SET data_json = ? WHERE id = ?");
         $stmt->execute([$json, $form['id']]);
     } catch (PDOException $e) {
