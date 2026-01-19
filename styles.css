@@ -1264,6 +1264,20 @@ section {
     margin: 0 0 12px;
 }
 
+.teaser-card__text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.teaser-card__text p {
+    margin: 0 0 12px;
+}
+
+.teaser-card__text p:last-child {
+    margin-bottom: 0;
+}
+
 .teaser-card ul {
     list-style: none;
     padding: 0;
@@ -1436,16 +1450,130 @@ section {
 }
 
 @media (max-width: 768px) {
+    /* Уменьшаем padding overlay для мобильных, чтобы модальное окно занимало 95% ширины */
+    .modal-overlay {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+        align-items: flex-start !important;
+    }
+    
+    .modal-overlay.active {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
     .modal-container {
-        max-width: 100%;
-        border-radius: 0;
-        max-height: 100vh;
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+        border-radius: 0 !important;
+        max-height: 98vh !important;
+        margin: 0 auto !important;
+        flex-shrink: 0 !important;
+        box-sizing: border-box !important;
+    }
+    
+    .modal-overlay.active .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+    }
+    
+    /* Переопределяем базовый padding для мобильных */
+    #business-modal.modal-overlay {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    #business-modal.modal-overlay.active {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+
+    /* Mobile: allow teaser content to use 95% of screen width */
+    #business-modal.modal-overlay {
+        padding: 0 !important;
+    }
+
+    #business-modal .modal-container {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+    }
+
+    #business-modal .modal-content,
+    #business-modal .modal-body {
+        padding: 0 !important;
+    }
+
+    #business-modal .modal-header {
+        padding-left: 16px !important;
+    }
+
+    #business-modal .modal-title-section {
+        padding-left: 8px !important;
+    }
+
+    #modal-teaser-section {
+        width: 95vw !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    #modal-teaser-content {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        margin: 0 auto !important;
+        padding: 10px !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Оптимизация контента модального окна для мобильных */
+    .modal-content {
+        padding: 20px !important;
+    }
+    
+    .modal-header {
+        padding-right: 60px !important;
+        margin-bottom: 24px !important;
     }
     
     .teaser-section {
-        padding: 20px;
+        padding: 16px !important;
+        margin: 0 !important;
     }
     
+    .teaser-result {
+        padding: 16px !important;
+    }
+    
+    #modal-teaser-content {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Modal teaser grid: force single column */
+    #modal-teaser-content .teaser-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+
+    #modal-teaser-content .teaser-grid .teaser-card {
+        grid-column: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    #modal-teaser-content .teaser-grid .teaser-card[data-variant="chart"] {
+        grid-column: auto !important;
+    }
+
     .teaser-grid {
         grid-template-columns: 1fr;
         gap: 16px;
@@ -1457,6 +1585,150 @@ section {
     
     .teaser-card {
         padding: 16px;
+    }
+}
+
+/* iPhone 12 и выше (390px - 428px) - специальная оптимизация */
+@media (max-width: 428px) and (min-width: 390px) {
+    .modal-overlay {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    .modal-overlay.active {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    #business-modal.modal-overlay {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    #business-modal.modal-overlay.active {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+        border-radius: 0 !important;
+    }
+    
+    .modal-overlay.active .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+    }
+    
+    .modal-content {
+        padding: 16px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    .teaser-section {
+        padding: 16px !important;
+        margin: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        border-radius: 16px !important;
+    }
+    
+    .teaser-result {
+        padding: 16px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    #modal-teaser-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    #modal-teaser-content .teaser-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Экраны меньше iPhone 12 (до 390px) */
+@media (max-width: 389px) {
+    .modal-overlay {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    .modal-overlay.active {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    #business-modal.modal-overlay {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    #business-modal.modal-overlay.active {
+        padding: 0.5vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+        border-radius: 0 !important;
+    }
+    
+    .modal-overlay.active .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+    }
+    
+    .modal-content {
+        padding: 12px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    #business-modal .modal-header {
+        padding-left: 16px !important;
+    }
+
+    #business-modal .modal-title-section {
+        padding-left: 8px !important;
+    }
+    
+    .teaser-section {
+        padding: 12px !important;
+        margin: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        border-radius: 12px !important;
+    }
+    
+    .teaser-result {
+        padding: 12px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    #modal-teaser-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
 }
 
@@ -2447,20 +2719,83 @@ section {
     }
 
 
+    /* Мобильная адаптация карточек */
+    .businesses-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .businesses-grid .business-card {
+        max-width: 100% !important;
+        min-height: 400px !important;
+        margin: 0 !important;
+    }
+
+    .business-card .card-header {
+        min-height: 140px !important;
+    }
+
+    .business-card .card-content {
+        padding: 16px !important;
+    }
+
+    .business-card .card-title {
+        font-size: 20px !important;
+    }
+
+    .business-card .card-description {
+        font-size: 13px !important;
+    }
+
     .card-metrics {
         grid-template-columns: repeat(3, 1fr);
         gap: 12px;
+        padding: 12px 8px !important;
     }
 
     .metric {
         padding: 12px 6px;
     }
 
-    .card-footer {
+    .business-card .metric-value {
+        font-size: 16px !important;
+    }
+
+    .business-card .card-footer {
         flex-direction: column;
         gap: 16px;
         align-items: stretch;
-        padding: 16px 20px 20px;
+        padding: 16px !important;
+    }
+
+    .business-card .card-price {
+        width: 100%;
+        align-items: center !important;
+    }
+
+    .business-card .price-amount {
+        font-size: 22px !important;
+    }
+
+    .business-card .card-button {
+        width: 100%;
+        padding: 12px 24px !important;
+    }
+
+    .business-card .card-badge {
+        font-size: 10px !important;
+        padding: 6px 14px !important;
+        top: 12px !important;
+        right: 12px !important;
+    }
+
+    .business-card .card-icon-bg {
+        width: 70px !important;
+        height: 70px !important;
+    }
+
+    .business-card .card-icon {
+        font-size: 32px !important;
     }
 
     .card-price {
@@ -2474,14 +2809,15 @@ section {
     }
 
     .modal-content {
-        padding: 24px;
+        padding: 20px !important;
     }
 
     .modal-header {
         flex-direction: column;
         gap: 16px;
-        padding-right: 0; /* Убираем отступ на мобильных */
+        padding-right: 50px !important; /* Место для кнопок */
         padding-top: 50px; /* Место для кнопки закрытия */
+        margin-bottom: 24px !important;
     }
     
     .modal-close {
@@ -2587,8 +2923,79 @@ section {
         padding: 0 16px;
     }
     
+    /* Еще больше уменьшаем padding для маленьких экранов */
+    .modal-overlay {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+        align-items: flex-start !important;
+    }
+    
+    .modal-overlay.active {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+        margin: 0 auto !important;
+        flex-shrink: 0 !important;
+        box-sizing: border-box !important;
+        border-radius: 0 !important;
+    }
+    
+    .modal-overlay.active .modal-container {
+        width: 95% !important;
+        max-width: 95% !important;
+        min-width: 95% !important;
+    }
+    
+    /* Переопределяем базовый padding для мобильных с ID */
+    #business-modal.modal-overlay {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    #business-modal.modal-overlay.active {
+        padding: 1vh 2.5% !important;
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+    }
+    
+    .modal-content {
+        padding: 16px !important;
+    }
+
+    #business-modal .modal-header {
+        padding-left: 16px !important;
+    }
+
+    #business-modal .modal-title-section {
+        padding-left: 8px !important;
+    }
+    
     .modal-header {
         padding-top: 45px;
+        padding-right: 50px !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .teaser-section {
+        padding: 12px !important;
+        margin: 0 !important;
+    }
+    
+    .teaser-result {
+        padding: 12px !important;
+    }
+    
+    #modal-teaser-content {
+        width: 100% !important;
+        max-width: 100% !important;
     }
     
     .modal-close {
@@ -2713,6 +3120,109 @@ section {
     }
 }
 
+/* Очень маленькие экраны (до 360px) */
+@media (max-width: 360px) {
+    .businesses-grid {
+        gap: 12px;
+    }
+
+    .businesses-grid .business-card {
+        min-height: 380px !important;
+        border-radius: 20px !important;
+    }
+
+    .business-card .card-header {
+        min-height: 120px !important;
+    }
+
+    .business-card .card-content {
+        padding: 12px !important;
+    }
+
+    .business-card .card-title {
+        font-size: 18px !important;
+    }
+
+    .business-card .card-description {
+        font-size: 12px !important;
+        padding: 12px 16px !important;
+    }
+
+    .card-metrics {
+        gap: 8px !important;
+        padding: 10px 6px !important;
+    }
+
+    .metric {
+        padding: 10px 4px !important;
+    }
+
+    .business-card .metric-value {
+        font-size: 15px !important;
+    }
+
+    .business-card .metric-label {
+        font-size: 10px !important;
+    }
+
+    .business-card .card-footer {
+        padding: 12px !important;
+        gap: 12px;
+    }
+
+    .business-card .price-amount {
+        font-size: 20px !important;
+    }
+
+    .business-card .card-button {
+        padding: 10px 20px !important;
+        font-size: 13px !important;
+    }
+
+    .business-card .card-badge {
+        font-size: 9px !important;
+        padding: 5px 12px !important;
+        top: 10px !important;
+        right: 10px !important;
+    }
+
+    .business-card .card-icon-bg {
+        width: 60px !important;
+        height: 60px !important;
+    }
+
+    .business-card .card-icon {
+        font-size: 28px !important;
+    }
+}
+
+/* Отключение hover-эффектов на touch-устройствах для лучшей производительности */
+@media (hover: none) and (pointer: coarse) {
+    .business-card:hover {
+        transform: none;
+    }
+
+    .business-card:hover .card-icon-bg {
+        transform: none;
+    }
+
+    .business-card:hover .card-illustration {
+        transform: none;
+        opacity: 0.9;
+    }
+
+    .business-card:hover .card-icon {
+        transform: none;
+    }
+
+    .business-card:hover .metric {
+        transform: none;
+    }
+
+    .business-card:hover .card-glow {
+        opacity: 0;
+    }
+}
 
 /* Smooth Scrolling */
 html {
