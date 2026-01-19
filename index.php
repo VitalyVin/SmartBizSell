@@ -373,12 +373,14 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
  * 
  * Создает уникальные абстрактные иллюстрации, отражающие деятельность компании.
  * Использует градиенты и паттерны, соответствующие общему стилю сайта.
+ * Выбирает одну из 10 различных иллюстраций на основе ID карточки для разнообразия.
  * 
  * @param string $industry Отрасль компании (it, restaurant, ecommerce, retail, services, manufacturing, real_estate)
  * @param string $productsServices Описание продуктов/услуг (для дополнительной персонализации)
+ * @param int|string $cardId ID карточки для выбора варианта иллюстрации (по умолчанию случайный)
  * @return string SVG код иллюстрации
  */
-function generateBusinessCardIllustration(string $industry, string $productsServices = ''): string
+function generateBusinessCardIllustration(string $industry, string $productsServices = '', $cardId = null): string
 {
     // Определяем цветовую схему и паттерн на основе отрасли
     $themes = [
@@ -430,198 +432,251 @@ function generateBusinessCardIllustration(string $industry, string $productsServ
     $gradientStart = $theme['gradient'][0];
     $gradientEnd = $theme['gradient'][1];
     $accent = $theme['accent'];
-    $pattern = $theme['pattern'];
     
-    // Генерируем уникальный SVG на основе паттерна
+    // Выбираем один из 10 вариантов иллюстраций на основе ID карточки для разнообразия
+    $cardIdHash = $cardId !== null ? abs(crc32((string)$cardId)) : abs(crc32($industry . $productsServices));
+    $variant = ($cardIdHash % 10) + 1; // От 1 до 10
+    
+    // Генерируем уникальный SVG на основе выбранного варианта
     $svg = '';
+    $uniqueId = md5($industry . $cardId . $variant);
     
-    switch ($pattern) {
-        case 'circuits':
-            // IT: схемы и соединения
+    switch ($variant) {
+        case 1:
+            // Вариант 1: Градиентные волны
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.35" />
+            <stop offset="50%" style="stop-color:{$accent};stop-opacity:0.25" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
-            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        <linearGradient id="wave-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.15" />
         </linearGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Circuit lines -->
-    <path d="M20,50 Q50,30 80,50 T140,50" stroke="{$accent}" stroke-width="2" fill="none" opacity="0.3" />
-    <path d="M40,100 Q70,80 100,100 T160,100" stroke="{$accent}" stroke-width="2" fill="none" opacity="0.3" />
-    <path d="M60,150 Q90,130 120,150 T180,150" stroke="{$accent}" stroke-width="2" fill="none" opacity="0.3" />
-    <!-- Nodes -->
-    <circle cx="80" cy="50" r="6" fill="url(#accent-{$industry})" />
-    <circle cx="100" cy="100" r="6" fill="url(#accent-{$industry})" />
-    <circle cx="120" cy="150" r="6" fill="url(#accent-{$industry})" />
-    <!-- Connecting lines -->
-    <line x1="80" y1="50" x2="100" y2="100" stroke="{$accent}" stroke-width="1.5" opacity="0.2" />
-    <line x1="100" y1="100" x2="120" y2="150" stroke="{$accent}" stroke-width="1.5" opacity="0.2" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <path d="M0,60 Q50,40 100,60 T200,60 L200,200 L0,200 Z" fill="url(#wave-{$uniqueId})" />
+    <path d="M0,100 Q50,80 100,100 T200,100 L200,200 L0,200 Z" fill="url(#wave-{$uniqueId})" opacity="0.7" />
+    <path d="M0,140 Q50,120 100,140 T200,140 L200,200 L0,200 Z" fill="url(#wave-{$uniqueId})" opacity="0.5" />
 </svg>
 SVG;
             break;
             
-        case 'organic':
-            // Рестораны: органические формы
+        case 2:
+            // Вариант 2: Геометрические формы
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <radialGradient id="accent-{$industry}">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+        <radialGradient id="shape-{$uniqueId}">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.5" />
             <stop offset="100%" style="stop-color:{$accent};stop-opacity:0" />
         </radialGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Organic shapes -->
-    <ellipse cx="60" cy="70" rx="35" ry="25" fill="url(#accent-{$industry})" transform="rotate(-15 60 70)" />
-    <ellipse cx="140" cy="100" rx="30" ry="40" fill="url(#accent-{$industry})" transform="rotate(25 140 100)" />
-    <ellipse cx="100" cy="150" rx="40" ry="20" fill="url(#accent-{$industry})" transform="rotate(-10 100 150)" />
-    <!-- Decorative circles -->
-    <circle cx="50" cy="120" r="8" fill="{$accent}" opacity="0.2" />
-    <circle cx="150" cy="60" r="10" fill="{$accent}" opacity="0.2" />
-    <circle cx="170" cy="140" r="6" fill="{$accent}" opacity="0.2" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <polygon points="50,50 100,30 150,50 150,100 100,120 50,100" fill="url(#shape-{$uniqueId})" />
+    <circle cx="100" cy="150" r="35" fill="url(#shape-{$uniqueId})" opacity="0.7" />
+    <rect x="130" y="120" width="45" height="45" fill="url(#shape-{$uniqueId})" rx="10" transform="rotate(45 152.5 142.5)" />
 </svg>
 SVG;
             break;
             
-        case 'grid':
-            // E-commerce: сетка и структура
+        case 3:
+            // Вариант 3: Сетка с акцентами
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
-            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        <linearGradient id="box-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.45" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.15" />
         </linearGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Grid pattern -->
-    <g opacity="0.3">
-        <line x1="0" y1="50" x2="200" y2="50" stroke="{$accent}" stroke-width="1" />
-        <line x1="0" y1="100" x2="200" y2="100" stroke="{$accent}" stroke-width="1" />
-        <line x1="0" y1="150" x2="200" y2="150" stroke="{$accent}" stroke-width="1" />
-        <line x1="50" y1="0" x2="50" y2="200" stroke="{$accent}" stroke-width="1" />
-        <line x1="100" y1="0" x2="100" y2="200" stroke="{$accent}" stroke-width="1" />
-        <line x1="150" y1="0" x2="150" y2="200" stroke="{$accent}" stroke-width="1" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <g opacity="0.25">
+        <line x1="0" y1="50" x2="200" y2="50" stroke="{$accent}" stroke-width="1.5" />
+        <line x1="0" y1="100" x2="200" y2="100" stroke="{$accent}" stroke-width="1.5" />
+        <line x1="0" y1="150" x2="200" y2="150" stroke="{$accent}" stroke-width="1.5" />
+        <line x1="50" y1="0" x2="50" y2="200" stroke="{$accent}" stroke-width="1.5" />
+        <line x1="100" y1="0" x2="100" y2="200" stroke="{$accent}" stroke-width="1.5" />
+        <line x1="150" y1="0" x2="150" y2="200" stroke="{$accent}" stroke-width="1.5" />
     </g>
-    <!-- Boxes -->
-    <rect x="30" y="30" width="40" height="40" fill="url(#accent-{$industry})" rx="4" />
-    <rect x="90" y="70" width="40" height="40" fill="url(#accent-{$industry})" rx="4" />
-    <rect x="130" y="130" width="40" height="40" fill="url(#accent-{$industry})" rx="4" />
+    <rect x="25" y="25" width="50" height="50" fill="url(#box-{$uniqueId})" rx="6" />
+    <rect x="85" y="65" width="50" height="50" fill="url(#box-{$uniqueId})" rx="6" />
+    <rect x="125" y="125" width="50" height="50" fill="url(#box-{$uniqueId})" rx="6" />
 </svg>
 SVG;
             break;
             
-        case 'waves':
-            // Retail: волны и потоки
+        case 4:
+            // Вариант 4: Органические формы
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.35" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
-            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
-        </linearGradient>
+        <radialGradient id="blob-{$uniqueId}">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.5" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0" />
+        </radialGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Wave patterns -->
-    <path d="M0,80 Q50,60 100,80 T200,80 L200,200 L0,200 Z" fill="url(#accent-{$industry})" />
-    <path d="M0,120 Q50,100 100,120 T200,120 L200,200 L0,200 Z" fill="url(#accent-{$industry})" opacity="0.6" />
-    <path d="M0,160 Q50,140 100,160 T200,160 L200,200 L0,200 Z" fill="url(#accent-{$industry})" opacity="0.4" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <ellipse cx="60" cy="70" rx="40" ry="30" fill="url(#blob-{$uniqueId})" transform="rotate(-20 60 70)" />
+    <ellipse cx="140" cy="100" rx="35" ry="45" fill="url(#blob-{$uniqueId})" transform="rotate(30 140 100)" />
+    <ellipse cx="100" cy="150" rx="45" ry="25" fill="url(#blob-{$uniqueId})" transform="rotate(-15 100 150)" />
+    <circle cx="45" cy="120" r="12" fill="{$accent}" opacity="0.25" />
+    <circle cx="155" cy="55" r="14" fill="{$accent}" opacity="0.25" />
+    <circle cx="170" cy="145" r="8" fill="{$accent}" opacity="0.25" />
 </svg>
 SVG;
             break;
             
-        case 'geometric':
-            // Services: геометрические формы
+        case 5:
+            // Вариант 5: Линейные паттерны
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
-            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
-        </linearGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Geometric shapes -->
-    <polygon points="50,50 100,30 150,50 150,100 100,120 50,100" fill="url(#accent-{$industry})" />
-    <circle cx="100" cy="150" r="30" fill="url(#accent-{$industry})" opacity="0.6" />
-    <rect x="130" y="120" width="40" height="40" fill="url(#accent-{$industry})" rx="8" transform="rotate(45 150 140)" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <path d="M20,50 Q50,30 80,50 T140,50 T200,50" stroke="{$accent}" stroke-width="2.5" fill="none" opacity="0.35" />
+    <path d="M40,100 Q70,80 100,100 T160,100 T200,100" stroke="{$accent}" stroke-width="2.5" fill="none" opacity="0.35" />
+    <path d="M60,150 Q90,130 120,150 T180,150 T200,150" stroke="{$accent}" stroke-width="2.5" fill="none" opacity="0.35" />
+    <line x1="80" y1="50" x2="100" y2="100" stroke="{$accent}" stroke-width="2" opacity="0.25" />
+    <line x1="100" y1="100" x2="120" y2="150" stroke="{$accent}" stroke-width="2" opacity="0.25" />
+    <circle cx="80" cy="50" r="8" fill="{$accent}" opacity="0.4" />
+    <circle cx="100" cy="100" r="8" fill="{$accent}" opacity="0.4" />
+    <circle cx="120" cy="150" r="8" fill="{$accent}" opacity="0.4" />
 </svg>
 SVG;
             break;
             
-        case 'industrial':
-            // Manufacturing: индустриальные элементы
+        case 6:
+            // Вариант 6: Круги и точки
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
-            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
-        </linearGradient>
+        <radialGradient id="circle-{$uniqueId}">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.45" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0" />
+        </radialGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Industrial elements -->
-    <rect x="40" y="40" width="60" height="40" fill="url(#accent-{$industry})" rx="2" />
-    <rect x="50" y="50" width="40" height="20" fill="{$accent}" opacity="0.3" />
-    <rect x="100" y="100" width="60" height="60" fill="url(#accent-{$industry})" rx="2" />
-    <circle cx="130" cy="130" r="15" fill="{$accent}" opacity="0.3" />
-    <!-- Lines -->
-    <line x1="40" y1="80" x2="100" y2="100" stroke="{$accent}" stroke-width="2" opacity="0.2" />
-    <line x1="100" y1="160" x2="160" y2="140" stroke="{$accent}" stroke-width="2" opacity="0.2" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <circle cx="100" cy="100" r="50" fill="url(#circle-{$uniqueId})" />
+    <circle cx="50" cy="50" r="25" fill="url(#circle-{$uniqueId})" opacity="0.6" />
+    <circle cx="150" cy="60" r="20" fill="url(#circle-{$uniqueId})" opacity="0.6" />
+    <circle cx="160" cy="150" r="30" fill="url(#circle-{$uniqueId})" opacity="0.5" />
+    <circle cx="40" cy="150" r="18" fill="{$accent}" opacity="0.3" />
+    <circle cx="170" cy="40" r="12" fill="{$accent}" opacity="0.3" />
 </svg>
 SVG;
             break;
             
-        case 'architectural':
-            // Real estate: архитектурные элементы
+        case 7:
+            // Вариант 7: Треугольники и стрелки
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
-        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
-            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        <linearGradient id="triangle-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.5" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.15" />
         </linearGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
-    <!-- Building shapes -->
-    <rect x="50" y="80" width="40" height="80" fill="url(#accent-{$industry})" />
-    <rect x="60" y="90" width="8" height="8" fill="{$accent}" opacity="0.4" />
-    <rect x="72" y="90" width="8" height="8" fill="{$accent}" opacity="0.4" />
-    <rect x="60" y="110" width="8" height="8" fill="{$accent}" opacity="0.4" />
-    <rect x="72" y="110" width="8" height="8" fill="{$accent}" opacity="0.4" />
-    <polygon points="50,80 70,60 90,80" fill="url(#accent-{$industry})" />
-    <rect x="110" y="100" width="50" height="60" fill="url(#accent-{$industry})" />
-    <polygon points="110,100 135,75 160,100" fill="url(#accent-{$industry})" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <polygon points="100,40 130,80 70,80" fill="url(#triangle-{$uniqueId})" />
+    <polygon points="50,100 80,140 20,140" fill="url(#triangle-{$uniqueId})" opacity="0.7" />
+    <polygon points="150,120 180,160 120,160" fill="url(#triangle-{$uniqueId})" opacity="0.7" />
+    <path d="M100,100 L130,100 L120,90 M130,100 L120,110" stroke="{$accent}" stroke-width="3" fill="none" opacity="0.4" />
+    <path d="M70,100 L40,100 L50,90 M40,100 L50,110" stroke="{$accent}" stroke-width="3" fill="none" opacity="0.4" />
+</svg>
+SVG;
+            break;
+            
+        case 8:
+            // Вариант 8: Волны и потоки
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.35" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="flow-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="50%" style="stop-color:{$gradientEnd};stop-opacity:0.25" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.15" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <path d="M0,70 Q25,50 50,70 T100,70 T150,70 T200,70 L200,200 L0,200 Z" fill="url(#flow-{$uniqueId})" />
+    <path d="M0,110 Q25,90 50,110 T100,110 T150,110 T200,110 L200,200 L0,200 Z" fill="url(#flow-{$uniqueId})" opacity="0.7" />
+    <path d="M0,150 Q25,130 50,150 T100,150 T150,150 T200,150 L200,200 L0,200 Z" fill="url(#flow-{$uniqueId})" opacity="0.5" />
+</svg>
+SVG;
+            break;
+            
+        case 9:
+            // Вариант 9: Многоугольники
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="poly-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.5" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.15" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <polygon points="100,30 140,60 130,110 70,110 60,60" fill="url(#poly-{$uniqueId})" />
+    <polygon points="40,100 70,120 60,160 20,150" fill="url(#poly-{$uniqueId})" opacity="0.7" />
+    <polygon points="160,100 180,120 170,160 140,150" fill="url(#poly-{$uniqueId})" opacity="0.7" />
+    <polygon points="100,170 120,150 140,180 80,180" fill="url(#poly-{$uniqueId})" opacity="0.6" />
+</svg>
+SVG;
+            break;
+            
+        case 10:
+            // Вариант 10: Абстрактные линии
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
+    <path d="M0,50 L80,50 L100,80 L120,50 L200,50" stroke="{$accent}" stroke-width="3" fill="none" opacity="0.35" />
+    <path d="M0,100 L60,100 L80,130 L100,100 L140,100 L200,100" stroke="{$accent}" stroke-width="3" fill="none" opacity="0.35" />
+    <path d="M0,150 L70,150 L90,120 L110,150 L150,150 L200,150" stroke="{$accent}" stroke-width="3" fill="none" opacity="0.35" />
+    <line x1="100" y1="0" x2="100" y2="200" stroke="{$accent}" stroke-width="2" opacity="0.2" />
+    <line x1="0" y1="100" x2="200" y2="100" stroke="{$accent}" stroke-width="2" opacity="0.2" />
+    <circle cx="100" cy="100" r="8" fill="{$accent}" opacity="0.4" />
 </svg>
 SVG;
             break;
@@ -631,12 +686,12 @@ SVG;
             $svg = <<<SVG
 <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
     <defs>
-        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
             <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
         </linearGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <rect width="100%" height="100%" fill="url(#grad-{$uniqueId})" />
 </svg>
 SVG;
     }
@@ -984,7 +1039,7 @@ SVG;
                      data-contact="+7 (495) 123-45-67">
                     <div class="card-header">
                         <div class="card-illustration">
-                            <?php echo generateBusinessCardIllustration('it', 'SaaS разработка'); ?>
+                            <?php echo generateBusinessCardIllustration('it', 'SaaS разработка', 1); ?>
                         </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">💻</div>
@@ -1046,7 +1101,7 @@ SVG;
                      data-contact="+7 (495) 234-56-78">
                     <div class="card-header">
                         <div class="card-illustration">
-                            <?php echo generateBusinessCardIllustration('restaurant', 'Кофейни'); ?>
+                            <?php echo generateBusinessCardIllustration('restaurant', 'Кофейни', 2); ?>
                         </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">🍽️</div>
@@ -1108,7 +1163,7 @@ SVG;
                      data-contact="+7 (812) 345-67-89">
                     <div class="card-header">
                         <div class="card-illustration">
-                            <?php echo generateBusinessCardIllustration('ecommerce', 'Интернет-магазин'); ?>
+                            <?php echo generateBusinessCardIllustration('ecommerce', 'Интернет-магазин', 3); ?>
                         </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">🛒</div>
@@ -1169,7 +1224,7 @@ SVG;
                      data-contact="+7 (495) 456-78-90">
                     <div class="card-header">
                         <div class="card-illustration">
-                            <?php echo generateBusinessCardIllustration('real_estate', 'Недвижимость'); ?>
+                            <?php echo generateBusinessCardIllustration('real_estate', 'Недвижимость', 4); ?>
                         </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">💼</div>
@@ -1230,7 +1285,7 @@ SVG;
                      data-contact="+7 (343) 567-89-01">
                     <div class="card-header">
                         <div class="card-illustration">
-                            <?php echo generateBusinessCardIllustration('retail', 'Магазины одежды'); ?>
+                            <?php echo generateBusinessCardIllustration('retail', 'Магазины одежды', 5); ?>
                         </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">🏪</div>
@@ -1291,7 +1346,7 @@ SVG;
                      data-contact="+7 (495) 678-90-12">
                     <div class="card-header">
                         <div class="card-illustration">
-                            <?php echo generateBusinessCardIllustration('services', 'Салон красоты'); ?>
+                            <?php echo generateBusinessCardIllustration('services', 'Салон красоты', 6); ?>
                         </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">✂️</div>
@@ -1385,7 +1440,7 @@ SVG;
                                     if (is_array($formData) && !empty($formData['products_services'])) {
                                         $productsServices = $formData['products_services'];
                                     }
-                                    echo generateBusinessCardIllustration($card['industry'], $productsServices);
+                                    echo generateBusinessCardIllustration($card['industry'], $productsServices, $card['id']);
                                     ?>
                                 </div>
                                 <div class="card-icon-bg">
@@ -1551,12 +1606,12 @@ SVG;
                             <p style="text-align: center; color: var(--text-secondary); padding: 40px;">Загрузка тизера...</p>
                         </div>
                     </div>
-                    
+
                     <!-- Блок документов актива -->
                     <div class="modal-documents-section" id="modal-documents-section" style="display: none;">
                         <div class="modal-documents-header">
                             <h3>Документы</h3>
-                        </div>
+                                </div>
                         <div class="modal-documents-list" id="modal-documents-list">
                             <p style="text-align: center; color: var(--text-secondary); padding: 20px;">Загрузка документов...</p>
                         </div>
@@ -1635,10 +1690,10 @@ SVG;
                 <div class="footer-links">
                     <div class="footer-links-column">
                         <h4>Навигация</h4>
-                        <a href="#how-it-works">Как это работает</a>
-                        <a href="#buy-business">Купить бизнес</a>
-                        <a href="#seller-form">Продать бизнес</a>
-                        <a href="#contact">Контакты</a>
+                    <a href="#how-it-works">Как это работает</a>
+                    <a href="#buy-business">Купить бизнес</a>
+                    <a href="#seller-form">Продать бизнес</a>
+                    <a href="#contact">Контакты</a>
                     </div>
                     <div class="footer-links-column">
                         <h4>Услуги</h4>
