@@ -367,6 +367,282 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
     
     return $cardData;
 }
+
+/**
+ * Генерирует персонализированную SVG-иллюстрацию для карточки бизнеса на основе отрасли
+ * 
+ * Создает уникальные абстрактные иллюстрации, отражающие деятельность компании.
+ * Использует градиенты и паттерны, соответствующие общему стилю сайта.
+ * 
+ * @param string $industry Отрасль компании (it, restaurant, ecommerce, retail, services, manufacturing, real_estate)
+ * @param string $productsServices Описание продуктов/услуг (для дополнительной персонализации)
+ * @return string SVG код иллюстрации
+ */
+function generateBusinessCardIllustration(string $industry, string $productsServices = ''): string
+{
+    // Определяем цветовую схему и паттерн на основе отрасли
+    $themes = [
+        'it' => [
+            'gradient' => ['#667EEA', '#764BA2'],
+            'accent' => '#8B5CF6',
+            'pattern' => 'circuits',
+            'elements' => ['code', 'cloud', 'network']
+        ],
+        'restaurant' => [
+            'gradient' => ['#FFC107', '#FF5722'],
+            'accent' => '#FF9800',
+            'pattern' => 'organic',
+            'elements' => ['food', 'chef', 'dining']
+        ],
+        'ecommerce' => [
+            'gradient' => ['#4CAF50', '#009688'],
+            'accent' => '#22C55E',
+            'pattern' => 'grid',
+            'elements' => ['shopping', 'cart', 'package']
+        ],
+        'retail' => [
+            'gradient' => ['#9C27B0', '#E91E63'],
+            'accent' => '#EC4899',
+            'pattern' => 'waves',
+            'elements' => ['store', 'products', 'display']
+        ],
+        'services' => [
+            'gradient' => ['#3F51B5', '#673AB7'],
+            'accent' => '#6366F1',
+            'pattern' => 'geometric',
+            'elements' => ['handshake', 'consulting', 'support']
+        ],
+        'manufacturing' => [
+            'gradient' => ['#607D8B', '#455A64'],
+            'accent' => '#64748B',
+            'pattern' => 'industrial',
+            'elements' => ['factory', 'production', 'machinery']
+        ],
+        'real_estate' => [
+            'gradient' => ['#0EA5E9', '#14B8A6'],
+            'accent' => '#06B6D4',
+            'pattern' => 'architectural',
+            'elements' => ['building', 'key', 'property']
+        ]
+    ];
+    
+    $theme = $themes[$industry] ?? $themes['services'];
+    $gradientStart = $theme['gradient'][0];
+    $gradientEnd = $theme['gradient'][1];
+    $accent = $theme['accent'];
+    $pattern = $theme['pattern'];
+    
+    // Генерируем уникальный SVG на основе паттерна
+    $svg = '';
+    
+    switch ($pattern) {
+        case 'circuits':
+            // IT: схемы и соединения
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Circuit lines -->
+    <path d="M20,50 Q50,30 80,50 T140,50" stroke="{$accent}" stroke-width="2" fill="none" opacity="0.3" />
+    <path d="M40,100 Q70,80 100,100 T160,100" stroke="{$accent}" stroke-width="2" fill="none" opacity="0.3" />
+    <path d="M60,150 Q90,130 120,150 T180,150" stroke="{$accent}" stroke-width="2" fill="none" opacity="0.3" />
+    <!-- Nodes -->
+    <circle cx="80" cy="50" r="6" fill="url(#accent-{$industry})" />
+    <circle cx="100" cy="100" r="6" fill="url(#accent-{$industry})" />
+    <circle cx="120" cy="150" r="6" fill="url(#accent-{$industry})" />
+    <!-- Connecting lines -->
+    <line x1="80" y1="50" x2="100" y2="100" stroke="{$accent}" stroke-width="1.5" opacity="0.2" />
+    <line x1="100" y1="100" x2="120" y2="150" stroke="{$accent}" stroke-width="1.5" opacity="0.2" />
+</svg>
+SVG;
+            break;
+            
+        case 'organic':
+            // Рестораны: органические формы
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <radialGradient id="accent-{$industry}">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0" />
+        </radialGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Organic shapes -->
+    <ellipse cx="60" cy="70" rx="35" ry="25" fill="url(#accent-{$industry})" transform="rotate(-15 60 70)" />
+    <ellipse cx="140" cy="100" rx="30" ry="40" fill="url(#accent-{$industry})" transform="rotate(25 140 100)" />
+    <ellipse cx="100" cy="150" rx="40" ry="20" fill="url(#accent-{$industry})" transform="rotate(-10 100 150)" />
+    <!-- Decorative circles -->
+    <circle cx="50" cy="120" r="8" fill="{$accent}" opacity="0.2" />
+    <circle cx="150" cy="60" r="10" fill="{$accent}" opacity="0.2" />
+    <circle cx="170" cy="140" r="6" fill="{$accent}" opacity="0.2" />
+</svg>
+SVG;
+            break;
+            
+        case 'grid':
+            // E-commerce: сетка и структура
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Grid pattern -->
+    <g opacity="0.3">
+        <line x1="0" y1="50" x2="200" y2="50" stroke="{$accent}" stroke-width="1" />
+        <line x1="0" y1="100" x2="200" y2="100" stroke="{$accent}" stroke-width="1" />
+        <line x1="0" y1="150" x2="200" y2="150" stroke="{$accent}" stroke-width="1" />
+        <line x1="50" y1="0" x2="50" y2="200" stroke="{$accent}" stroke-width="1" />
+        <line x1="100" y1="0" x2="100" y2="200" stroke="{$accent}" stroke-width="1" />
+        <line x1="150" y1="0" x2="150" y2="200" stroke="{$accent}" stroke-width="1" />
+    </g>
+    <!-- Boxes -->
+    <rect x="30" y="30" width="40" height="40" fill="url(#accent-{$industry})" rx="4" />
+    <rect x="90" y="70" width="40" height="40" fill="url(#accent-{$industry})" rx="4" />
+    <rect x="130" y="130" width="40" height="40" fill="url(#accent-{$industry})" rx="4" />
+</svg>
+SVG;
+            break;
+            
+        case 'waves':
+            // Retail: волны и потоки
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Wave patterns -->
+    <path d="M0,80 Q50,60 100,80 T200,80 L200,200 L0,200 Z" fill="url(#accent-{$industry})" />
+    <path d="M0,120 Q50,100 100,120 T200,120 L200,200 L0,200 Z" fill="url(#accent-{$industry})" opacity="0.6" />
+    <path d="M0,160 Q50,140 100,160 T200,160 L200,200 L0,200 Z" fill="url(#accent-{$industry})" opacity="0.4" />
+</svg>
+SVG;
+            break;
+            
+        case 'geometric':
+            // Services: геометрические формы
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Geometric shapes -->
+    <polygon points="50,50 100,30 150,50 150,100 100,120 50,100" fill="url(#accent-{$industry})" />
+    <circle cx="100" cy="150" r="30" fill="url(#accent-{$industry})" opacity="0.6" />
+    <rect x="130" y="120" width="40" height="40" fill="url(#accent-{$industry})" rx="8" transform="rotate(45 150 140)" />
+</svg>
+SVG;
+            break;
+            
+        case 'industrial':
+            // Manufacturing: индустриальные элементы
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Industrial elements -->
+    <rect x="40" y="40" width="60" height="40" fill="url(#accent-{$industry})" rx="2" />
+    <rect x="50" y="50" width="40" height="20" fill="{$accent}" opacity="0.3" />
+    <rect x="100" y="100" width="60" height="60" fill="url(#accent-{$industry})" rx="2" />
+    <circle cx="130" cy="130" r="15" fill="{$accent}" opacity="0.3" />
+    <!-- Lines -->
+    <line x1="40" y1="80" x2="100" y2="100" stroke="{$accent}" stroke-width="2" opacity="0.2" />
+    <line x1="100" y1="160" x2="160" y2="140" stroke="{$accent}" stroke-width="2" opacity="0.2" />
+</svg>
+SVG;
+            break;
+            
+        case 'architectural':
+            // Real estate: архитектурные элементы
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="accent-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$accent};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$accent};stop-opacity:0.1" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+    <!-- Building shapes -->
+    <rect x="50" y="80" width="40" height="80" fill="url(#accent-{$industry})" />
+    <rect x="60" y="90" width="8" height="8" fill="{$accent}" opacity="0.4" />
+    <rect x="72" y="90" width="8" height="8" fill="{$accent}" opacity="0.4" />
+    <rect x="60" y="110" width="8" height="8" fill="{$accent}" opacity="0.4" />
+    <rect x="72" y="110" width="8" height="8" fill="{$accent}" opacity="0.4" />
+    <polygon points="50,80 70,60 90,80" fill="url(#accent-{$industry})" />
+    <rect x="110" y="100" width="50" height="60" fill="url(#accent-{$industry})" />
+    <polygon points="110,100 135,75 160,100" fill="url(#accent-{$industry})" />
+</svg>
+SVG;
+            break;
+            
+        default:
+            // Fallback: простой градиент
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="grad-{$industry}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grad-{$industry})" />
+</svg>
+SVG;
+    }
+    
+    return $svg;
+}
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -707,6 +983,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                      data-risks="Зависимость от ключевых сотрудников|Конкуренция на рынке SaaS"
                      data-contact="+7 (495) 123-45-67">
                     <div class="card-header">
+                        <div class="card-illustration">
+                            <?php echo generateBusinessCardIllustration('it', 'SaaS разработка'); ?>
+                        </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">💻</div>
                         </div>
@@ -766,6 +1045,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                      data-risks="Конкуренция в сегменте|Зависимость от локации"
                      data-contact="+7 (495) 234-56-78">
                     <div class="card-header">
+                        <div class="card-illustration">
+                            <?php echo generateBusinessCardIllustration('restaurant', 'Кофейни'); ?>
+                        </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">🍽️</div>
                         </div>
@@ -825,6 +1107,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                      data-risks="Сезонность спроса|Зависимость от поставщиков"
                      data-contact="+7 (812) 345-67-89">
                     <div class="card-header">
+                        <div class="card-illustration">
+                            <?php echo generateBusinessCardIllustration('ecommerce', 'Интернет-магазин'); ?>
+                        </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">🛒</div>
                         </div>
@@ -867,7 +1152,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
 
                 <!-- Business Card 4 -->
                 <div class="business-card card-services"
-                     data-industry="services"
+                     data-industry="real_estate"
                      data-price="3000000"
                      data-location="moscow"
                      data-id="4"
@@ -883,6 +1168,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                      data-risks="Зависимость от рынка недвижимости|Конкуренция"
                      data-contact="+7 (495) 456-78-90">
                     <div class="card-header">
+                        <div class="card-illustration">
+                            <?php echo generateBusinessCardIllustration('real_estate', 'Недвижимость'); ?>
+                        </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">💼</div>
                         </div>
@@ -941,6 +1229,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                      data-risks="Конкуренция в ритейле|Зависимость от арендодателей"
                      data-contact="+7 (343) 567-89-01">
                     <div class="card-header">
+                        <div class="card-illustration">
+                            <?php echo generateBusinessCardIllustration('retail', 'Магазины одежды'); ?>
+                        </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">🏪</div>
                         </div>
@@ -999,6 +1290,9 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                      data-risks="Зависимость от мастеров|Конкуренция в сегменте"
                      data-contact="+7 (495) 678-90-12">
                     <div class="card-header">
+                        <div class="card-illustration">
+                            <?php echo generateBusinessCardIllustration('services', 'Салон красоты'); ?>
+                        </div>
                         <div class="card-icon-bg">
                             <div class="card-icon">✂️</div>
                         </div>
@@ -1085,6 +1379,15 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                              data-risks="<?php echo htmlspecialchars(implode('|', $card['risks']), ENT_QUOTES, 'UTF-8'); ?>"
                              data-contact="<?php echo htmlspecialchars($card['contact'], ENT_QUOTES, 'UTF-8'); ?>">
                             <div class="card-header">
+                                <div class="card-illustration">
+                                    <?php 
+                                    $productsServices = '';
+                                    if (is_array($formData) && !empty($formData['products_services'])) {
+                                        $productsServices = $formData['products_services'];
+                                    }
+                                    echo generateBusinessCardIllustration($card['industry'], $productsServices);
+                                    ?>
+                                </div>
                                 <div class="card-icon-bg">
                                     <div class="card-icon"><?php echo $icon; ?></div>
                                 </div>

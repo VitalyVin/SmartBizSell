@@ -643,35 +643,73 @@ section {
     border-color: rgba(255, 112, 67, 0.3) !important;
 }
 
+.businesses-grid .business-card.card-real_estate {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(20, 184, 166, 0.15) 100%), #ffffff !important;
+    border-color: rgba(14, 165, 233, 0.3) !important;
+}
+
+.businesses-grid .business-card.card-manufacturing {
+    background: linear-gradient(135deg, rgba(96, 125, 139, 0.15) 0%, rgba(69, 90, 100, 0.15) 100%), #ffffff !important;
+    border-color: rgba(96, 125, 139, 0.3) !important;
+}
+
 .business-card .card-header {
     position: relative;
-    padding: 32px 24px 24px !important;
+    padding: 0 !important;
     display: flex !important;
     justify-content: center;
     align-items: center;
-    min-height: 140px !important;
-    background: linear-gradient(135deg, rgba(248, 250, 252, 0.8) 0%, rgba(241, 245, 249, 0.6) 100%) !important;
+    min-height: 180px !important;
+    background: transparent !important;
     border-bottom: 2px solid rgba(0, 0, 0, 0.06) !important;
+    overflow: hidden;
+}
+
+.business-card .card-illustration {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    opacity: 0.9;
+}
+
+.business-card .card-illustration svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .business-card .card-icon-bg {
     width: 90px !important;
     height: 90px !important;
     border-radius: 22px !important;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(250, 250, 250, 1) 100%) !important;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(250, 250, 250, 0.95) 100%) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     display: flex !important;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
-    border: 2px solid rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
     transition: all 0.3s ease;
+    position: relative;
+    z-index: 2;
 }
 
 .business-card:hover .card-icon-bg {
     transform: scale(1.1);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+
+.business-card:hover .card-illustration {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.business-card .card-illustration {
+    transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
 .business-card .card-icon {
