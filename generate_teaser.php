@@ -746,9 +746,22 @@ if (empty($apiKey)) {
         if (!function_exists('ensureOverviewWithAi')) {
             throw new RuntimeException('Function ensureOverviewWithAi not found');
         }
+        // Проверяем, нужно ли очищать текст от "Актив" (определяем один раз)
+        $assetDisclosure = $maskedPayload['asset_disclosure'] ?? '';
+        $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет');
+        
         $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey);
         $logger->logStep('ensureOverviewWithAi', ['has_overview_summary' => !empty($teaserData['overview']['summary'])]);
         error_log('ensureOverviewWithAi completed');
+        
+        // Очищаем данные сразу после ensureOverviewWithAi (она делает дополнительный вызов к ИИ)
+        if ($isNameHidden) {
+            if (!function_exists('cleanTeaserDataFromHiddenCompanyReferences')) {
+                throw new RuntimeException('Function cleanTeaserDataFromHiddenCompanyReferences not found');
+            }
+            $teaserData = cleanTeaserDataFromHiddenCompanyReferences($teaserData, true);
+            error_log('cleanTeaserDataFromHiddenCompanyReferences after ensureOverviewWithAi completed');
+        }
         
         if (!function_exists('ensureProductsLocalized')) {
             throw new RuntimeException('Function ensureProductsLocalized not found');
@@ -756,6 +769,12 @@ if (empty($apiKey)) {
         $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
         $logger->logStep('ensureProductsLocalized', ['has_products' => !empty($teaserData['products'])]);
         error_log('ensureProductsLocalized completed');
+        
+        // Очищаем данные сразу после ensureProductsLocalized (она делает дополнительный вызов к ИИ)
+        if ($isNameHidden) {
+            $teaserData = cleanTeaserDataFromHiddenCompanyReferences($teaserData, true);
+            error_log('cleanTeaserDataFromHiddenCompanyReferences after ensureProductsLocalized completed');
+        }
     
     // Генерируем краткое описание для hero блока из overview summary
         // Используем маскированные данные
@@ -766,8 +785,26 @@ if (empty($apiKey)) {
         $logger->logStep('buildHeroDescription', ['hero_description_length' => strlen($heroDescription ?? '')]);
         error_log('buildHeroDescription completed');
         
+        // Очищаем heroDescription и overview summary от нежелательных сочетаний
+        // $isNameHidden уже определен выше
+        if ($isNameHidden) {
+            if (!function_exists('cleanHiddenCompanyText')) {
+                throw new RuntimeException('Function cleanHiddenCompanyText not found');
+            }
+            $heroDescription = cleanHiddenCompanyText($heroDescription ?? '', true);
+            
+            // Очищаем overview summary в teaserData
+            if (!empty($teaserData['overview']['summary'])) {
+                $teaserData['overview']['summary'] = cleanHiddenCompanyText($teaserData['overview']['summary'], true);
+            }
+        }
+        
         // Используем маскированное название актива для рендеринга
+        // Для скрытых активов не показываем "Актив" вообще
         $displayAssetName = $maskedPayload['asset_name'] ?? 'Актив';
+        if ($isNameHidden && $displayAssetName === 'Актив') {
+            $displayAssetName = ''; // Пустая строка для скрытых активов
+        }
         if (!function_exists('renderTeaserHtml')) {
             throw new RuntimeException('Function renderTeaserHtml not found');
         }
@@ -775,6 +812,17 @@ if (empty($apiKey)) {
         $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData, $logger);
         $logger->logStep('renderTeaserHtml', ['html_length' => strlen($html), 'html_size' => round(strlen($html) / 1024, 2) . 'KB']);
         error_log('renderTeaserHtml completed, HTML length: ' . strlen($html));
+        
+        // Пост-обработка HTML для скрытых активов: удаление сочетаний "Компания Актив"
+        // $isNameHidden уже определен выше
+        if ($isNameHidden) {
+            if (!function_exists('cleanHiddenCompanyReferences')) {
+                throw new RuntimeException('Function cleanHiddenCompanyReferences not found');
+            }
+            $html = cleanHiddenCompanyReferences($html, true);
+            $logger->logStep('cleanHiddenCompanyReferences', ['html_length_after_cleanup' => strlen($html)]);
+            error_log('cleanHiddenCompanyReferences completed, HTML length after cleanup: ' . strlen($html));
+        }
 
         // Сохраняем snapshot с исходными данными (не маскированными)
         // Маскированные данные используются только для генерации HTML тизера
@@ -1051,14 +1099,9 @@ function buildMaskedTeaserPayload(array $payload): array
         // Заменяем название актива на "Актив" во всех местах
         $maskedPayload['asset_name'] = 'Актив';
         
-        // Также заменяем в company_brands, если там упоминается название актива
-        // Это нужно для того, чтобы в тизере не было упоминаний реального названия
-        if (!empty($maskedPayload['company_brands'])) {
-            $originalName = $payload['asset_name'] ?? '';
-            if (!empty($originalName) && strpos($maskedPayload['company_brands'], $originalName) !== false) {
-                $maskedPayload['company_brands'] = str_ireplace($originalName, 'Актив', $maskedPayload['company_brands']);
-            }
-        }
+        // Скрываем названия брендов для клиентов со скрытым именем
+        // Очищаем поле company_brands, чтобы бренды не появлялись в тизере
+        $maskedPayload['company_brands'] = '';
     }
     
     // ВАЖНО: Сохраняем final_price и _original_data_json в маскированном payload
@@ -1085,13 +1128,22 @@ function buildTeaserPrompt(array $payload): string
             "\n";
     }
 
+    // Проверяем, скрыто ли имя компании
+    $isNameHidden = ($assetName === 'Актив');
+    $nameInstruction = '';
+    $displayNameInPrompt = $assetName;
+    if ($isNameHidden) {
+        $nameInstruction = "\nВАЖНО: Название компании скрыто. НЕ используй слово 'Актив' в тексте вообще. Можно использовать 'Компания' или 'Фирма', но НЕ упоминай 'Актив' ни в каком виде (ни отдельно, ни в сочетаниях типа 'Компания Актив', 'Компания «Актив»' и т.д.).";
+        $displayNameInPrompt = 'компании'; // Используем нейтральное название вместо "Актив"
+    }
+
     return <<<PROMPT
-Ты — инвестиционный банкир. Подготовь лаконичный тизер компании "{$assetName}" для потенциальных инвесторов.
+Ты — инвестиционный банкир. Подготовь лаконичный тизер {$displayNameInPrompt} для потенциальных инвесторов.
 
 Важно:
 - Отвечай строго на русском языке.
 - Используй данные анкеты (если поле пустое, пиши «уточняется») и при необходимости дополни их публичными отраслевыми фактами (без выдумывания конкретных чисел, если они неупомянуты).
-- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.
+- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.{$nameInstruction}
 
 Структура ответа — строго валидный JSON:
 {
@@ -1150,6 +1202,172 @@ function buildTeaserPrompt(array $payload): string
 
 ВАЖНО: Если в данных анкеты указана цена предложения Продавца (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если цена предложения Продавца не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
 PROMPT;
+}
+
+/**
+ * Очищает текст от нежелательных сочетаний типа "Компания Актив" для скрытых активов.
+ * 
+ * Заменяет "Компания Актив", "Компания «Актив»" и подобные на "Компания",
+ * оставляя отдельные слова "Компания" и "Фирма" без изменений.
+ * 
+ * @param string $text Текст для обработки (может быть HTML или обычный текст)
+ * @param bool $isNameHidden Флаг, указывающий, скрыто ли имя компании
+ * @return string Очищенный текст
+ */
+function cleanHiddenCompanyText(string $text, bool $isNameHidden): string
+{
+    if (!$isNameHidden) {
+        return $text;
+    }
+    
+    // Удаляем все упоминания "Актив" из текста
+    // Обрабатываем различные варианты: "Компания Актив", "Компания «Актив»", просто "Актив" и т.д.
+    $patterns = [
+        // "Компания Актив" (с пробелом) - заменяем на "Компания"
+        '/\bКомпания\s+Актив\b/ui',
+        '/\bкомпания\s+Актив\b/ui',
+        // "Компания «Актив»" (с русскими кавычками) - заменяем на "Компания"
+        '/\bКомпания\s*[«"]\s*Актив\s*[»"]\b/ui',
+        '/\bкомпания\s*[«"]\s*Актив\s*[»"]\b/ui',
+        // "Компания "Актив"" (с английскими кавычками) - заменяем на "Компания"
+        '/\bКомпания\s*["\']\s*Актив\s*["\']\b/ui',
+        '/\bкомпания\s*["\']\s*Актив\s*["\']\b/ui',
+        // С множественными пробелами
+        '/\bКомпания\s{2,}\s*Актив\b/ui',
+        '/\bкомпания\s{2,}\s*Актив\b/ui',
+        // Более общий паттерн для любых кавычек и пробелов
+        '/\bКомпания\s*[«"\'"]\s*Актив\s*[»"\'"]\b/ui',
+        '/\bкомпания\s*[«"\'"]\s*Актив\s*[»"\'"]\b/ui',
+        // Просто "Актив" как отдельное слово (не в начале предложения, чтобы не удалить из других контекстов)
+        // Удаляем только если это не часть другого слова
+        '/\bАктив\b(?![а-яА-Я])/ui',
+        // "Компания «Компания»" - заменяем на "Компания"
+        '/\bКомпания\s*[«"]\s*Компания\s*[»"]\b/ui',
+        '/\bкомпания\s*[«"]\s*компания\s*[»"]\b/ui',
+        '/\bКомпания\s*["\']\s*Компания\s*["\']\b/ui',
+        '/\bкомпания\s*["\']\s*компания\s*["\']\b/ui',
+    ];
+    
+    foreach ($patterns as $pattern) {
+        $text = preg_replace($pattern, 'Компания', $text);
+    }
+    
+    // Дополнительно: удаляем оставшиеся упоминания "Актив" в кавычках
+    $text = preg_replace('/[«"]\s*Актив\s*[»"]/ui', '', $text);
+    $text = preg_replace('/["\']\s*Актив\s*["\']/ui', '', $text);
+    
+    // Удаляем лишние пробелы, которые могли остаться после удаления
+    $text = preg_replace('/\s+/', ' ', $text);
+    $text = trim($text);
+    
+    return $text;
+}
+
+/**
+ * Рекурсивно очищает все текстовые поля в массиве данных тизера от нежелательных сочетаний.
+ * 
+ * Проходит по всем полям массива и очищает строковые значения от "Актив", 
+ * "Компания Актив", "Компания «Компания»" и т.д.
+ * 
+ * @param array $data Массив данных тизера
+ * @param bool $isNameHidden Флаг, указывающий, скрыто ли имя компании
+ * @return array Очищенные данные тизера
+ */
+function cleanTeaserDataFromHiddenCompanyReferences(array $data, bool $isNameHidden): array
+{
+    if (!$isNameHidden) {
+        return $data;
+    }
+    
+    if (!function_exists('cleanHiddenCompanyText')) {
+        return $data;
+    }
+    
+    $cleaned = [];
+    foreach ($data as $key => $value) {
+        if (is_string($value)) {
+            // Очищаем строковые значения
+            $cleaned[$key] = cleanHiddenCompanyText($value, true);
+        } elseif (is_array($value)) {
+            // Рекурсивно обрабатываем вложенные массивы
+            $cleaned[$key] = cleanTeaserDataFromHiddenCompanyReferences($value, true);
+        } else {
+            // Оставляем другие типы без изменений
+            $cleaned[$key] = $value;
+        }
+    }
+    
+    return $cleaned;
+}
+
+/**
+ * Очищает HTML тизера от нежелательных сочетаний типа "Компания Актив" для скрытых активов.
+ * 
+ * Заменяет "Компания Актив" на "Компания" (или "Фирма"), оставляя отдельные слова
+ * "Компания" и "Фирма" без изменений.
+ * 
+ * @param string $html HTML тизера для обработки
+ * @param bool $isNameHidden Флаг, указывающий, скрыто ли имя компании
+ * @return string Очищенный HTML
+ */
+function cleanHiddenCompanyReferences(string $html, bool $isNameHidden): string
+{
+    if (!$isNameHidden) {
+        // Если имя не скрыто, возвращаем HTML без изменений
+        return $html;
+    }
+    
+    // Используем DOMDocument для безопасной обработки HTML
+    if (!class_exists('DOMDocument')) {
+        // Fallback: используем функцию очистки текста
+        return cleanHiddenCompanyText($html, $isNameHidden);
+    }
+    
+    // Создаем DOMDocument для безопасной обработки
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    
+    // Подавляем ошибки парсинга (HTML может быть невалидным)
+    libxml_use_internal_errors(true);
+    
+    // Загружаем HTML с учетом кодировки UTF-8
+    $html = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
+    @$dom->loadHTML('<?xml encoding="UTF-8">' . $html);
+    
+    // Очищаем ошибки парсинга
+    libxml_clear_errors();
+    
+    // Создаем XPath для поиска текстовых узлов
+    $xpath = new DOMXPath($dom);
+    
+    // Находим все текстовые узлы
+    $textNodes = $xpath->query('//text()');
+    
+    if ($textNodes) {
+        foreach ($textNodes as $textNode) {
+            $text = $textNode->nodeValue;
+            
+            // Используем функцию очистки текста
+            $cleaned = cleanHiddenCompanyText($text, $isNameHidden);
+            
+            // Обновляем текст узла только если были изменения
+            if ($cleaned !== $text) {
+                $textNode->nodeValue = $cleaned;
+            }
+        }
+    }
+    
+    // Извлекаем body содержимое
+    $body = $dom->getElementsByTagName('body')->item(0);
+    if ($body) {
+        $result = '';
+        foreach ($body->childNodes as $node) {
+            $result .= $dom->saveHTML($node);
+        }
+        return $result;
+    }
+    
+    // Fallback: возвращаем исходный HTML
+    return $html;
 }
 
 /**
@@ -2608,9 +2826,22 @@ function ensureProductsLocalized(array $data, array $payload, string $apiKey): a
 function buildProductsLocalizationPrompt(array $entries, array $payload): string
 {
     $asset = $payload['asset_name'] ?? 'актив';
+    $assetDisclosure = $payload['asset_disclosure'] ?? '';
+    $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет' || $asset === 'Актив');
+    
+    // Для скрытых активов используем нейтральное название
+    if ($isNameHidden) {
+        $asset = 'компании';
+    }
+    
+    $nameInstruction = '';
+    if ($isNameHidden) {
+        $nameInstruction = "\nВАЖНО: Название компании скрыто. НЕ используй слово 'Актив' в тексте вообще. Можно использовать 'Компания' или 'Фирма', но НЕ упоминай 'Актив' ни в каком виде.";
+    }
+    
     $json = json_encode($entries, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     return <<<PROMPT
-Ты маркетолог инвестиционного банка. Переведи и переформулируй на красивом русском языке описания блока "Продукты и клиенты" для компании "{$asset}".
+Ты маркетолог инвестиционного банка. Переведи и переформулируй на красивом русском языке описания блока "Продукты и клиенты" для {$asset}.{$nameInstruction}
 Важно:
 - Ответ верни строго в JSON с теми же ключами (portfolio, differentiators, key_clients, sales_channels).
 - Используй деловой стиль, максимум два предложения в каждом значении.
@@ -2682,11 +2913,19 @@ function shouldEnhanceOverview(array $overview): bool
  */
 function buildOverviewRefinementPrompt(array $overview, array $payload): string
 {
+    $assetName = $payload['asset_name'] ?? '';
+    $assetDisclosure = $payload['asset_disclosure'] ?? '';
+    $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет' || $assetName === 'Актив');
+    
+    // Для скрытых активов не передаем название или используем нейтральное
+    $nameFact = '';
+    if (!$isNameHidden && $assetName !== '') {
+        $nameFact = $assetName;
+    }
+    
     $facts = [
-        'Название' => $payload['asset_name'] ?? '',
         'Отрасль' => $payload['products_services'] ?? '',
         'Регионы присутствия' => $payload['presence_regions'] ?? '',
-        'Бренды' => $payload['company_brands'] ?? '',
         'Клиенты' => $payload['main_clients'] ?? '',
         'Персонал' => $payload['personnel_count'] ?? '',
         'Цель сделки' => $payload['deal_goal'] ?? '',
@@ -2696,14 +2935,32 @@ function buildOverviewRefinementPrompt(array $overview, array $payload): string
         'Загрузка мощностей' => $payload['production_load'] ?? '',
         'Источник сайта' => buildWebsiteInsightSentence($payload) ?? '',
     ];
+    
+    // Добавляем название только если оно не скрыто
+    if ($nameFact !== '') {
+        $facts = array_merge(['Название' => $nameFact], $facts);
+    }
+    
+    // Не передаем бренды для скрытых активов
+    if (!$isNameHidden) {
+        $brands = $payload['company_brands'] ?? '';
+        if ($brands !== '') {
+            $facts['Бренды'] = $brands;
+        }
+    }
 
     $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
     $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
     $existingSummary = trim((string)($overview['summary'] ?? ''));
+    
+    $nameInstruction = '';
+    if ($isNameHidden) {
+        $nameInstruction = "\nВАЖНО: Название компании скрыто. НЕ используй слово 'Актив' в тексте вообще. Можно использовать 'Компания' или 'Фирма', но НЕ упоминай 'Актив' ни в каком виде (ни отдельно, ни в сочетаниях типа 'Компания Актив', 'Компания «Актив»' и т.д.).";
+    }
 
     return <<<PROMPT
-Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.
+Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}
 - Стиль: не более четырёх предложений, деловой и живой тон без канцелярита.
 - Сформируй ровно четыре абзаца, в каждом по одному предложению. Делай переходы логичными: 1) кто компания и что делает, 2) география и клиенты, 3) конкурентные преимущества, 4) планы использования инвестиций и ожидаемый рост.
 - Используй только приведённые факты, не придумывай цифры или названия.
@@ -3354,6 +3611,12 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
     }
 
     $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
+    $assetDisclosure = $payload['asset_disclosure'] ?? '';
+    $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет' || $assetName === 'Актив');
+    
+    // Для скрытых активов используем "Компания" или "Фирма", но не "Компания Актив"
+    $displayName = $isNameHidden ? 'Компания' : $assetName;
+    
     $industry = trim((string)($payload['products_services'] ?? ''));
     $regions = trim((string)($payload['presence_regions'] ?? ''));
     $brands = trim((string)($payload['company_brands'] ?? ''));
@@ -3362,13 +3625,14 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
 
     $sentences = [];
     $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
-    $sentences[] = "{$assetName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+    $sentences[] = "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
 
     if ($regions !== '') {
         $sentences[] = "Присутствие в регионах {$regions} обеспечивает диверсификацию выручки и доступ к новым каналам.";
     }
 
-    if ($brands !== '') {
+    // Не упоминаем бренды для скрытых активов
+    if ($brands !== '' && !$isNameHidden) {
         $sentences[] = "Портфель включает бренды {$brands}, что усиливает узнаваемость и лояльность покупателей.";
     }
 
@@ -3423,9 +3687,15 @@ function buildHeroDescription(array $teaserData, array $payload): string
     if (empty($overviewSummary)) {
         // Если summary нет, создаем краткое описание из данных анкеты
         $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
+        $assetDisclosure = $payload['asset_disclosure'] ?? '';
+        $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет' || $assetName === 'Актив');
+        
+        // Для скрытых активов используем "Компания" или "Фирма", но не "Компания Актив"
+        $displayName = $isNameHidden ? 'Компания' : $assetName;
+        
         $industry = trim((string)($payload['products_services'] ?? ''));
         $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
-        return "{$assetName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+        return "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
     }
     
     // Убираем HTML теги и форматирование
@@ -3719,7 +3989,10 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
     // Рендерим HTML
     $html = '<div class="teaser-hero">';
     $html .= '<div class="teaser-hero__content">';
-    $html .= '<h3>' . escapeHtml($assetName) . '</h3>';
+    // Не показываем заголовок, если имя скрыто (assetName пустой или "Актив")
+    if (!empty($assetName) && $assetName !== 'Актив') {
+        $html .= '<h3>' . escapeHtml($assetName) . '</h3>';
+    }
     $html .= '<p class="teaser-hero__description">' . escapeHtml($heroDescription) . '</p>';
     
     if (!empty($heroChips)) {
@@ -4141,6 +4414,12 @@ function buildWebsiteInsightSentence(array $payload): ?string
 function buildOverviewFallbackSentences(array $payload): array
 {
     $assetName = trim((string)($payload['asset_name'] ?? 'Компания'));
+    $assetDisclosure = $payload['asset_disclosure'] ?? '';
+    $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет' || $assetName === 'Актив');
+    
+    // Для скрытых активов используем "Компания" или "Фирма", но не "Компания Актив"
+    $displayName = $isNameHidden ? 'Компания' : $assetName;
+    
     $regions = trim((string)($payload['presence_regions'] ?? ''));
     $clients = trim((string)($payload['main_clients'] ?? ''));
     $dealGoal = trim((string)($payload['deal_goal'] ?? ''));
@@ -4149,7 +4428,7 @@ function buildOverviewFallbackSentences(array $payload): array
     $website = buildWebsiteInsightSentence($payload);
 
     $sentences = [];
-    $sentences[] = $assetName !== '' ? "{$assetName} готова к диалогу с инвестором на платформе SmartBizSell." : 'Команда актива готова к диалогу с инвестором на платформе SmartBizSell.';
+    $sentences[] = $displayName !== '' ? "{$displayName} готова к диалогу с инвестором на платформе SmartBizSell." : 'Команда актива готова к диалогу с инвестором на платформе SmartBizSell.';
     if ($regions !== '') {
         $sentences[] = "География деятельности охватывает {$regions}, что поддерживает диверсификацию спроса.";
     }
