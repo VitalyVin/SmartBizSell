@@ -4880,15 +4880,16 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                             if ($value === null) {
                                 return '—';
                             }
-                            $rounded = round($value);
-                            $formatted = number_format(abs($rounded), 0, '.', ' ');
-                            if ($isExpense && $rounded > 0) {
+                            $absValue = abs($value);
+                            $decimals = $absValue > 0 && $absValue < 1 ? 2 : 0;
+                            $formatted = number_format($absValue, $decimals, '.', ' ');
+                            if ($isExpense && $value > 0) {
                                 return '(' . $formatted . ')';
                             }
-                            if ($isExpense && $rounded < 0) {
+                            if ($isExpense && $value < 0) {
                                 return '−(' . $formatted . ')';
                             }
-                            return ($rounded < 0 ? '−' : '') . $formatted;
+                            return ($value < 0 ? '−' : '') . $formatted;
                         };
                         $formatPercent = static function ($value, bool $italic = false): string {
                             if ($value === null) {
@@ -7647,6 +7648,13 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
              */
             const formatMoney = (value) => {
                 if (value === null || value === undefined) return '—';
+                const absValue = Math.abs(value);
+                if (absValue > 0 && absValue < 1) {
+                    return value.toLocaleString('ru-RU', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    });
+                }
                 return Math.round(value).toLocaleString('ru-RU');
             };
             
