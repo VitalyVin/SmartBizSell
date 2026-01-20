@@ -90,6 +90,138 @@ if (!$post) {
 $pageTitle = !empty($post['meta_title']) ? $post['meta_title'] : $post['title'] . ' | Блог SmartBizSell';
 $pageDescription = !empty($post['meta_description']) ? $post['meta_description'] : (!empty($post['excerpt']) ? $post['excerpt'] : 'Статья блога SmartBizSell о продаже и покупке бизнеса, M&A сделках и инвестициях.');
 $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа бизнеса, покупка бизнеса, M&A, инвестиции';
+
+/**
+ * Вычисляет время чтения статьи
+ */
+function estimateReadingTime(?string $content): int {
+    if (empty($content)) {
+        return 5;
+    }
+    $wordCount = str_word_count(strip_tags($content));
+    if ($wordCount === 0) {
+        return 5;
+    }
+    $readingTime = ceil($wordCount / 200);
+    return max(1, $readingTime);
+}
+
+/**
+ * Генерирует SVG-иллюстрацию для категории блога
+ */
+function generateBlogCategoryIllustration(string $category, int $postId = null): string {
+    $categoryLower = mb_strtolower($category);
+    $themes = [
+        'm&a' => ['#667EEA', '#764BA2', '#8B5CF6'],
+        'оценка' => ['#3F51B5', '#673AB7', '#6366F1'],
+        'инвестиции' => ['#4CAF50', '#009688', '#22C55E'],
+        'продажа бизнеса' => ['#9C27B0', '#E91E63', '#EC4899'],
+        'покупка бизнеса' => ['#0EA5E9', '#14B8A6', '#06B6D4'],
+        'финансы' => ['#607D8B', '#455A64', '#64748B'],
+    ];
+    
+    $theme = ['#667EEA', '#764BA2', '#8B5CF6'];
+    foreach ($themes as $key => $colors) {
+        if (strpos($categoryLower, $key) !== false) {
+            $theme = $colors;
+            break;
+        }
+    }
+    
+    $gradientStart = $theme[0];
+    $gradientEnd = $theme[1];
+    $accent = $theme[2];
+    $uniqueId = md5($category . $postId);
+    $variant = $postId ? (($postId % 5) + 1) : 1;
+    
+    $svg = '';
+    switch ($variant) {
+        case 1:
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="blog-grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.25" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#blog-grad-{$uniqueId})" />
+    <circle cx="50" cy="50" r="30" fill="{$accent}" opacity="0.2" />
+    <circle cx="150" cy="150" r="40" fill="{$accent}" opacity="0.15" />
+</svg>
+SVG;
+            break;
+        case 2:
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="blog-grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.35" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#blog-grad-{$uniqueId})" />
+    <path d="M0,100 Q50,50 100,100 T200,100 L200,200 L0,200 Z" fill="{$accent}" opacity="0.2" />
+</svg>
+SVG;
+            break;
+        default:
+            $svg = <<<SVG
+<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+    <defs>
+        <linearGradient id="blog-grad-{$uniqueId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:{$gradientStart};stop-opacity:0.3" />
+            <stop offset="100%" style="stop-color:{$gradientEnd};stop-opacity:0.2" />
+        </linearGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#blog-grad-{$uniqueId})" />
+</svg>
+SVG;
+    }
+    
+    return $svg;
+}
+
+/**
+ * Генерирует оглавление из заголовков статьи
+ */
+function generateTableOfContents(string $content): array {
+    $toc = [];
+    if (empty($content)) {
+        return $toc;
+    }
+    
+    $dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    @$dom->loadHTML('<?xml encoding="UTF-8">' . $content);
+    libxml_clear_errors();
+    
+    $xpath = new DOMXPath($dom);
+    $headings = $xpath->query('//h2 | //h3');
+    
+    foreach ($headings as $index => $heading) {
+        $text = trim($heading->textContent);
+        if (empty($text)) {
+            continue;
+        }
+        
+        $id = 'heading-' . ($index + 1);
+        $heading->setAttribute('id', $id);
+        
+        $level = (int)substr($heading->nodeName, 1);
+        $toc[] = [
+            'id' => $id,
+            'text' => $text,
+            'level' => $level
+        ];
+    }
+    
+    return $toc;
+}
+
+$readingTime = estimateReadingTime($post['content'] ?? '');
+$toc = generateTableOfContents($post['content'] ?? '');
+$currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -128,6 +260,17 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
     <style>
         body {
             background: #f8f9fa;
+        }
+        .reading-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 0%;
+            height: 4px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            z-index: 9999;
+            transition: width 0.1s ease;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
         }
         /* Обеспечиваем правильное отображение навигации */
         .navbar {
@@ -259,28 +402,49 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             padding: 120px 20px 80px;
         }
         .blog-post-header {
+            position: relative;
             margin-bottom: 50px;
+            padding: 60px 40px;
+            border-radius: 24px;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .blog-post-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.4;
+            z-index: 0;
+        }
+        .blog-post-header > * {
+            position: relative;
+            z-index: 1;
         }
         .blog-post-category {
             display: inline-block;
-            padding: 8px 16px;
+            padding: 10px 20px;
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
             color: white;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 13px;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 24px;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+            margin-bottom: 28px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
         .blog-post-title {
-            font-size: 48px;
+            font-size: 52px;
             font-weight: 800;
             line-height: 1.2;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
             color: #1a1a1a;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.8px;
         }
         .blog-post-meta {
             display: flex;
@@ -289,22 +453,140 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             font-size: 15px;
             color: #6b7280;
             margin-bottom: 40px;
-            padding-bottom: 24px;
+            padding-bottom: 28px;
             border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+            flex-wrap: wrap;
         }
         .blog-post-meta span {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
+        }
+        .blog-post-reading-time {
+            color: #667EEA;
+            font-weight: 600;
+        }
+        .blog-post-share {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .share-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: #667EEA;
+        }
+        .share-btn:hover {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .blog-post-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 40px;
+            margin-bottom: 50px;
         }
         .blog-post-content {
             background: white;
             padding: 50px;
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            border-radius: 20px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
             font-size: 19px;
             line-height: 1.85;
             color: #2d3748;
+        }
+        .blog-post-sidebar {
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+        }
+        .blog-toc {
+            background: white;
+            padding: 28px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            margin-bottom: 24px;
+        }
+        .blog-toc h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #1a1a1a;
+        }
+        .blog-toc ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .blog-toc li {
+            margin-bottom: 12px;
+        }
+        .blog-toc a {
+            color: #6b7280;
+            text-decoration: none;
+            font-size: 15px;
+            line-height: 1.6;
+            transition: color 0.3s ease;
+            display: block;
+            padding-left: 16px;
+            position: relative;
+        }
+        .blog-toc a::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #667EEA;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .blog-toc a:hover,
+        .blog-toc a.active {
+            color: #667EEA;
+        }
+        .blog-toc a.active::before {
+            opacity: 1;
+        }
+        .back-to-top {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+            z-index: 100;
+        }
+        .back-to-top.visible {
+            display: flex;
+        }
+        .back-to-top:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(102, 126, 234, 0.5);
         }
         .blog-post-content h2 {
             font-size: 36px;
@@ -313,6 +595,18 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             color: #1a1a1a;
             line-height: 1.3;
             letter-spacing: -0.3px;
+            position: relative;
+            padding-left: 20px;
+        }
+        .blog-post-content h2::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            border-radius: 2px;
         }
         .blog-post-content h3 {
             font-size: 28px;
@@ -320,6 +614,19 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             margin: 40px 0 20px;
             color: #1a1a1a;
             line-height: 1.4;
+            position: relative;
+            padding-left: 16px;
+        }
+        .blog-post-content h3::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            border-radius: 2px;
         }
         .blog-post-content h4 {
             font-size: 22px;
@@ -332,12 +639,36 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
         }
         .blog-post-content ul,
         .blog-post-content ol {
-            margin: 24px 0;
-            padding-left: 32px;
+            margin: 28px 0;
+            padding-left: 36px;
         }
-        .blog-post-content li {
-            margin-bottom: 12px;
-            line-height: 1.7;
+        .blog-post-content ul li {
+            margin-bottom: 14px;
+            line-height: 1.8;
+            position: relative;
+            padding-left: 8px;
+        }
+        .blog-post-content ul li::marker {
+            color: #667EEA;
+        }
+        .blog-post-content ul li::before {
+            content: '';
+            position: absolute;
+            left: -20px;
+            top: 12px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+        }
+        .blog-post-content ol li {
+            margin-bottom: 14px;
+            line-height: 1.8;
+            padding-left: 8px;
+        }
+        .blog-post-content ol li::marker {
+            color: #667EEA;
+            font-weight: 600;
         }
         .blog-post-content strong {
             font-weight: 600;
@@ -352,20 +683,91 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             color: #764BA2;
         }
         .blog-post-content blockquote {
-            margin: 32px 0;
-            padding: 24px 32px;
-            background: #f8f9fa;
-            border-left: 4px solid #667EEA;
-            border-radius: 8px;
+            margin: 40px 0;
+            padding: 28px 36px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            border-left: 5px solid #667EEA;
+            border-radius: 12px;
             font-style: italic;
             color: #4a5568;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .blog-post-content blockquote::before {
+            content: '"';
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            font-size: 60px;
+            color: #667EEA;
+            opacity: 0.2;
+            font-family: Georgia, serif;
         }
         .blog-post-content img {
             max-width: 100%;
             height: auto;
+            border-radius: 16px;
+            margin: 40px 0;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            transition: transform 0.3s ease;
+        }
+        .blog-post-content img:hover {
+            transform: scale(1.02);
+        }
+        .blog-post-content code {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            color: #667EEA;
+            font-weight: 600;
+        }
+        .blog-post-content pre {
+            background: #1a1a1a;
+            color: #f8f9fa;
+            padding: 24px;
             border-radius: 12px;
+            overflow-x: auto;
             margin: 32px 0;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        .blog-post-content pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-weight: normal;
+        }
+        .blog-post-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 32px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .blog-post-content table th {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .blog-post-content table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        .blog-post-content table tr:last-child td {
+            border-bottom: none;
+        }
+        .blog-post-content table tr:nth-child(even) {
+            background: rgba(102, 126, 234, 0.03);
+        }
+        .blog-post-content hr {
+            border: none;
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, #667EEA 50%, transparent 100%);
+            margin: 48px 0;
         }
         .blog-post-tags {
             display: flex;
@@ -388,44 +790,142 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             background: #e2e8f0;
             transform: translateY(-1px);
         }
+        .blog-post-author {
+            display: flex;
+            gap: 24px;
+            padding: 32px;
+            margin-top: 50px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            border-radius: 16px;
+            border: 2px solid rgba(102, 126, 234, 0.1);
+            align-items: center;
+        }
+        .author-avatar {
+            flex-shrink: 0;
+        }
+        .author-avatar-inner {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+        }
+        .author-info {
+            flex: 1;
+        }
+        .author-name {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+        .author-bio {
+            color: var(--text-secondary);
+            font-size: 15px;
+            line-height: 1.6;
+            margin: 0;
+        }
+        .blog-post-share-bottom {
+            margin-top: 50px;
+            padding-top: 40px;
+            border-top: 2px solid rgba(0, 0, 0, 0.08);
+            text-align: center;
+        }
+        .share-label {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+        }
         .related-posts {
             margin-top: 80px;
             padding-top: 50px;
             border-top: 2px solid rgba(0, 0, 0, 0.1);
         }
         .related-posts h2 {
-            font-size: 32px;
-            font-weight: 700;
+            font-size: 36px;
+            font-weight: 800;
             margin-bottom: 40px;
             color: #1a1a1a;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         .related-posts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 24px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 28px;
         }
         .related-post-card {
-            padding: 24px;
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(0, 0, 0, 0.06);
-            transition: all 0.3s;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .related-post-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
         .related-post-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            transform: translateY(-8px);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+        }
+        .related-post-card:hover::before {
+            opacity: 1;
+        }
+        .related-post-card-header {
+            position: relative;
+            height: 120px;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+        .related-post-card-illustration {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+        }
+        .related-post-card-content {
+            padding: 24px;
+            flex: 1;
         }
         .related-post-card a {
             color: #1a1a1a;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 16px;
-            line-height: 1.5;
+            font-weight: 700;
+            font-size: 18px;
+            line-height: 1.4;
             display: block;
+            margin-bottom: 12px;
+            transition: color 0.3s ease;
         }
         .related-post-card a:hover {
             color: #667EEA;
+        }
+        .related-post-card p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0;
         }
         .back-to-blog {
             margin-bottom: 40px;
@@ -444,9 +944,20 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
             color: #764BA2;
             transform: translateX(-4px);
         }
+        @media (max-width: 1024px) {
+            .blog-post-wrapper {
+                grid-template-columns: 1fr;
+            }
+            .blog-post-sidebar {
+                position: static;
+            }
+        }
         @media (max-width: 768px) {
             .blog-post-container {
                 padding: 100px 16px 60px;
+            }
+            .blog-post-header {
+                padding: 40px 24px;
             }
             .blog-post-title {
                 font-size: 32px;
@@ -466,13 +977,37 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
                 align-items: flex-start;
                 gap: 12px;
             }
+            .blog-post-share {
+                flex-wrap: wrap;
+            }
+            .blog-post-author {
+                flex-direction: column;
+                text-align: center;
+                padding: 24px;
+            }
+            .author-avatar {
+                margin: 0 auto;
+            }
+            .blog-post-share-bottom {
+                margin-top: 40px;
+                padding-top: 32px;
+            }
             .related-posts-grid {
                 grid-template-columns: 1fr;
+            }
+            .back-to-top {
+                bottom: 20px;
+                right: 20px;
+                width: 48px;
+                height: 48px;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Reading Progress Indicator -->
+    <div class="reading-progress" id="readingProgress"></div>
+    
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container">
@@ -524,24 +1059,78 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
                 <h1 class="blog-post-title"><?php echo htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8'); ?></h1>
                 <div class="blog-post-meta">
                     <span>
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle;">
                             <path d="M8 1V4M8 12V15M3 8H1M15 8H13M3.5 3.5L2 2M14 2L12.5 3.5M3.5 12.5L2 14M14 14L12.5 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                             <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
                         <?php echo date('d.m.Y', strtotime($post['published_at'])); ?>
                     </span>
+                    <span class="blog-post-reading-time">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle;">
+                            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M8 4V8L10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        <?php echo $readingTime; ?> мин чтения
+                    </span>
                     <span>
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display: inline-block; vertical-align: middle;">
                             <path d="M8 3C4 3 1 6 1 8C1 10 4 13 8 13C12 13 15 10 15 8C15 6 12 3 8 3Z" stroke="currentColor" stroke-width="1.5"/>
                             <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
                         <?php echo number_format($post['views'] ?? 0, 0, '.', ' '); ?> просмотров
                     </span>
                 </div>
+                <div class="blog-post-share">
+                    <a href="https://vk.com/share.php?url=<?php echo urlencode($currentUrl); ?>&title=<?php echo urlencode($post['title']); ?>" 
+                       target="_blank" 
+                       class="share-btn" 
+                       title="Поделиться в VK">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.408 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.727-1.084-1.084-1.57 0-1.57.619v1.108c0 .495-.247.743-.743.743H9.89c-.495 0-.743-.247-.743-.743V9.89c0-.495.247-.743.743-.743h1.108c.495 0 .743.247.743.743v.495c.495-.495 1.084-1.108 2.05-1.108h2.05c.495 0 .743.247.743.743v1.108c0 .495-.247.743-.743.743h-1.108c-.495 0-.743.247-.743.743v2.05c0 .495.247.743.743.743h2.05c.495 0 .743.247.743.743v1.108c0 .495-.247.743-.743.743z"/>
+                        </svg>
+                    </a>
+                    <a href="https://t.me/share/url?url=<?php echo urlencode($currentUrl); ?>&text=<?php echo urlencode($post['title']); ?>" 
+                       target="_blank" 
+                       class="share-btn" 
+                       title="Поделиться в Telegram">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.559z"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=<?php echo urlencode($currentUrl); ?>" 
+                       target="_blank" 
+                       class="share-btn" 
+                       title="Поделиться в Facebook">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
+                    </a>
+                </div>
             </div>
 
-            <div class="blog-post-content">
-                <?php echo $post['content']; ?>
+            <div class="blog-post-wrapper">
+                <div class="blog-post-content" id="blogContent">
+                    <?php echo $post['content']; ?>
+                </div>
+                
+                <?php if (!empty($toc)): ?>
+                    <div class="blog-post-sidebar">
+                        <div class="blog-toc">
+                            <h3>Содержание</h3>
+                            <ul>
+                                <?php foreach ($toc as $item): ?>
+                                    <li>
+                                        <a href="#<?php echo htmlspecialchars($item['id'], ENT_QUOTES, 'UTF-8'); ?>" 
+                                           class="toc-link" 
+                                           data-level="<?php echo $item['level']; ?>">
+                                            <?php echo htmlspecialchars($item['text'], ENT_QUOTES, 'UTF-8'); ?>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <?php if (!empty($post['tags'])): ?>
@@ -558,6 +1147,53 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
                     ?>
                 </div>
             <?php endif; ?>
+
+            <!-- Author Section -->
+            <div class="blog-post-author">
+                <div class="author-avatar">
+                    <div class="author-avatar-inner">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </div>
+                </div>
+                <div class="author-info">
+                    <h3 class="author-name">SmartBizSell</h3>
+                    <p class="author-bio">Эксперты в области M&A сделок, оценки бизнеса и инвестиций</p>
+                </div>
+            </div>
+
+            <!-- Share Buttons Bottom -->
+            <div class="blog-post-share-bottom">
+                <p class="share-label">Поделиться статьей:</p>
+                <div class="blog-post-share">
+                    <a href="https://vk.com/share.php?url=<?php echo urlencode($currentUrl); ?>&title=<?php echo urlencode($post['title']); ?>" 
+                       target="_blank" 
+                       class="share-btn" 
+                       title="Поделиться в VK">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.408 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.727-1.084-1.084-1.57 0-1.57.619v1.108c0 .495-.247.743-.743.743H9.89c-.495 0-.743-.247-.743-.743V9.89c0-.495.247-.743.743-.743h1.108c.495 0 .743.247.743.743v.495c.495-.495 1.084-1.108 2.05-1.108h2.05c.495 0 .743.247.743.743v1.108c0 .495-.247.743-.743.743h-1.108c-.495 0-.743.247-.743.743v2.05c0 .495.247.743.743.743h2.05c.495 0 .743.247.743.743v1.108c0 .495-.247.743-.743.743z"/>
+                        </svg>
+                    </a>
+                    <a href="https://t.me/share/url?url=<?php echo urlencode($currentUrl); ?>&text=<?php echo urlencode($post['title']); ?>" 
+                       target="_blank" 
+                       class="share-btn" 
+                       title="Поделиться в Telegram">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.559z"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=<?php echo urlencode($currentUrl); ?>" 
+                       target="_blank" 
+                       class="share-btn" 
+                       title="Поделиться в Facebook">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
         </article>
 
         <?php if (!empty($relatedPosts)): ?>
@@ -566,20 +1202,43 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
                 <div class="related-posts-grid">
                     <?php foreach ($relatedPosts as $related): ?>
                         <div class="related-post-card">
-                            <a href="/blog/<?php echo htmlspecialchars($related['slug'], ENT_QUOTES, 'UTF-8'); ?>">
-                                <?php echo htmlspecialchars($related['title'], ENT_QUOTES, 'UTF-8'); ?>
-                            </a>
-                            <?php if (!empty($related['excerpt'])): ?>
-                                <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary);">
-                                    <?php echo htmlspecialchars(mb_substr($related['excerpt'], 0, 100) . '...', ENT_QUOTES, 'UTF-8'); ?>
-                                </p>
-                            <?php endif; ?>
+                            <div class="related-post-card-header">
+                                <?php if (!empty($post['category'])): ?>
+                                    <div class="related-post-card-illustration">
+                                        <?php 
+                                        // Используем функцию из blog.php, если доступна, иначе простой SVG
+                                        if (function_exists('generateBlogCategoryIllustration')) {
+                                            echo generateBlogCategoryIllustration($post['category'], $related['id']);
+                                        } else {
+                                            echo '<svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="rel-grad-' . $related['id'] . '" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#667EEA;stop-opacity:0.3" /><stop offset="100%" style="stop-color:#764BA2;stop-opacity:0.2" /></linearGradient></defs><rect width="100%" height="100%" fill="url(#rel-grad-' . $related['id'] . ')" /></svg>';
+                                        }
+                                        ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="related-post-card-content">
+                                <a href="/blog/<?php echo htmlspecialchars($related['slug'], ENT_QUOTES, 'UTF-8'); ?>">
+                                    <?php echo htmlspecialchars($related['title'], ENT_QUOTES, 'UTF-8'); ?>
+                                </a>
+                                <?php if (!empty($related['excerpt'])): ?>
+                                    <p>
+                                        <?php echo htmlspecialchars(mb_substr($related['excerpt'], 0, 120) . '...', ENT_QUOTES, 'UTF-8'); ?>
+                                    </p>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
             </div>
         <?php endif; ?>
     </div>
+
+    <!-- Back to Top Button -->
+    <button class="back-to-top" id="backToTop" aria-label="Наверх">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 15l-6-6-6 6"/>
+        </svg>
+    </button>
 
     <!-- Структурированные данные для статьи -->
     <script type="application/ld+json">
@@ -616,7 +1275,7 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
 
     <script src="script.js?v=<?php echo time(); ?>"></script>
     <script>
-        // Обработка скролла для навигации (как на главной странице)
+        // Обработка скролла для навигации
         (function() {
             const navbar = document.querySelector('.navbar');
             if (!navbar) return;
@@ -633,6 +1292,78 @@ $pageKeywords = !empty($post['keywords']) ? $post['keywords'] : 'продажа 
                 
                 lastScroll = currentScroll;
             });
+        })();
+
+        // Reading Progress Indicator
+        (function() {
+            const progressBar = document.getElementById('readingProgress');
+            if (!progressBar) return;
+
+            function updateProgress() {
+                const windowHeight = window.innerHeight;
+                const documentHeight = document.documentElement.scrollHeight;
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                const scrollPercent = (scrollTop / (documentHeight - windowHeight)) * 100;
+                progressBar.style.width = Math.min(100, Math.max(0, scrollPercent)) + '%';
+            }
+
+            window.addEventListener('scroll', updateProgress);
+            updateProgress();
+        })();
+
+        // Back to Top Button
+        (function() {
+            const backToTopBtn = document.getElementById('backToTop');
+            if (!backToTopBtn) return;
+
+            function toggleBackToTop() {
+                if (window.pageYOffset > 300) {
+                    backToTopBtn.classList.add('visible');
+                } else {
+                    backToTopBtn.classList.remove('visible');
+                }
+            }
+
+            backToTopBtn.addEventListener('click', () => {
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            });
+
+            window.addEventListener('scroll', toggleBackToTop);
+            toggleBackToTop();
+        })();
+
+        // Table of Contents Highlighting
+        (function() {
+            const tocLinks = document.querySelectorAll('.toc-link');
+            if (tocLinks.length === 0) return;
+
+            const headings = Array.from(tocLinks).map(link => {
+                const id = link.getAttribute('href').substring(1);
+                return document.getElementById(id);
+            }).filter(Boolean);
+
+            function updateActiveTocLink() {
+                let current = '';
+                headings.forEach((heading, index) => {
+                    const rect = heading.getBoundingClientRect();
+                    if (rect.top <= 100) {
+                        current = heading.id;
+                    }
+                });
+
+                tocLinks.forEach(link => {
+                    link.classList.remove('active');
+                    if (link.getAttribute('href').substring(1) === current) {
+                        link.classList.add('active');
+                    }
+                });
+            }
+
+            window.addEventListener('scroll', updateActiveTocLink);
+            updateActiveTocLink();
         })();
     </script>
 </body>
