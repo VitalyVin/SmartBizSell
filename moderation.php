@@ -528,6 +528,21 @@ $statusColors = [
                         <form id="moderation-form" onsubmit="return false;">
                         <input type="hidden" id="teaser_id" value="<?php echo $teaserId; ?>">
                         
+                        <div style="margin-bottom: 16px;">
+                            <label for="card_title" style="display: block; margin-bottom: 8px; font-weight: 600;">Название карточки:</label>
+                            <input 
+                                type="text" 
+                                id="card_title" 
+                                name="card_title"
+                                value="<?php echo htmlspecialchars($currentTeaser['card_title'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                placeholder="Например: производитель одежды"
+                                style="width: 100%; padding: 12px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                            >
+                            <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                                Если не указано, будет использоваться название компании или "Актив"
+                            </small>
+                        </div>
+                        
                         <textarea 
                             name="moderated_html" 
                             class="editor-textarea" 
@@ -826,6 +841,7 @@ $statusColors = [
             const teaserId = document.getElementById('teaser_id').value;
             const moderatedHtml = document.getElementById('teaser-html-editor').value;
             const moderationNotes = document.getElementById('moderation_notes').value;
+            const cardTitle = document.getElementById('card_title')?.value || '';
             const messageDiv = document.getElementById('moderation-message');
             
             if (!teaserId) {
@@ -850,6 +866,7 @@ $statusColors = [
                 formData.append('teaser_id', teaserId);
                 formData.append('moderated_html', moderatedHtml);
                 formData.append('moderation_notes', moderationNotes);
+                formData.append('card_title', cardTitle);
                 formData.append('status_action', statusAction);
                 
                 const response = await fetch('moderation_api.php?action=save', {

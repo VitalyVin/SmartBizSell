@@ -62,12 +62,14 @@ try {
                 $teaserId = isset($input['teaser_id']) ? (int)$input['teaser_id'] : 0;
                 $moderatedHtml = $input['moderated_html'] ?? '';
                 $moderationNotes = $input['moderation_notes'] ?? '';
+                $cardTitle = isset($input['card_title']) ? trim($input['card_title']) : null;
                 $statusAction = $input['status_action'] ?? 'save';
             } else {
                 // Парсим FormData или обычный POST
                 $teaserId = isset($_POST['teaser_id']) ? (int)$_POST['teaser_id'] : 0;
                 $moderatedHtml = $_POST['moderated_html'] ?? '';
                 $moderationNotes = $_POST['moderation_notes'] ?? '';
+                $cardTitle = isset($_POST['card_title']) && trim($_POST['card_title']) !== '' ? trim($_POST['card_title']) : null;
                 $statusAction = $_POST['status_action'] ?? 'save';
             }
             
@@ -107,6 +109,7 @@ try {
                     moderated_html = ?,
                     moderation_status = ?,
                     moderation_notes = ?,
+                    card_title = ?,
                     moderator_id = ?,
                     moderated_at = ?,
                     published_at = ?,
@@ -118,6 +121,7 @@ try {
                 $moderatedHtml,
                 $newStatus,
                 $moderationNotes,
+                $cardTitle,
                 $user['id'],
                 $moderatedAt,
                 $publishedAt,

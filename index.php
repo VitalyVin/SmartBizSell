@@ -29,6 +29,7 @@ try {
             pt.seller_form_id,
             pt.moderated_html,
             pt.published_at,
+            pt.card_title,
             sf.asset_name,
             sf.data_json,
             sf.presence_regions,
@@ -90,15 +91,25 @@ try {
  */
 function extractTeaserCardData(array $teaser, ?array $formData): array
 {
-    // Маскирование названия актива по пожеланию продавца (asset_disclosure = 'нет')
-    $disclosureRaw = '';
-    if (is_array($formData) && isset($formData['asset_disclosure'])) {
-        $disclosureRaw = (string)$formData['asset_disclosure'];
+    // Приоритет названия карточки:
+    // 1. card_title (кастомное название от модератора)
+    // 2. asset_name (если не скрыто продавцом)
+    // 3. "Актив" (по умолчанию)
+    
+    // Проверяем кастомное название от модератора
+    if (!empty($teaser['card_title'])) {
+        $title = trim($teaser['card_title']);
+    } else {
+        // Маскирование названия актива по пожеланию продавца (asset_disclosure = 'нет')
+        $disclosureRaw = '';
+        if (is_array($formData) && isset($formData['asset_disclosure'])) {
+            $disclosureRaw = (string)$formData['asset_disclosure'];
+        }
+        $disclosureNormalized = mb_strtolower(trim($disclosureRaw));
+        $shouldMaskName = in_array($disclosureNormalized, ['нет', 'no', 'false', '0'], true);
+        $titleSource = $teaser['asset_name'] ?: 'Актив';
+        $title = $shouldMaskName ? 'Актив' : $titleSource;
     }
-    $disclosureNormalized = mb_strtolower(trim($disclosureRaw));
-    $shouldMaskName = in_array($disclosureNormalized, ['нет', 'no', 'false', '0'], true);
-    $titleSource = $teaser['asset_name'] ?: 'Актив';
-    $title = $shouldMaskName ? 'Актив' : $titleSource;
 
     $cardData = [
         'id' => $teaser['id'],
