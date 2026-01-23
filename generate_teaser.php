@@ -775,6 +775,16 @@ if (empty($apiKey)) {
             $teaserData = cleanTeaserDataFromHiddenCompanyReferences($teaserData, true);
             error_log('cleanTeaserDataFromHiddenCompanyReferences after ensureProductsLocalized completed');
         }
+        
+        // Очищаем фразы о развитии для cash-out сделок
+        $isOnlyCashOut = isOnlyCashOut($maskedPayload['deal_goal'] ?? '');
+        if ($isOnlyCashOut) {
+            if (!function_exists('cleanTeaserDataFromCashOutDevelopmentPhrases')) {
+                throw new RuntimeException('Function cleanTeaserDataFromCashOutDevelopmentPhrases not found');
+            }
+            $teaserData = cleanTeaserDataFromCashOutDevelopmentPhrases($teaserData, true);
+            error_log('cleanTeaserDataFromCashOutDevelopmentPhrases completed');
+        }
     
     // Генерируем краткое описание для hero блока из overview summary
         // Используем маскированные данные
@@ -799,6 +809,16 @@ if (empty($apiKey)) {
             }
         }
         
+        // Очищаем фразы о развитии для cash-out сделок в heroDescription
+        $isOnlyCashOut = isOnlyCashOut($maskedPayload['deal_goal'] ?? '');
+        if ($isOnlyCashOut) {
+            if (!function_exists('cleanCashOutDevelopmentPhrases')) {
+                throw new RuntimeException('Function cleanCashOutDevelopmentPhrases not found');
+            }
+            $heroDescription = cleanCashOutDevelopmentPhrases($heroDescription ?? '', true);
+            error_log('cleanCashOutDevelopmentPhrases for heroDescription completed');
+        }
+        
         // Используем маскированное название актива для рендеринга
         // Для скрытых активов не показываем "Актив" вообще
         $displayAssetName = $maskedPayload['asset_name'] ?? 'Актив';
@@ -809,7 +829,7 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function renderTeaserHtml not found');
         }
         error_log('Rendering teaser HTML...');
-        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData, $logger);
+        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData, $logger, $apiKey);
         $logger->logStep('renderTeaserHtml', ['html_length' => strlen($html), 'html_size' => round(strlen($html) / 1024, 2) . 'KB']);
         error_log('renderTeaserHtml completed, HTML length: ' . strlen($html));
         
@@ -1136,6 +1156,13 @@ function buildTeaserPrompt(array $payload): string
         $nameInstruction = "\nВАЖНО: Название компании скрыто. НЕ используй слово 'Актив' в тексте вообще. Можно использовать 'Компания' или 'Фирма', но НЕ упоминай 'Актив' ни в каком виде (ни отдельно, ни в сочетаниях типа 'Компания Актив', 'Компания «Актив»' и т.д.).";
         $displayNameInPrompt = 'компании'; // Используем нейтральное название вместо "Актив"
     }
+    
+    // Проверяем, является ли цель сделки только cash_out (выход продавца)
+    $isOnlyCashOut = isOnlyCashOut($payload['deal_goal'] ?? '');
+    $cashOutInstruction = '';
+    if ($isOnlyCashOut) {
+        $cashOutInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Цель сделки - только cash-out (выход продавца). Продавец забирает деньги и выходит из бизнеса. НЕ используй фразы о том, что инвестиции позволят ускорить развитие, расширить присутствие, поддержать рост выручки, масштабировать бизнес или что-либо подобное. НЕ упоминай направления использования инвестиций на развитие компании. Фокус должен быть на текущем состоянии бизнеса и его привлекательности для покупателя, а не на планах развития.";
+    }
 
     return <<<PROMPT
 Ты — инвестиционный банкир. Подготовь лаконичный тизер {$displayNameInPrompt} для потенциальных инвесторов.
@@ -1143,7 +1170,7 @@ function buildTeaserPrompt(array $payload): string
 Важно:
 - Отвечай строго на русском языке.
 - Используй данные анкеты (если поле пустое, пиши «уточняется») и при необходимости дополни их публичными отраслевыми фактами (без выдумывания конкретных чисел, если они неупомянуты).
-- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.{$nameInstruction}
+- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.{$nameInstruction}{$cashOutInstruction}
 
 Структура ответа — строго валидный JSON:
 {
@@ -1257,7 +1284,10 @@ function cleanHiddenCompanyText(string $text, bool $isNameHidden): string
     $text = preg_replace('/["\']\s*Актив\s*["\']/ui', '', $text);
     
     // Удаляем лишние пробелы, которые могли остаться после удаления
-    $text = preg_replace('/\s+/', ' ', $text);
+    // Сохраняем двойные переносы строк, заменяем только множественные пробелы и табы
+    $text = preg_replace('/[ \t]+/', ' ', $text); // Заменяем только пробелы и табы, не переносы строк
+    // Нормализуем переносы строк: оставляем только одиночные и двойные
+    $text = preg_replace('/\n{3,}/', "\n\n", $text); // Множественные переносы -> двойные
     $text = trim($text);
     
     return $text;
@@ -1291,6 +1321,118 @@ function cleanTeaserDataFromHiddenCompanyReferences(array $data, bool $isNameHid
         } elseif (is_array($value)) {
             // Рекурсивно обрабатываем вложенные массивы
             $cleaned[$key] = cleanTeaserDataFromHiddenCompanyReferences($value, true);
+        } else {
+            // Оставляем другие типы без изменений
+            $cleaned[$key] = $value;
+        }
+    }
+    
+    return $cleaned;
+}
+
+/**
+ * Очищает текст от фраз о развитии и инвестициях для cash-out сделок.
+ * 
+ * Удаляет фразы типа "Инвестиции позволят ускорить развитие", "расширение присутствия",
+ * "поддержит рост выручки" и подобные, так как при cash-out продавец забирает деньги,
+ * а не вкладывает их в развитие.
+ * 
+ * @param string $text Текст для обработки
+ * @param bool $isCashOut Флаг, указывающий, является ли сделка cash-out
+ * @return string Очищенный текст
+ */
+function cleanCashOutDevelopmentPhrases(string $text, bool $isCashOut): string
+{
+    if (!$isCashOut) {
+        return $text;
+    }
+    
+    // Паттерны для удаления фраз о развитии и инвестициях
+    $patterns = [
+        // Фразы о том, что инвестиции позволят что-то сделать
+        '/Инвестиции\s+позволят\s+[^\.]+\./ui',
+        '/инвестиции\s+позволят\s+[^\.]+\./ui',
+        '/Инвестиции\s+позволяют\s+[^\.]+\./ui',
+        '/инвестиции\s+позволяют\s+[^\.]+\./ui',
+        
+        // Фразы об ускорении развития
+        '/ускорить\s+развитие[^\.]*\./ui',
+        '/ускорение\s+развития[^\.]*\./ui',
+        '/ускорит\s+развитие[^\.]*\./ui',
+        '/ускорит\s+развитие\s+[^\.]+\./ui',
+        
+        // Фразы о расширении присутствия
+        '/расширение\s+присутствия[^\.]*\./ui',
+        '/расширить\s+присутствие[^\.]*\./ui',
+        '/расширения\s+присутствия[^\.]*\./ui',
+        
+        // Фразы о поддержке роста
+        '/поддержит\s+рост\s+выручки[^\.]*\./ui',
+        '/поддержка\s+роста\s+выручки[^\.]*\./ui',
+        '/поддержит\s+рост[^\.]*\./ui',
+        
+        // Фразы о масштабировании
+        '/масштабирование\s+бизнеса[^\.]*\./ui',
+        '/масштабировать\s+бизнес[^\.]*\./ui',
+        '/масштабирования\s+бизнеса[^\.]*\./ui',
+        
+        // Фразы о направлении средств на развитие
+        '/направлены\s+на\s+развитие[^\.]*\./ui',
+        '/направление\s+средств\s+на\s+развитие[^\.]*\./ui',
+        '/направлены\s+на\s+масштабирование[^\.]*\./ui',
+        
+        // Фразы о следующем этапе роста
+        '/следующего\s+этапа\s+роста[^\.]*\./ui',
+        '/следующий\s+этап\s+роста[^\.]*\./ui',
+        '/для\s+следующего\s+этапа\s+роста[^\.]*\./ui',
+        
+        // Комбинированные фразы
+        '/Инвестиции\s+позволят\s+ускорить\s+развитие[^\.]+\./ui',
+        '/Инвестиции\s+позволят\s+расширить\s+присутствие[^\.]+\./ui',
+        '/Инвестиции\s+позволят\s+поддержать\s+рост[^\.]+\./ui',
+        '/Инвестиции\s+позволят\s+масштабировать[^\.]+\./ui',
+    ];
+    
+    foreach ($patterns as $pattern) {
+        $text = preg_replace($pattern, '', $text);
+    }
+    
+    // Удаляем лишние пробелы и точки, которые могли остаться
+    $text = preg_replace('/\s*\.\s*\./u', '.', $text); // Двойные точки
+    // Сохраняем двойные переносы строк, заменяем только множественные пробелы и табы
+    $text = preg_replace('/[ \t]+/', ' ', $text); // Заменяем только пробелы и табы, не переносы строк
+    // Нормализуем переносы строк: оставляем только одиночные и двойные
+    $text = preg_replace('/\n{3,}/', "\n\n", $text); // Множественные переносы -> двойные
+    $text = trim($text);
+    
+    return $text;
+}
+
+/**
+ * Рекурсивно очищает все текстовые поля в массиве данных тизера от фраз о развитии для cash-out.
+ * 
+ * @param array $data Массив данных тизера
+ * @param bool $isCashOut Флаг, указывающий, является ли сделка cash-out
+ * @return array Очищенные данные тизера
+ */
+function cleanTeaserDataFromCashOutDevelopmentPhrases(array $data, bool $isCashOut): array
+{
+    if (!$isCashOut) {
+        return $data;
+    }
+    
+    if (!function_exists('cleanCashOutDevelopmentPhrases')) {
+        return $data;
+    }
+    
+    $cleaned = [];
+    foreach ($data as $key => $value) {
+        if (is_string($value)) {
+            // Очищаем строковые значения
+            $cleaned[$key] = cleanCashOutDevelopmentPhrases($value, true);
+        } elseif (is_array($value)) {
+            // Рекурсивно обрабатываем вложенные массивы
+            $cleaned[$key] = cleanTeaserDataFromCashOutDevelopmentPhrases($value, true);
         } else {
             // Оставляем другие типы без изменений
             $cleaned[$key] = $value;
@@ -1507,10 +1649,10 @@ function parseTeaserResponse(string $text): array
  * На этом этапе уже всё нормализовано — остаётся собрать карточки, графики
  * и вспомогательные блоки (кнопки, подсказки, подписи и т.п.).
  */
-function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null, ?TeaserLogger $logger = null): string
+function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null, ?TeaserLogger $logger = null, ?string $apiKey = null): string
 {
     // Рендерим hero блок в начале
-    $heroHtml = renderHeroBlock($assetName, $data, $payload, $dcfData, $logger);
+    $heroHtml = renderHeroBlock($assetName, $data, $payload, $dcfData, $logger, $apiKey);
     
     $blocks = [];
 
@@ -1518,7 +1660,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         $overview = $data['overview'];
         $blocks[] = renderCard('Обзор возможности', [
             // Убираем subtitle, чтобы не показывать "Резюме" или другие заголовки
-            'text' => nl2br(htmlspecialchars($overview['summary'] ?? '', ENT_QUOTES, 'UTF-8')),
+            'text' => formatOverviewTextWithParagraphs($overview['summary'] ?? ''),
             'list' => $overview['key_metrics'] ?? [],
         ], 'overview');
     }
@@ -1814,7 +1956,16 @@ function renderCard(string $title, array $payload, string $variant = ''): string
     }
 
     if (!empty($payload['text'])) {
-        $html .= '<p>' . $payload['text'] . '</p>';
+        // Проверяем, содержит ли текст уже HTML-теги (например, <p>)
+        // Если содержит, не оборачиваем в дополнительный <p>
+        $text = $payload['text'];
+        if (strpos($text, '<p>') !== false || strpos($text, '<div>') !== false) {
+            // Текст уже содержит HTML-теги, выводим как есть
+            $html .= '<div class="teaser-card__text">' . $text . '</div>';
+        } else {
+            // Обычный текст, оборачиваем в <p>
+            $html .= '<p>' . $text . '</p>';
+        }
     }
 
     if (!empty($payload['list']) && is_array($payload['list'])) {
@@ -2291,21 +2442,10 @@ function buildTeaserTimelineFromDCF(array $dcfData): ?array
             if (isset($revenueRow['values'][$dcfPeriod])) {
                 $value = $revenueRow['values'][$dcfPeriod];
                 if ($value !== null && is_numeric($value)) {
-                    // Значения в DCF модели хранятся в тех единицах, в которых были введены в форму
-                    // Обычно это уже в млн рублей (833, 1667, 2500 и т.д.)
-                    // Но если значение очень большое (> 1 млн), значит введено в рублях
-                    $absValue = abs($value);
-                    if ($absValue > 1000000) {
-                        // Конвертируем из рублей в млн рублей
-                        $valueInMillions = $value / 1000000;
-                    } else {
-                        // Уже в млн рублей (значения обычно в диапазоне 0-10000)
-                        $valueInMillions = $value;
-                    }
-                    // Добавляем точку для всех значений (включая 0)
+                    // DCF значения уже нормализованы до млн ₽ на этапе расчета
                     $points[] = [
                         'label' => $chartLabel,
-                        'value' => $valueInMillions,
+                        'value' => (float)$value,
                     ];
                 }
             }
@@ -2333,21 +2473,10 @@ function buildTeaserTimelineFromDCF(array $dcfData): ?array
             if (isset($profitRow['values'][$dcfPeriod])) {
                 $value = $profitRow['values'][$dcfPeriod];
                 if ($value !== null && is_numeric($value)) {
-                    // Значения в DCF модели хранятся в тех единицах, в которых были введены в форму
-                    // Обычно это уже в млн рублей
-                    // Но если значение очень большое (> 1 млн), значит введено в рублях
-                    $absValue = abs($value);
-                    if ($absValue > 1000000) {
-                        // Конвертируем из рублей в млн рублей
-                        $valueInMillions = $value / 1000000;
-                    } else {
-                        // Уже в млн рублей
-                        $valueInMillions = $value;
-                    }
-                    // Добавляем точку для всех значений (включая 0 и отрицательные)
+                    // DCF значения уже нормализованы до млн ₽ на этапе расчета
                     $points[] = [
                         'label' => $chartLabel,
-                        'value' => $valueInMillions,
+                        'value' => (float)$value,
                     ];
                 }
             }
@@ -2747,14 +2876,18 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
         $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
         $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
         $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
-        $aiText = trim(preg_replace('/\s+/', ' ', $aiText));
+        // Сохраняем двойные переносы строк для абзацев, заменяем только множественные пробелы и табы
+        $aiText = preg_replace('/[ \t]+/', ' ', $aiText); // Заменяем только пробелы и табы, не переносы строк
+        // Нормализуем переносы строк: оставляем только одиночные и двойные
+        $aiText = preg_replace('/\n{3,}/', "\n\n", $aiText); // Множественные переносы -> двойные
+        $aiText = trim($aiText);
         if ($aiText !== '') {
             $sentences = splitIntoSentences($aiText);
             $data['overview']['summary'] = buildParagraphsFromSentences(
                 $sentences,
                 buildOverviewFallbackSentences($payload),
-                4,
-                2
+                3,
+                3
             );
         }
     } catch (Throwable $e) {
@@ -2958,13 +3091,23 @@ function buildOverviewRefinementPrompt(array $overview, array $payload): string
     if ($isNameHidden) {
         $nameInstruction = "\nВАЖНО: Название компании скрыто. НЕ используй слово 'Актив' в тексте вообще. Можно использовать 'Компания' или 'Фирма', но НЕ упоминай 'Актив' ни в каком виде (ни отдельно, ни в сочетаниях типа 'Компания Актив', 'Компания «Актив»' и т.д.).";
     }
+    
+    // Проверяем, является ли цель сделки только cash_out (выход продавца)
+    $isOnlyCashOut = isOnlyCashOut($payload['deal_goal'] ?? '');
+    $cashOutInstruction = '';
+    $fourthParagraphInstruction = '4) планы использования инвестиций и ожидаемый рост.';
+    if ($isOnlyCashOut) {
+        $cashOutInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Цель сделки - только cash-out (выход продавца). Продавец забирает деньги и выходит из бизнеса. НЕ используй фразы о том, что инвестиции позволят ускорить развитие, расширить присутствие, поддержать рост выручки, масштабировать бизнес или что-либо подобное. НЕ упоминай направления использования инвестиций на развитие компании. Фокус должен быть на текущем состоянии бизнеса и его привлекательности для покупателя, а не на планах развития.";
+        $fourthParagraphInstruction = '4) текущее состояние бизнеса и его привлекательность для покупателя.';
+    }
 
     return <<<PROMPT
-Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}
-- Стиль: не более четырёх предложений, деловой и живой тон без канцелярита.
-- Сформируй ровно четыре абзаца, в каждом по одному предложению. Делай переходы логичными: 1) кто компания и что делает, 2) география и клиенты, 3) конкурентные преимущества, 4) планы использования инвестиций и ожидаемый рост.
+Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}{$cashOutInstruction}
+- Стиль: деловой и живой тон без канцелярита.
+- Сформируй несколько абзацев (2-4 абзаца), в каждом по 2-3 предложения. Делай переходы логичными: 1) кто компания и что делает, 2) география и клиенты, 3) конкурентные преимущества, {$fourthParagraphInstruction}
 - Используй только приведённые факты, не придумывай цифры или названия.
 - Внутри предложений соединяй части запятыми, избегай сухих списков.
+- Каждый абзац должен быть отделён пустой строкой от предыдущего.
 
 Исходная версия: "{$existingSummary}"
 
@@ -3623,9 +3766,16 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
     $clients = trim((string)($payload['main_clients'] ?? ''));
     $personnel = trim((string)($payload['personnel_count'] ?? ''));
 
+    // Проверяем, является ли цель сделки только cash_out
+    $isOnlyCashOut = isOnlyCashOut($payload['deal_goal'] ?? '');
+
     $sentences = [];
     $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
-    $sentences[] = "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+    if ($isOnlyCashOut) {
+        $sentences[] = "{$displayName} — {$descriptor}, готовый к продаже.";
+    } else {
+        $sentences[] = "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+    }
 
     if ($regions !== '') {
         $sentences[] = "Присутствие в регионах {$regions} обеспечивает диверсификацию выручки и доступ к новым каналам.";
@@ -3750,15 +3900,74 @@ function buildHeroDescription(array $teaserData, array $payload): string
 }
 
 /**
+ * Сокращает текст сегмента до максимум 7 слов с сохранением смысла
+ * Использует AI для сокращения, если доступен, иначе использует умную обрезку
+ * 
+ * @param string $segment Исходный текст сегмента
+ * @param string|null $apiKey API ключ для вызова AI (опционально)
+ * @return string Сокращенный текст до 7 слов
+ */
+function limitSegmentToSevenWords(string $segment, ?string $apiKey = null): string
+{
+    $segment = trim($segment);
+    if ($segment === '') {
+        return '';
+    }
+    
+    // Подсчитываем количество слов
+    $words = preg_split('/\s+/u', $segment, -1, PREG_SPLIT_NO_EMPTY);
+    $wordCount = count($words);
+    
+    // Если уже 7 слов или меньше, возвращаем как есть
+    if ($wordCount <= 7) {
+        return $segment;
+    }
+    
+    // Пытаемся использовать AI для сокращения, если доступен API ключ
+    if ($apiKey !== null && function_exists('callAICompletions')) {
+        try {
+            $prompt = "Ты маркетолог. Сократи описание области деятельности компании до максимум 7 слов, сохраняя ключевую информацию о том, чем занимается компания.\n\nВажно:\n- Выдели основную область деятельности и специализацию компании\n- Укажи ключевые продукты, услуги или нишу рынка\n- Сохрани важные характеристики (сегмент, тип клиентов, если они важны для понимания деятельности)\n- Ответ должен быть только сокращенным текстом, без дополнительных объяснений\n- Используй деловой стиль\n\nТекст для сокращения: {$segment}";
+            
+            $aiResponse = trim(callAICompletions($prompt, $apiKey));
+            
+            // Очищаем ответ от возможных артефактов AI
+            // Убираем префиксы на английском в начале строки
+            $aiResponse = preg_replace('/^[^А-Яа-я]*/u', '', $aiResponse);
+            // Убираем markdown код блоки, если есть
+            $aiResponse = preg_replace('/```[a-z]*\s*/i', '', $aiResponse);
+            $aiResponse = preg_replace('/```$/', '', $aiResponse);
+            // Оставляем русские буквы, цифры, дефисы, пробелы и основные знаки препинания
+            $aiResponse = preg_replace('/[^А-Яа-яЁё\s\-0-9,\.\(\)]/u', '', $aiResponse);
+            $aiResponse = trim($aiResponse);
+            
+            // Проверяем, что ответ не пустой и содержит разумное количество слов
+            $aiWords = preg_split('/\s+/u', $aiResponse, -1, PREG_SPLIT_NO_EMPTY);
+            if (!empty($aiResponse) && count($aiWords) <= 7 && count($aiWords) > 0) {
+                return $aiResponse;
+            }
+        } catch (Throwable $e) {
+            // Если AI недоступен, используем fallback
+            error_log('AI segment shortening failed: ' . $e->getMessage());
+        }
+    }
+    
+    // Fallback: умная обрезка до 7 слов
+    // Пытаемся сохранить целостность фразы, обрезая по границам слов
+    $limitedWords = array_slice($words, 0, 7);
+    return implode(' ', $limitedWords);
+}
+
+/**
  * Рендерит hero блок тизера с названием компании, описанием, чипами и статистикой
  * 
  * @param string $assetName Название актива
  * @param array $teaserData Данные тизера
  * @param array $payload Данные анкеты
  * @param array|null $dcfData Данные DCF модели
+ * @param string|null $apiKey API ключ для AI (опционально, для сокращения сегмента)
  * @return string HTML код hero блока
  */
-function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?array $dcfData = null, ?TeaserLogger $logger = null): string
+function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?array $dcfData = null, ?TeaserLogger $logger = null, ?string $apiKey = null): string
 {
     // Получаем описание из hero_description или из overview
     $heroDescription = '';
@@ -3777,11 +3986,15 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
     // 1. Сегмент рынка
     $industry = trim((string)($payload['products_services'] ?? ''));
     if ($industry !== '') {
-        $heroChips[] = [
-            'label' => 'СЕГМЕНТ',
-            'value' => $industry,
-            'icon' => 'segment'
-        ];
+        // Ограничиваем сегмент до 7 слов с сохранением смысла
+        $industry = limitSegmentToSevenWords($industry, $apiKey);
+        if ($industry !== '') {
+            $heroChips[] = [
+                'label' => 'СЕГМЕНТ',
+                'value' => $industry,
+                'icon' => 'segment'
+            ];
+        }
     }
     
     // 2. География присутствия
@@ -4535,6 +4748,53 @@ function buildParagraphsFromSentences(
     int $requiredParagraphs = 4,
     int $sentencesPerParagraph = 2
 ): string {
+    // Если требуется переменное количество предложений (2-3), используем специальную логику
+    $useVariableSentences = ($sentencesPerParagraph === 3 && $requiredParagraphs === 3);
+    
+    if ($useVariableSentences) {
+        // Для 3 абзацев по 2-3 предложения: используем паттерн 3, 2, 3 или 2, 3, 2
+        $totalNeeded = 8; // 3+2+3 или 2+3+2
+        $normalized = normalizeSentenceList($sentences, $totalNeeded);
+        $fallbackNormalized = normalizeSentenceList($fallbackSentences, $totalNeeded);
+
+        foreach ($fallbackNormalized as $sentence) {
+            if (count($normalized) >= $totalNeeded) {
+                break;
+            }
+            if (!in_array($sentence, $normalized, true)) {
+                $normalized[] = $sentence;
+            }
+        }
+
+        if (empty($normalized)) {
+            return '';
+        }
+
+        if (count($normalized) < $totalNeeded) {
+            foreach ($fallbackNormalized as $sentence) {
+                if (count($normalized) >= $totalNeeded) {
+                    break;
+                }
+                if (!in_array($sentence, $normalized, true)) {
+                    $normalized[] = $sentence;
+                }
+            }
+        }
+
+        while (count($normalized) < $totalNeeded) {
+            $normalized[] = end($normalized);
+        }
+
+        // Создаем 3 абзаца: первый и третий по 3 предложения, второй по 2
+        $paragraphs = [];
+        $paragraphs[] = implode(' ', array_slice($normalized, 0, 3));
+        $paragraphs[] = implode(' ', array_slice($normalized, 3, 2));
+        $paragraphs[] = implode(' ', array_slice($normalized, 5, 3));
+
+        return implode("\n\n", $paragraphs);
+    }
+    
+    // Старая логика для фиксированного количества предложений
     $totalNeeded = $requiredParagraphs * $sentencesPerParagraph;
     $normalized = normalizeSentenceList($sentences, $totalNeeded);
     $fallbackNormalized = normalizeSentenceList($fallbackSentences, $totalNeeded);
@@ -4604,6 +4864,44 @@ function normalizeSentenceList(array $items, int $limit): array
         }
     }
     return $normalized;
+}
+
+/**
+ * Форматирует текст обзора возможности с правильным разделением на абзацы
+ * 
+ * Преобразует двойные переносы строк (\n\n) в закрывающие/открывающие теги <p>
+ * 
+ * @param string $text Текст для форматирования
+ * @return string Отформатированный HTML
+ */
+function formatOverviewTextWithParagraphs(string $text): string
+{
+    if (empty($text)) {
+        return '';
+    }
+    
+    // Экранируем HTML
+    $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    
+    // Разбиваем текст на абзацы по двойным переносам строк
+    $paragraphs = preg_split('/\n\n+/', $text);
+    
+    // Убираем пустые абзацы и оборачиваем каждый в <p> тег
+    $paragraphs = array_filter(array_map('trim', $paragraphs), function($p) {
+        return $p !== '';
+    });
+    
+    // Если абзацев нет, возвращаем пустую строку
+    if (empty($paragraphs)) {
+        return '';
+    }
+    
+    // Оборачиваем каждый абзац в <p> тег и заменяем одиночные переносы на <br>
+    $formatted = array_map(function($paragraph) {
+        return '<p>' . nl2br($paragraph) . '</p>';
+    }, $paragraphs);
+    
+    return implode('', $formatted);
 }
 
 /**
