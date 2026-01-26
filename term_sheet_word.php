@@ -69,7 +69,7 @@ try {
     $docxContent = generateDocx($content);
     
     // Формируем имя файла
-    $filename = sanitizeFilename($assetName) . '_Term_Sheet_' . date('Y-m-d') . '.docx';
+    $filename = sanitizeFileName($assetName) . '_Term_Sheet_' . date('Y-m-d') . '.docx';
     
     // Устанавливаем заголовки для скачивания
     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -590,29 +590,5 @@ function escapeXml(string $text): string
     return $text;
 }
 
-/**
- * Очищает имя файла от недопустимых символов для безопасного использования.
- * 
- * Удаляет символы, которые могут вызвать проблемы в файловой системе:
- * - Специальные символы (/, \, :, *, ?, ", <, >, |)
- * - Оставляет только буквы, цифры, дефисы, подчеркивания и пробелы
- * - Заменяет пробелы на подчеркивания
- * - Ограничивает длину до 50 символов
- * 
- * @param string $filename Исходное имя файла
- * @return string Очищенное имя файла, безопасное для использования
- */
-function sanitizeFilename(string $filename): string
-{
-    // Удаляем недопустимые символы, оставляя только буквы, цифры, дефисы, подчеркивания и пробелы
-    $filename = preg_replace('/[^a-zA-Z0-9а-яА-ЯёЁ_\-\s]/u', '', $filename);
-    // Заменяем пробелы на подчеркивания для лучшей совместимости
-    $filename = preg_replace('/\s+/', '_', $filename);
-    // Ограничиваем длину до 50 символов для избежания проблем с длинными именами файлов
-    if (mb_strlen($filename, 'UTF-8') > 50) {
-        $filename = mb_substr($filename, 0, 50, 'UTF-8');
-    }
-    return $filename;
-}
 
 
