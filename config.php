@@ -61,12 +61,12 @@ define('MODERATOR_EMAIL', getenv('MODERATOR_EMAIL') ?: 'drvinogradov@yahoo.com')
 //    - https://www.mail-tester.com/ (общая проверка доставляемости)
 // 
 // Эти записи настраиваются в DNS зоне домена smartbizsell.ru через панель управления хостингом
-define('SMTP_HOST', 'mail.smartbizsell.ru');
-define('SMTP_PORT', 465);
-define('SMTP_SECURE', 'ssl'); // ssl для порта 465
-define('SMTP_USER', 'info@smartbizsell.ru');
+define('SMTP_HOST', 'mail.hosting.reg.ru');
+define('SMTP_PORT', 587);
+define('SMTP_SECURE', 'tls'); // tls для порта 587
+define('SMTP_USER', 'no-reply@smartbizsell.ru');
 define('SMTP_PASS', getenv('SMTP_PASS') ?: '!No-reply2025');
-define('SMTP_FROM_EMAIL', 'info@smartbizsell.ru');
+define('SMTP_FROM_EMAIL', 'no-reply@smartbizsell.ru');
 define('SMTP_FROM_NAME', 'SmartBizSell');
 
 // Настройки восстановления пароля
@@ -75,7 +75,14 @@ define('PASSWORD_RESET_TOKEN_LIFETIME', 3600); // 1 час в секундах
 // Настройки AI (together.ai + Qwen)
 // Можно переопределить через переменные окружения TOGETHER_API_KEY и TOGETHER_MODEL
 define('TOGETHER_API_KEY', getenv('TOGETHER_API_KEY') ?: 'c0bf29d89744dd1e091c9eca2b1cfeda9d7af4dacedadcf82872b4698d8365ba');
-define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'Qwen/Qwen2.5-72B-Instruct-Turbo');
+define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'Qwen/Qwen3-Next-80B-A3B-Instruct');
+
+// Параметры для Together.ai
+// Можно переопределить через переменные окружения
+define('TOGETHER_MAX_TOKENS_NORMAL', (int)(getenv('TOGETHER_MAX_TOKENS_NORMAL') ?: 600));
+define('TOGETHER_MAX_TOKENS_LONG', (int)(getenv('TOGETHER_MAX_TOKENS_LONG') ?: 8000));
+define('TOGETHER_TEMPERATURE', (float)(getenv('TOGETHER_TEMPERATURE') ?: 0.2));
+define('TOGETHER_TOP_P', (float)(getenv('TOGETHER_TOP_P') ?: 0.9));
 
 // Настройки Alibaba Cloud Qwen 3 Max
 // Можно переопределить через переменные окружения
@@ -527,6 +534,26 @@ function sendEmail($to, $subject, $body, $altBody = '', $fromEmail = null, $from
     $phpmailerPath = __DIR__ . '/vendor/autoload.php';
     if (file_exists($phpmailerPath)) {
         require_once $phpmailerPath;
+    } else {
+        // Fallback без Composer: подключаем PHPMailer напрямую, если он загружен вручную
+        $phpmailerBase = __DIR__ . '/vendor/PHPMailer/src';
+        $phpmailerFiles = [
+            $phpmailerBase . '/PHPMailer.php',
+            $phpmailerBase . '/SMTP.php',
+            $phpmailerBase . '/Exception.php',
+        ];
+        $allExists = true;
+        foreach ($phpmailerFiles as $file) {
+            if (!file_exists($file)) {
+                $allExists = false;
+                break;
+            }
+        }
+        if ($allExists) {
+            require_once $phpmailerFiles[0];
+            require_once $phpmailerFiles[1];
+            require_once $phpmailerFiles[2];
+        }
     }
     
     // Проверяем наличие PHPMailer
@@ -534,15 +561,29 @@ function sendEmail($to, $subject, $body, $altBody = '', $fromEmail = null, $from
         try {
             $mail = new PHPMailer\PHPMailer\PHPMailer(true);
             
+            // Включаем SMTPDebug только при ошибках (уровень 0 = отключен, 1 = только ошибки)
+            // Для детальной отладки можно установить 2 (client/server conversation)
+            $mail->SMTPDebug = 0;
+            $mail->Debugoutput = function($str, $level) {
+                // Логируем только ошибки (level 1 и выше)
+                if ($level >= 1) {
+                    error_log("SMTP Debug (level $level): " . trim($str));
+                }
+            };
+            
             // Настройки SMTP
             $mail->isSMTP();
-            $mail->Host = SMTP_HOST;
+            $smtpHost = SMTP_HOST;
+            $mail->Host = $smtpHost;
             $mail->SMTPAuth = true;
             $mail->Username = SMTP_USER;
             $mail->Password = SMTP_PASS;
             $mail->SMTPSecure = SMTP_SECURE;
             $mail->Port = SMTP_PORT;
             $mail->CharSet = 'UTF-8';
+            // Явно указываем кодировку для корректной обработки кириллицы
+            // base64 лучше для UTF-8, чем quoted-printable, и предотвращает проблемы с MIXED_ES
+            $mail->Encoding = 'base64';
             
             // Настройки SSL для безопасности
             // Проверка сертификата важна для правильной работы SPF/DKIM/DMARC
@@ -550,7 +591,9 @@ function sendEmail($to, $subject, $body, $altBody = '', $fromEmail = null, $from
             $sslOptions = array(
                 'verify_peer' => true,
                 'verify_peer_name' => true,
-                'allow_self_signed' => false
+                'allow_self_signed' => false,
+                // Ensure cert CN/SAN is checked against hostname, not IP
+                'peer_name' => $smtpHost,
             );
             
             // Пытаемся найти CA bundle в стандартных местах
@@ -623,76 +666,57 @@ function sendEmail($to, $subject, $body, $altBody = '', $fromEmail = null, $from
             // Важные заголовки для избежания спама
             // Message-ID уже установлен выше
             
-            // Date заголовок (автоматически устанавливается PHPMailer)
-            // Но можно явно установить для консистентности
-            $mail->addCustomHeader('Date', date('r'));
+            // Date заголовок устанавливается автоматически PHPMailer в правильном формате RFC 2822
+            // НЕ добавляем его вручную через addCustomHeader, чтобы избежать дублирования или неправильного формата
+            // PHPMailer автоматически устанавливает Date при вызове send() в формате: "Date: Mon, 1 Jan 2024 12:00:00 +0000"
             
             // MIME-Version (автоматически устанавливается PHPMailer)
             
             // Content-Type (автоматически устанавливается PHPMailer для multipart/alternative)
             
+            // DKIM подпись: reg.ru должен автоматически подписывать письма при отправке через SMTP
+            // Если DKIM_INVALID в SpamAssassin, проверьте настройки DKIM в панели reg.ru
+            // Убедитесь, что DKIM включен для домена smartbizsell.ru
+            
             // УБИРАЕМ заголовки, которые могут помечать письма как спам:
             // - List-Unsubscribe (только для массовых рассылок)
             // - Precedence: bulk (помечает как массовую рассылку)
+            // - Auto-Submitted: auto-generated (помечает как автоматическое письмо)
             
-            // Вместо этого добавляем заголовки для транзакционных писем:
+            // Добавляем заголовки для транзакционных писем (не массовых рассылок):
+            // X-Auto-Response-Suppress предотвращает автоответы, но не помечает как спам
             $mail->addCustomHeader('X-Auto-Response-Suppress', 'All');
-            $mail->addCustomHeader('Auto-Submitted', 'auto-generated');
             
-            // Для улучшения доставляемости добавляем заголовок с доменом
-            $mail->addCustomHeader('X-Entity-Ref-ID', uniqid());
+            // Для транзакционных писем (восстановление пароля) используем:
+            // Auto-Submitted: auto-replied (для автоматических ответов)
+            // Но для транзакционных писем лучше вообще не ставить Auto-Submitted
+            // или использовать значение "no" для явного указания, что это не автоответ
             
-            $mail->send();
+            // Улучшаем репутацию отправителя:
+            // Добавляем заголовок с доменом для идентификации
+            $mail->addCustomHeader('X-Mailer-Domain', parse_url(BASE_URL, PHP_URL_HOST));
+            
+            // Добавляем заголовок для отслеживания транзакционных писем
+            $mail->addCustomHeader('X-Transaction-ID', uniqid());
+            
+            // Отправляем письмо и проверяем результат
+            $result = $mail->send();
+            if (!$result) {
+                error_log("Email sending failed: " . $mail->ErrorInfo);
+                return false;
+            }
+            
+            error_log("Email successfully sent to: $to");
             return true;
         } catch (Exception $e) {
             error_log("Email sending error (PHPMailer): " . $mail->ErrorInfo);
+            error_log("Exception: " . $e->getMessage());
             return false;
         }
     } else {
-        // Если PHPMailer не установлен, используем встроенную функцию mail()
-        // Внимание: mail() может не работать с SMTP, но это fallback вариант
-        error_log("PHPMailer not found, falling back to mail()");
-        
-        // Генерируем уникальный Message-ID
-        $messageId = '<' . time() . '.' . uniqid() . '@' . parse_url(BASE_URL, PHP_URL_HOST) . '>';
-        
-        // Улучшенные заголовки для избежания спама
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "From: " . $fromName . " <" . $fromEmail . ">\r\n";
-        $headers .= "Reply-To: " . $fromEmail . "\r\n";
-        $headers .= "Return-Path: " . $fromEmail . "\r\n";
-        $headers .= "Message-ID: " . $messageId . "\r\n";
-        $headers .= "Date: " . date('r') . "\r\n";
-        $headers .= "X-Auto-Response-Suppress: All\r\n";
-        $headers .= "Auto-Submitted: auto-generated\r\n";
-        $headers .= "X-Entity-Ref-ID: " . uniqid() . "\r\n";
-        
-        // Отправляем с текстовой версией в multipart/alternative
-        if (!empty($altBody)) {
-            $boundary = md5(uniqid(time()));
-            $headers .= "Content-Type: multipart/alternative; boundary=\"" . $boundary . "\"\r\n";
-            
-            $message = "--" . $boundary . "\r\n";
-            $message .= "Content-Type: text/plain; charset=UTF-8\r\n";
-            $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
-            $message .= $altBody . "\r\n\r\n";
-            $message .= "--" . $boundary . "\r\n";
-            $message .= "Content-Type: text/html; charset=UTF-8\r\n";
-            $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
-            $message .= $body . "\r\n\r\n";
-            $message .= "--" . $boundary . "--\r\n";
-            
-            $encodedSubject = function_exists('mb_encode_mimeheader')
-                ? mb_encode_mimeheader($subject, 'UTF-8', 'B', "\r\n")
-                : $subject;
-            return @mail($to, $encodedSubject, $message, $headers);
-        } else {
-            $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-            $encodedSubject = function_exists('mb_encode_mimeheader')
-                ? mb_encode_mimeheader($subject, 'UTF-8', 'B', "\r\n")
-                : $subject;
-            return @mail($to, $encodedSubject, $body, $headers);
-        }
+        // Без PHPMailer не отправляем письма напрямую, чтобы не ломать SPF/DKIM/DMARC
+        error_log("PHPMailer not found: SMTP disabled. Install PHPMailer to send email via reg.ru SMTP.");
+        return false;
     }
 }
 
@@ -1284,9 +1308,9 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
     $body = json_encode([
         'model' => TOGETHER_MODEL,
         'prompt' => $prompt,
-        'max_tokens' => 600,
-        'temperature' => 0.2,
-        'top_p' => 0.9,
+        'max_tokens' => TOGETHER_MAX_TOKENS_NORMAL,
+        'temperature' => TOGETHER_TEMPERATURE,
+        'top_p' => TOGETHER_TOP_P,
     ], JSON_UNESCAPED_UNICODE);
     
     if ($body === false) {
@@ -1422,14 +1446,29 @@ function callAICompletions($prompt, ?string $apiKey = null, int $maxRetries = 3,
     
     // Обычный prompt-based запрос
     // Если передан ключ, но он не соответствует текущему провайдеру, игнорируем его
-    if ($provider === 'alibaba') {
-        // Для Alibaba используем только ALIBABA_API_KEY, игнорируем переданный ключ если он от Together
-        $apiKey = ALIBABA_API_KEY;
-        return callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries);
-    } else {
+    try {
+        if ($provider === 'alibaba') {
+            // Для Alibaba используем только ALIBABA_API_KEY, игнорируем переданный ключ если он от Together
+            $apiKey = ALIBABA_API_KEY;
+            return callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries);
+        }
         // По умолчанию используем Together.ai
         $apiKey = TOGETHER_API_KEY;
         return callTogetherCompletions($prompt, $apiKey, $maxRetries);
+    } catch (RuntimeException $e) {
+        // Fallback на второго провайдера при 5xx/временной недоступности
+        $message = $e->getMessage();
+        if (mb_strpos($message, 'Сервер API временно недоступен') !== false) {
+            if ($provider === 'alibaba') {
+                error_log('Alibaba API temporary failure, fallback to Together.ai');
+                $apiKey = TOGETHER_API_KEY;
+                return callTogetherCompletions($prompt, $apiKey, $maxRetries);
+            }
+            error_log('Together API temporary failure, fallback to Alibaba Cloud');
+            $apiKey = ALIBABA_API_KEY;
+            return callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries);
+        }
+        throw $e;
     }
 }
 
@@ -1447,12 +1486,26 @@ function callAIChatCompletions(array $messages, ?string $apiKey = null, int $max
     $provider = getCurrentAIProvider();
     
     // Игнорируем переданный ключ, всегда используем ключ текущего провайдера
-    if ($provider === 'alibaba') {
-        $apiKey = ALIBABA_API_KEY;
-        return callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries);
-    } else {
+    try {
+        if ($provider === 'alibaba') {
+            $apiKey = ALIBABA_API_KEY;
+            return callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries);
+        }
         $apiKey = TOGETHER_API_KEY;
         return callTogetherChatCompletions($messages, $apiKey, $maxRetries);
+    } catch (RuntimeException $e) {
+        $message = $e->getMessage();
+        if (mb_strpos($message, 'Сервер API временно недоступен') !== false) {
+            if ($provider === 'alibaba') {
+                error_log('Alibaba Chat API temporary failure, fallback to Together.ai');
+                $apiKey = TOGETHER_API_KEY;
+                return callTogetherChatCompletions($messages, $apiKey, $maxRetries);
+            }
+            error_log('Together Chat API temporary failure, fallback to Alibaba Cloud');
+            $apiKey = ALIBABA_API_KEY;
+            return callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries);
+        }
+        throw $e;
     }
 }
 
@@ -1584,9 +1637,9 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
     $body = json_encode([
         'model' => TOGETHER_MODEL,
         'messages' => $messages,
-        'max_tokens' => ALIBABA_MAX_TOKENS_LONG,
-        'temperature' => ALIBABA_TEMPERATURE,
-        'top_p' => ALIBABA_TOP_P,
+        'max_tokens' => TOGETHER_MAX_TOKENS_LONG,
+        'temperature' => TOGETHER_TEMPERATURE,
+        'top_p' => TOGETHER_TOP_P,
     ], JSON_UNESCAPED_UNICODE);
     
     if ($body === false) {
