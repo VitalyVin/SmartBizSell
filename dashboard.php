@@ -1375,6 +1375,7 @@ $savedTeaserHtml = null;
 $savedTeaserTimestamp = null;
 $savedInvestorHtml = null;
 $savedInvestorTimestamp = null;
+$isStartup = false; // Инициализация для предотвращения ошибок
 
 // Загружаем полные данные выбранной анкеты для работы с инструментами
 $latestForm = null;
@@ -1489,6 +1490,10 @@ function validateFormForTeaser(array $form): array
 if ($latestForm) {
     $dcfSourceStatus = $latestForm['status'];
     $dcfData = calculateUserDCF($latestForm);
+    
+    // Определяем тип компании для условного отображения блоков
+    $companyType = $latestForm['company_type'] ?? null;
+    $isStartup = ($companyType === 'startup');
     
     // Проверяем заполненность полей для генерации тизера
     $teaserValidation = validateFormForTeaser($latestForm);
@@ -4758,7 +4763,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         <?php if ($showNavigation && $latestForm): ?>
         <nav class="dashboard-nav" id="dashboard-nav" aria-label="Навигация по разделам">
             <ul class="dashboard-nav__list" role="list">
-                <?php if ($dcfData): ?>
+                <?php if ($dcfData && !$isStartup): ?>
                 <li class="dashboard-nav__item" role="listitem">
                     <a href="#dcf-model" class="dashboard-nav__link" data-section="dcf-model" aria-label="Перейти к DCF модели">
                         <span class="dashboard-nav__icon" aria-hidden="true">
@@ -4827,7 +4832,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         </nav>
         <?php endif; ?>
 
-        <?php if ($dcfData): ?>
+        <?php if ($dcfData && !$isStartup): ?>
             <div class="dcf-card" id="dcf-model">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
                     <div>
@@ -5003,7 +5008,7 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
         <?php endif; ?>
 
         <!-- Блок "Определение цены" -->
-        <?php if ($latestForm && $dcfData && !isset($dcfData['error'])): ?>
+        <?php if ($latestForm && $dcfData && !isset($dcfData['error']) && !$isStartup): ?>
             <?php
             // Получаем Equity Value из DCF для сравнения
             $dcfEquityValue = null;
