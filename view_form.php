@@ -134,6 +134,9 @@ function buildViewData(array $form): array
     return $data;
 }
 
+// Определяем тип компании
+$companyType = $form['company_type'] ?? null;
+
 // Строим унифицированные данные для отображения
 $formData = buildViewData($form);
 
@@ -408,6 +411,292 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
             </div>
         </div>
 
+        <?php if ($companyType === 'startup'): ?>
+        <?php $startupData = $formData; ?>
+
+        <div class="view-card">
+            <h2>Описание продукта и технологии</h2>
+            <div class="info-grid">
+                <?php if (!empty($startupData['company_founded_date'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Дата основания</label>
+                    <span><?php echo htmlspecialchars($startupData['company_founded_date'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Описание продукта / решения</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_product_description'] ?? '—', ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+
+                <?php if (!empty($startupData['startup_technology_description'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Описание технологии</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_technology_description'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_ip_patents'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Патенты, интеллектуальная собственность</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_ip_patents'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_product_stage'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Текущая стадия продукта</label>
+                    <span>
+                        <?php
+                        $stages = [
+                            'idea' => 'Идея',
+                            'prototype' => 'Прототип',
+                            'mvp' => 'MVP',
+                            'working_product' => 'Рабочий продукт',
+                            'scaling' => 'Масштабирование'
+                        ];
+                        echo htmlspecialchars($stages[$startupData['startup_product_stage']] ?? $startupData['startup_product_stage'], ENT_QUOTES, 'UTF-8');
+                        ?>
+                    </span>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="view-card">
+            <h2>Ключевые показатели (traction)</h2>
+            <div class="info-grid">
+                <?php if (!empty($startupData['startup_users_count'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Пользователи / клиенты</label>
+                    <span><?php echo number_format((float)$startupData['startup_users_count'], 0, ',', ' '); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_mrr'] ?? '')): ?>
+                <div class="info-item">
+                    <label>MRR, руб.</label>
+                    <span><?php echo number_format((float)$startupData['startup_mrr'], 2, ',', ' '); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_dau'] ?? '')): ?>
+                <div class="info-item">
+                    <label>DAU</label>
+                    <span><?php echo number_format((float)$startupData['startup_dau'], 0, ',', ' '); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_mau'] ?? '')): ?>
+                <div class="info-item">
+                    <label>MAU</label>
+                    <span><?php echo number_format((float)$startupData['startup_mau'], 0, ',', ' '); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_registrations'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Количество регистраций</label>
+                    <span><?php echo number_format((float)$startupData['startup_registrations'], 0, ',', ' '); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_conversion_rate'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Конверсия, %</label>
+                    <span><?php echo htmlspecialchars($startupData['startup_conversion_rate'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_retention_rate'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Удержание, %</label>
+                    <span><?php echo htmlspecialchars($startupData['startup_retention_rate'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_pilots_partnerships'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Пилотные проекты / партнерства</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_pilots_partnerships'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="view-card">
+            <h2>Команда</h2>
+            <div class="info-grid">
+                <?php if (!empty($startupData['startup_shareholders'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Состав акционеров</label>
+                    <span><?php echo nl2br(htmlspecialchars(is_array($startupData['startup_shareholders']) ? json_encode($startupData['startup_shareholders'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $startupData['startup_shareholders'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_key_employees'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Ключевые сотрудники</label>
+                    <span><?php echo nl2br(htmlspecialchars(is_array($startupData['startup_key_employees']) ? json_encode($startupData['startup_key_employees'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $startupData['startup_key_employees'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['personnel_count'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Численность команды</label>
+                    <span><?php echo htmlspecialchars($startupData['personnel_count'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_social_links'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Ссылки на соцсети</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_social_links'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="view-card">
+            <h2>Рынок и конкурентные преимущества</h2>
+            <div class="info-grid">
+                <?php if (!empty($startupData['startup_target_market'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Целевой рынок</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_target_market'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_market_size'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Размер рынка (TAM/SAM/SOM)</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_market_size'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_competitors'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Конкуренты и аналоги</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_competitors'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_competitive_advantages'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Преимущества и недостатки существующих продуктов</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_competitive_advantages'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['company_website'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Сайт / продукт</label>
+                    <span><?php echo htmlspecialchars($startupData['company_website'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="view-card">
+            <h2>Дорожная карта и использование инвестиций</h2>
+            <div class="info-grid">
+                <?php if (!empty($startupData['startup_roadmap'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>План развития (12–24 мес.)</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_roadmap'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_scaling_plans'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>Планы по масштабированию</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_scaling_plans'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_funding_usage'] ?? '')): ?>
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <label>На что пойдут средства (cash-in)</label>
+                    <span><?php echo nl2br(htmlspecialchars($startupData['startup_funding_usage'], ENT_QUOTES, 'UTF-8')); ?></span>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="view-card">
+            <h2>Финансовые показатели и прогнозы</h2>
+            <div class="info-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+                <div class="info-item">
+                    <label>2023: выручка / расходы / прибыль</label>
+                    <span><?php
+                        $r = $startupData['startup_revenue_2023'] ?? null;
+                        $e = $startupData['startup_expenses_2023'] ?? null;
+                        $p = $startupData['startup_profit_2023'] ?? null;
+                        echo htmlspecialchars(trim(($r ?? '—') . ' / ' . ($e ?? '—') . ' / ' . ($p ?? '—')), ENT_QUOTES, 'UTF-8');
+                    ?></span>
+                </div>
+                <div class="info-item">
+                    <label>2024: выручка / расходы / прибыль</label>
+                    <span><?php
+                        $r = $startupData['startup_revenue_2024'] ?? null;
+                        $e = $startupData['startup_expenses_2024'] ?? null;
+                        $p = $startupData['startup_profit_2024'] ?? null;
+                        echo htmlspecialchars(trim(($r ?? '—') . ' / ' . ($e ?? '—') . ' / ' . ($p ?? '—')), ENT_QUOTES, 'UTF-8');
+                    ?></span>
+                </div>
+                <div class="info-item">
+                    <label>2025: выручка / расходы / прибыль</label>
+                    <span><?php
+                        $r = $startupData['startup_revenue_2025'] ?? null;
+                        $e = $startupData['startup_expenses_2025'] ?? null;
+                        $p = $startupData['startup_profit_2025'] ?? null;
+                        echo htmlspecialchars(trim(($r ?? '—') . ' / ' . ($e ?? '—') . ' / ' . ($p ?? '—')), ENT_QUOTES, 'UTF-8');
+                    ?></span>
+                </div>
+            </div>
+
+            <?php if (!empty($startupData['startup_forecast'] ?? '')): ?>
+            <div style="margin-top:20px;">
+                <label style="font-size:12px; color:var(--text-secondary); text-transform:uppercase;">Прогнозные показатели (3–5 лет)</label>
+                <p style="margin-top:8px;"><?php echo nl2br(htmlspecialchars(is_array($startupData['startup_forecast']) ? json_encode($startupData['startup_forecast'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $startupData['startup_forecast'], ENT_QUOTES, 'UTF-8')); ?></p>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($startupData['startup_unit_economics'] ?? '')): ?>
+            <div style="margin-top:20px;">
+                <label style="font-size:12px; color:var(--text-secondary); text-transform:uppercase;">Юнит-экономика</label>
+                <p style="margin-top:8px;"><?php echo nl2br(htmlspecialchars(is_array($startupData['startup_unit_economics']) ? json_encode($startupData['startup_unit_economics'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $startupData['startup_unit_economics'], ENT_QUOTES, 'UTF-8')); ?></p>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <div class="view-card">
+            <h2>Инвестиции</h2>
+            <div class="info-grid">
+                <?php if (!empty($startupData['startup_valuation'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Текущая оценка компании, руб.</label>
+                    <span><?php echo htmlspecialchars($startupData['startup_valuation'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($startupData['startup_investment_amount'] ?? '')): ?>
+                <div class="info-item">
+                    <label>Требуемая сумма инвестиций, руб.</label>
+                    <span><?php echo htmlspecialchars($startupData['startup_investment_amount'], ENT_QUOTES, 'UTF-8'); ?></span>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!empty($startupData['startup_previous_investments'] ?? '')): ?>
+            <div style="margin-top:20px;">
+                <label style="font-size:12px; color:var(--text-secondary); text-transform:uppercase;">Предыдущие инвестиции</label>
+                <p style="margin-top:8px;"><?php echo nl2br(htmlspecialchars(is_array($startupData['startup_previous_investments']) ? json_encode($startupData['startup_previous_investments'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $startupData['startup_previous_investments'], ENT_QUOTES, 'UTF-8')); ?></p>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <?php elseif ($companyType === 'mature' || !$companyType): ?>
         <div class="view-card">
             <h2>Описание бизнеса</h2>
             <div class="info-grid">
@@ -613,6 +902,7 @@ function safeValue(array $data, string $key, string $fallback = '—'): string
                 <p class="empty-note">Балансовые данные отсутствуют.</p>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
 
     <script src="script.js?v=<?php echo time(); ?>"></script>

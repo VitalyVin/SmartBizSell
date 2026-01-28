@@ -86,11 +86,36 @@ $requiredFields = [
  * Проверяет, является ли поле обязательным для отправки формы
  * 
  * @param string $field Название поля
+ * @param string|null $companyType Тип компании ('startup' или 'mature')
  * @return bool true если поле обязательное, false иначе
  */
-function isFieldRequired(string $field): bool
+function isFieldRequired(string $field, ?string $companyType = null): bool
 {
     global $requiredFields;
+    
+    // Базовые обязательные поля для всех типов
+    $baseRequired = ['company_inn', 'asset_name', 'deal_share_range', 'deal_goal', 'asset_disclosure', 'agree'];
+    
+    if (in_array($field, $baseRequired, true)) {
+        return true;
+    }
+    
+    // Для стартапов убираем требования к финансовым данным за 3 года
+    if ($companyType === 'startup') {
+        $startupExcluded = ['financial_results_vat', 'financial_source'];
+        if (in_array($field, $startupExcluded, true)) {
+            return false;
+        }
+        // Для стартапов обязательны специфичные поля (проверяются отдельно в валидации)
+        $startupRequired = ['startup_product_description', 'startup_product_stage', 'startup_target_market'];
+        if (in_array($field, $startupRequired, true)) {
+            return true;
+        }
+        // Остальные поля для стартапов опциональны
+        return false;
+    }
+    
+    // Для зрелых компаний - все текущие обязательные поля
     return in_array($field, $requiredFields, true);
 }
 
@@ -99,11 +124,12 @@ function isFieldRequired(string $field): bool
  * Используется в HTML-формах для валидации на стороне клиента
  * 
  * @param string $field Название поля
+ * @param string|null $companyType Тип компании ('startup' или 'mature')
  * @return string Строка ' required' или пустая строка
  */
-function requiredAttr(string $field): string
+function requiredAttr(string $field, ?string $companyType = null): string
 {
-    return isFieldRequired($field) ? ' required' : '';
+    return isFieldRequired($field, $companyType) ? ' required' : '';
 }
 
 /**
@@ -111,11 +137,12 @@ function requiredAttr(string $field): string
  * Используется для визуального выделения обязательных полей
  * 
  * @param string $field Название поля
+ * @param string|null $companyType Тип компании ('startup' или 'mature')
  * @return string CSS-класс 'required-field' или пустая строка
  */
-function requiredClass(string $field): string
+function requiredClass(string $field, ?string $companyType = null): string
 {
-    return isFieldRequired($field) ? ' required-field' : '';
+    return isFieldRequired($field, $companyType) ? ' required-field' : '';
 }
 
 /**
@@ -173,7 +200,8 @@ function buildDraftPayload(array $source): array
         'offline_sales_area', 'offline_sales_third_party', 'offline_sales_distributors',
         'online_sales_presence', 'online_sales_share', 'online_sales_channels',
         'main_clients', 'sales_share', 'personnel_count', 'company_website',
-        'additional_info', 'financial_results_vat', 'financial_source'
+        'additional_info', 'financial_results_vat', 'financial_source',
+        'company_type'
     ];
 
     $payload = [];
@@ -193,8 +221,30 @@ function buildDraftPayload(array $source): array
     }
 
     $payload['production'] = normalizeDraftValue($source['production'] ?? []);
-    $payload['financial'] = normalizeDraftValue($source['financial'] ?? []);
-    $payload['balance'] = normalizeDraftValue($source['balance'] ?? []);
+    $payload['financial'] = normalizeDraftValue(applyTableUnitFallback($source['financial'] ?? []));
+    $payload['balance'] = normalizeDraftValue(applyTableUnitFallback($source['balance'] ?? []));
+
+    // Поля для стартапов (хранятся в data_json)
+    $startupFields = [
+        'company_founded_date', 'startup_product_description', 'startup_technology_description',
+        'startup_ip_patents', 'startup_product_stage', 'startup_users_count', 'startup_mrr',
+        'startup_dau', 'startup_mau', 'startup_registrations', 'startup_conversion_rate',
+        'startup_retention_rate', 'startup_pilots_partnerships', 'startup_shareholders',
+        'startup_key_employees', 'startup_social_links', 'startup_target_market',
+        'startup_market_size', 'startup_competitors', 'startup_competitive_advantages',
+        'startup_roadmap', 'startup_scaling_plans', 'startup_funding_usage',
+        'startup_revenue_2023', 'startup_revenue_2024', 'startup_revenue_2025',
+        'startup_expenses_2023', 'startup_expenses_2024', 'startup_expenses_2025',
+        'startup_profit_2023', 'startup_profit_2024', 'startup_profit_2025',
+        'startup_forecast', 'startup_unit_economics', 'startup_valuation',
+        'startup_investment_amount', 'startup_previous_investments'
+    ];
+    
+    foreach ($startupFields as $field) {
+        if (array_key_exists($field, $source)) {
+            $payload[$field] = normalizeDraftValue($source[$field]);
+        }
+    }
 
     if (isset($source['save_draft'])) {
         $payload['save_draft'] = $source['save_draft'];
@@ -205,6 +255,46 @@ function buildDraftPayload(array $source): array
     }
 
     return $payload;
+}
+
+/**
+ * Заполняет пустые единицы измерения единым значением по таблице.
+ * Берем первую непустую единицу и подставляем в строки без unit.
+ */
+function applyTableUnitFallback(array $rows): array
+{
+    if (empty($rows)) {
+        return $rows;
+    }
+
+    $tableUnit = '';
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $unit = trim((string)($row['unit'] ?? ''));
+        if ($unit !== '') {
+            $tableUnit = $unit;
+            break;
+        }
+    }
+
+    if ($tableUnit === '') {
+        return $rows;
+    }
+
+    foreach ($rows as $key => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $unit = trim((string)($row['unit'] ?? ''));
+        if ($unit === '') {
+            $row['unit'] = $tableUnit;
+            $rows[$key] = $row;
+        }
+    }
+
+    return $rows;
 }
 
 /**
@@ -488,11 +578,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Загружаем существующую форму, если указан form_id
     $formId = isset($_POST['form_id']) ? (int)$_POST['form_id'] : null;
+    $existingForm = null;
     if ($formId) {
         $effectiveUserId = getEffectiveUserId();
         $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
         $stmt->execute([$formId, $effectiveUserId]);
         $existingForm = $stmt->fetch();
+    }
+
+    // Определяем тип компании из POST или существующей формы
+    $companyType = null;
+    if (isset($_POST['company_type']) && in_array($_POST['company_type'], ['startup', 'mature'], true)) {
+        $companyType = $_POST['company_type'];
+    } elseif ($existingForm && isset($existingForm['company_type'])) {
+        $companyType = $existingForm['company_type'];
     }
 
     // Получаем данные формы
@@ -508,9 +607,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     error_log("Form processing: method=POST, form_id=" . ($formId ?: 'new') . ", is_draft=" . ($isDraftSave ? 'yes' : 'no') . ", asset_name='" . $asset_name . "'");
 
+    // Определяем тип компании для валидации
+    $companyTypeForValidation = $_POST['company_type'] ?? ($existingForm['company_type'] ?? null);
+
     // Валидация обязательных полей (только для финальной отправки)
     // Для черновиков валидация не выполняется - можно сохранить частично заполненную форму
     if (!$isDraftSave) {
+        // Обязательные поля для всех типов
         if ($asset_name === '') {
             $errors['asset_name'] = 'Укажите название актива';
         }
@@ -519,9 +622,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!preg_match('/^\d{10}$|^\d{12}$/', $companyInnDigits)) {
             $errors['company_inn'] = 'ИНН должен содержать 10 или 12 цифр';
         }
-        // Регионы присутствия - необязательное поле, валидация убрана
-        if (!isset($_POST['agree'])) {
-            $errors['agree'] = 'Необходимо согласие на обработку данных';
+        if (empty($_POST['deal_share_range'])) {
+            $errors['deal_share_range'] = 'Укажите предмет сделки';
+        }
+        if (empty($_POST['asset_disclosure'])) {
+            $errors['asset_disclosure'] = 'Укажите, раскрывать ли название';
         }
         // Валидация deal_goal: должен быть выбран хотя бы один вариант
         $dealGoalValue = $_POST['deal_goal'] ?? '';
@@ -532,11 +637,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (empty($dealGoalValue)) {
             $errors['deal_goal'] = 'Выберите хотя бы одну цель сделки';
         }
+        if (!isset($_POST['agree'])) {
+            $errors['agree'] = 'Необходимо согласие на обработку данных';
+        }
+        
+        // Валидация для стартапов
+        if ($companyTypeForValidation === 'startup') {
+            // Проверяем обязательные поля стартапа из data_json (будут в draftPayload)
+            $draftPayload = buildDraftPayload($_POST);
+            if (empty($draftPayload['startup_product_description'])) {
+                $errors['startup_product_description'] = 'Укажите описание продукта/решения';
+            }
+            if (empty($draftPayload['startup_product_stage'])) {
+                $errors['startup_product_stage'] = 'Укажите текущую стадию продукта';
+            }
+            if (empty($draftPayload['startup_target_market'])) {
+                $errors['startup_target_market'] = 'Укажите целевой рынок';
+            }
+            // Команда: хотя бы один из списков должен быть заполнен
+            if (empty($draftPayload['startup_shareholders']) && empty($draftPayload['startup_key_employees'])) {
+                $errors['startup_team'] = 'Укажите состав акционеров или ключевых сотрудников';
+            }
+        } else {
+            // Валидация для зрелых компаний (текущие требования)
+            if (empty($_POST['company_description'])) {
+                $errors['company_description'] = 'Укажите описание деятельности';
+            }
+            if (empty($_POST['presence_regions'])) {
+                $errors['presence_regions'] = 'Укажите регионы присутствия';
+            }
+            if (empty($_POST['products_services'])) {
+                $errors['products_services'] = 'Укажите продукцию/услуги';
+            }
+            if (empty($_POST['main_clients'])) {
+                $errors['main_clients'] = 'Укажите основных клиентов';
+            }
+            if (empty($_POST['sales_share'])) {
+                $errors['sales_share'] = 'Укажите долю продаж в РФ';
+            }
+            if (empty($_POST['personnel_count'])) {
+                $errors['personnel_count'] = 'Укажите численность персонала';
+            }
+            if (empty($_POST['financial_results_vat'])) {
+                $errors['financial_results_vat'] = 'Укажите формат НДС для финансовых результатов';
+            }
+            if (empty($_POST['financial_source'])) {
+                $errors['financial_source'] = 'Укажите источник финансовых показателей';
+            }
+        }
     }
 
     // Если ошибок валидации нет, сохраняем данные
     if (empty($errors)) {
         try {
+            // Заполняем единицы измерения по таблице, если часть строк не заполнена
+            $_POST['financial'] = applyTableUnitFallback($_POST['financial'] ?? []);
+            $_POST['balance'] = applyTableUnitFallback($_POST['balance'] ?? []);
+
             // Подготавливаем данные для сохранения в JSON
             // buildDraftPayload нормализует все данные формы в единую структуру
             $draftPayload = buildDraftPayload($_POST);
@@ -589,14 +746,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
                     
                     $effectiveUserId = getEffectiveUserId();
-                    $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
-                    $stmt->execute([$asset_name, $companyInnDigits, $dataJson, $formId, $effectiveUserId]);
+                    $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, company_type = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
+                    $stmt->execute([$asset_name, $companyInnDigits, $companyType ?: null, $dataJson, $formId, $effectiveUserId]);
                     error_log("DRAFT UPDATED - form_id: $formId");
                 } else {
                     // Создание нового черновика
                     $effectiveUserId = getEffectiveUserId();
-                    $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, company_inn, data_json, status) VALUES (?, ?, ?, ?, 'draft')");
-                    $stmt->execute([$effectiveUserId, $asset_name, $companyInnDigits, $dataJson]);
+                    $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, company_inn, company_type, data_json, status) VALUES (?, ?, ?, ?, ?, 'draft')");
+                    $stmt->execute([$effectiveUserId, $asset_name, $companyInnDigits, $companyType ?: null, $dataJson]);
                     $formId = $pdo->lastInsertId();
                     error_log("DRAFT INSERTED - new form_id: $formId");
                 }
@@ -658,6 +815,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $additionalInfo = sanitizeInput($_POST['additional_info'] ?? '');
                 $financialResultsVat = sanitizeInput($_POST['financial_results_vat'] ?? '');
                 $financialSource = sanitizeInput($_POST['financial_source'] ?? '');
+                // $companyType уже определена выше в начале блока POST
 
                 // Сохраняем таблицы как JSON
                 $productionVolumes = isset($_POST['production']) ? json_encode($_POST['production'], JSON_UNESCAPED_UNICODE) : null;
@@ -688,7 +846,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
                     
                     $stmt = $pdo->prepare("UPDATE seller_forms SET
-                        asset_name = ?, company_inn = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
+                        asset_name = ?, company_inn = ?, company_type = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
                         company_description = ?, presence_regions = ?, products_services = ?, company_brands = ?,
                         own_production = ?, production_sites_count = ?, production_sites_region = ?, production_area = ?,
                         production_capacity = ?, production_load = ?, production_building_ownership = ?, production_land_ownership = ?,
@@ -702,7 +860,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         status = 'submitted', submitted_at = NOW(), updated_at = NOW()
                         WHERE id = ? AND user_id = ?");
                     $stmt->execute([
-                        $asset_name, $companyInnDigits, $dealSubject, $dealPurpose, $assetDisclosure,
+                        $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
                         $companyDescription, $presenceRegions, $productsServices, $companyBrands,
                         $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
                         $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
@@ -717,7 +875,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (
-                                    user_id, asset_name, company_inn, deal_subject, deal_purpose, asset_disclosure,
+                                    user_id, asset_name, company_inn, company_type, deal_subject, deal_purpose, asset_disclosure,
                                     company_description, presence_regions, products_services, company_brands,
                         own_production, production_sites_count, production_sites_region, production_area,
                         production_capacity, production_load, production_building_ownership, production_land_ownership,
@@ -729,10 +887,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         financial_results_vat, financial_source,
                         production_volumes, financial_results, balance_indicators, data_json,
                         status, submitted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
                             $effectiveUserId = getEffectiveUserId();
                             $stmt->execute([
-                        $effectiveUserId, $asset_name, $companyInnDigits, $dealSubject, $dealPurpose, $assetDisclosure,
+                        $effectiveUserId, $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
                         $companyDescription, $presenceRegions, $productsServices, $companyBrands,
                         $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
                         $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
@@ -782,10 +940,23 @@ if (isset($_GET['saved'])) {
     $draftMessage = true;
 }
 
+// Определяем тип компании
+$companyType = null;
+if (isset($_POST['company_type']) && in_array($_POST['company_type'], ['startup', 'mature'], true)) {
+    $companyType = $_POST['company_type'];
+} elseif ($existingForm && isset($existingForm['company_type'])) {
+    $companyType = $existingForm['company_type'];
+}
+
 // Если есть существующая форма, загружаем данные
 if ($existingForm) {
-    error_log("LOADING EXISTING FORM - form_id: " . $existingForm['id'] . ", status: " . $existingForm['status']);
+    error_log("LOADING EXISTING FORM - form_id: " . $existingForm['id'] . ", status: " . $existingForm['status'] . ", company_type: " . ($companyType ?? 'NULL'));
     hydrateFormFromDb($existingForm);
+    // Восстанавливаем company_type из БД, если не был передан в POST
+    if (!$companyType && isset($existingForm['company_type'])) {
+        $companyType = $existingForm['company_type'];
+        $_POST['company_type'] = $companyType;
+    }
 } else {
     error_log("NO EXISTING FORM TO LOAD");
 }
@@ -824,6 +995,7 @@ function ensureSellerFormSchema(PDO $pdo): void
         'financial_results_vat' => "ALTER TABLE seller_forms ADD COLUMN financial_results_vat ENUM('with_vat','without_vat') DEFAULT NULL AFTER production_volumes",
         'balance_indicators' => "ALTER TABLE seller_forms ADD COLUMN balance_indicators JSON DEFAULT NULL AFTER financial_results",
         'data_json' => "ALTER TABLE seller_forms ADD COLUMN data_json JSON DEFAULT NULL AFTER submitted_at",
+        'company_type' => "ALTER TABLE seller_forms ADD COLUMN company_type ENUM('startup', 'mature') DEFAULT NULL COMMENT 'Тип компании: startup - стартап/начинающая, mature - зрелая компания' AFTER user_id",
     ];
 
     // Добавление новых колонок (если они еще не существуют)
@@ -968,33 +1140,66 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                 <form class="seller-form" method="POST" action="seller_form.php" novalidate>
                     <input type="hidden" name="form_id" value="<?php echo htmlspecialchars($formId ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                     <input type="hidden" name="save_draft_flag" value="0" id="save-draft-flag">
+                    
+                    <?php if (!$companyType): ?>
+                    <!-- Выбор типа компании - показывается только если тип не определен -->
+                    <div class="form-section" id="company-type-selection">
+                        <h3 class="form-section-title">Выберите тип компании</h3>
+                        <div class="form-group<?php echo requiredClass('company_type', $companyType); ?>">
+                            <label>Тип компании:</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="company_type" value="startup" <?php echo (($_POST['company_type'] ?? '') === 'startup') ? 'checked' : ''; ?> required>
+                                    <span>Стартап / начинающая компания</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="company_type" value="mature" <?php echo (($_POST['company_type'] ?? '') === 'mature') ? 'checked' : ''; ?> required>
+                                    <span>Зрелая компания</span>
+                                </label>
+                            </div>
+                            <?php if (isset($errors['company_type'])): ?>
+                                <span class="error-message"><?php echo $errors['company_type']; ?></span>
+                            <?php endif; ?>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 8px;">
+                                Выберите тип компании для отображения соответствующей анкеты
+                            </small>
+                        </div>
+                        <div style="text-align: center; margin-top: 24px;">
+                            <button type="submit" name="save_draft" value="1" class="btn btn-primary" formnovalidate>
+                                Продолжить
+                            </button>
+                        </div>
+                    </div>
+                    <?php else: ?>
+                    <!-- Форма отображается только если тип компании выбран -->
                     <div class="form-actions" style="margin-bottom:24px; text-align:right;">
                         <button type="submit" name="save_draft" value="1" class="btn btn-secondary" style="padding: 10px 20px;" formnovalidate>
                             Сохранить черновик
                         </button>
                     </div>
+                    <input type="hidden" name="company_type" value="<?php echo htmlspecialchars($companyType, ENT_QUOTES, 'UTF-8'); ?>">
 
                     <div class="form-section">
                         <h3 class="form-section-title">I. Детали предполагаемой сделки</h3>
-                        <div class="form-group<?php echo requiredClass('company_inn'); ?>">
+                        <div class="form-group<?php echo requiredClass('company_inn', $companyType); ?>">
                             <label for="company_inn">ИНН организации:</label>
-                            <input type="text" id="company_inn" name="company_inn"<?php echo requiredAttr('company_inn'); ?>
+                            <input type="text" id="company_inn" name="company_inn"<?php echo requiredAttr('company_inn', $companyType); ?>
                                    value="<?php echo htmlspecialchars($_POST['company_inn'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                    placeholder="Например, 7707083893 или 500100732259">
                             <?php if (isset($errors['company_inn'])): ?>
                                 <span class="error-message"><?php echo $errors['company_inn']; ?></span>
                             <?php endif; ?>
                         </div>
-                        <div class="form-group<?php echo requiredClass('asset_name'); ?>">
+                        <div class="form-group<?php echo requiredClass('asset_name', $companyType); ?>">
                             <label for="asset_name">Название актива (название ЮЛ, группы компаний или бренда):</label>
-                            <input type="text" id="asset_name" name="asset_name"<?php echo requiredAttr('asset_name'); ?>
+                            <input type="text" id="asset_name" name="asset_name"<?php echo requiredAttr('asset_name', $companyType); ?>
                                    value="<?php echo htmlspecialchars($_POST['asset_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <?php if (isset($errors['asset_name'])): ?>
                                 <span class="error-message"><?php echo $errors['asset_name']; ?></span>
                             <?php endif; ?>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('deal_share_range'); ?>">
+                        <div class="form-group<?php echo requiredClass('deal_share_range', $companyType); ?>">
                             <label for="deal_share_range">Предмет сделки: продажа доли ____%</label>
                             <div class="input-suffix-container">
                                 <input type="number"
@@ -1005,14 +1210,14 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                        step="1"
                                        placeholder="например, 25"
                                        class="input-with-suffix"
-                                       <?php echo requiredAttr('deal_share_range'); ?>
+                                       <?php echo requiredAttr('deal_share_range', $companyType); ?>
                                        value="<?php echo htmlspecialchars(preg_replace('/[^0-9\\.]/', '', $_POST['deal_share_range'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                                 <span class="input-suffix">%</span>
                             </div>
                             <small style="color: var(--text-secondary);">Введите число от 1 до 100, знак «%» подставится автоматически</small>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('deal_goal'); ?>">
+                        <div class="form-group<?php echo requiredClass('deal_goal', $companyType); ?>">
                             <label>Цель сделки:</label>
                             <div class="radio-group">
                                 <?php
@@ -1048,11 +1253,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             <?php endif; ?>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('asset_disclosure'); ?>">
+                        <div class="form-group<?php echo requiredClass('asset_disclosure', $companyType); ?>">
                             <label>Раскрытие названия актива в анкете: да/нет</label>
                             <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="asset_disclosure" value="yes" <?php echo (($_POST['asset_disclosure'] ?? '') === 'yes') ? 'checked' : ''; ?><?php echo requiredAttr('asset_disclosure'); ?>>
+                                    <input type="radio" name="asset_disclosure" value="yes" <?php echo (($_POST['asset_disclosure'] ?? '') === 'yes') ? 'checked' : ''; ?><?php echo requiredAttr('asset_disclosure', $companyType); ?>>
                                     <span>да</span>
                                 </label>
                                 <label class="radio-label">
@@ -1063,11 +1268,264 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         </div>
                     </div>
 
+                    <?php if ($companyType === 'startup'): ?>
+                    <!-- СЕКЦИИ ДЛЯ СТАРТАПОВ -->
+                    <?php
+                    // Загружаем данные стартапа из data_json
+                    $startupData = [];
+                    if ($existingForm && !empty($existingForm['data_json'])) {
+                        $decoded = json_decode($existingForm['data_json'], true);
+                        if (is_array($decoded)) {
+                            $startupData = $decoded;
+                        }
+                    }
+                    // Приоритет у POST данных
+                    foreach ($_POST as $key => $value) {
+                        if (strpos($key, 'startup_') === 0 || $key === 'company_founded_date') {
+                            $startupData[$key] = $value;
+                        }
+                    }
+                    ?>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">II. Описание продукта и технологии</h3>
+                        <div class="form-group">
+                            <label for="company_founded_date">Дата основания компании (месяц/год):</label>
+                            <input type="month" id="company_founded_date" name="company_founded_date"
+                                   value="<?php echo htmlspecialchars($startupData['company_founded_date'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group<?php echo requiredClass('startup_product_description', $companyType); ?>">
+                            <label for="startup_product_description">Описание продукта/решения:</label>
+                            <textarea id="startup_product_description" name="startup_product_description" rows="5"<?php echo requiredAttr('startup_product_description', $companyType); ?>><?php echo htmlspecialchars($startupData['startup_product_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">Что вы создаете, какую конкретную проблему решаете, в чем конкурентные преимущества</small>
+                            <?php if (isset($errors['startup_product_description'])): ?>
+                                <span class="error-message"><?php echo $errors['startup_product_description']; ?></span>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_technology_description">Описание технологии:</label>
+                            <textarea id="startup_technology_description" name="startup_technology_description" rows="4"><?php echo htmlspecialchars($startupData['startup_technology_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_ip_patents">Патенты, интеллектуальная собственность:</label>
+                            <textarea id="startup_ip_patents" name="startup_ip_patents" rows="3"><?php echo htmlspecialchars($startupData['startup_ip_patents'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+
+                        <div class="form-group<?php echo requiredClass('startup_product_stage', $companyType); ?>">
+                            <label for="startup_product_stage">Текущая стадия продукта:</label>
+                            <select id="startup_product_stage" name="startup_product_stage"<?php echo requiredAttr('startup_product_stage', $companyType); ?>>
+                                <option value="">— выбрать —</option>
+                                <option value="idea" <?php echo (($startupData['startup_product_stage'] ?? '') === 'idea') ? 'selected' : ''; ?>>Идея</option>
+                                <option value="prototype" <?php echo (($startupData['startup_product_stage'] ?? '') === 'prototype') ? 'selected' : ''; ?>>Прототип</option>
+                                <option value="mvp" <?php echo (($startupData['startup_product_stage'] ?? '') === 'mvp') ? 'selected' : ''; ?>>MVP</option>
+                                <option value="working_product" <?php echo (($startupData['startup_product_stage'] ?? '') === 'working_product') ? 'selected' : ''; ?>>Рабочий продукт</option>
+                                <option value="scaling" <?php echo (($startupData['startup_product_stage'] ?? '') === 'scaling') ? 'selected' : ''; ?>>Масштабирование</option>
+                            </select>
+                            <?php if (isset($errors['startup_product_stage'])): ?>
+                                <span class="error-message"><?php echo $errors['startup_product_stage']; ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">III. Ключевые показатели (traction)</h3>
+                        <div class="form-group">
+                            <label for="startup_users_count">Количество пользователей/клиентов:</label>
+                            <input type="number" id="startup_users_count" name="startup_users_count" min="0"
+                                   value="<?php echo htmlspecialchars($startupData['startup_users_count'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_mrr">Ежемесячный прирост дохода (MRR), руб.:</label>
+                            <input type="number" id="startup_mrr" name="startup_mrr" min="0" step="0.01"
+                                   value="<?php echo htmlspecialchars($startupData['startup_mrr'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_dau">Количество активных пользователей (DAU):</label>
+                            <input type="number" id="startup_dau" name="startup_dau" min="0"
+                                   value="<?php echo htmlspecialchars($startupData['startup_dau'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_mau">Количество активных пользователей (MAU):</label>
+                            <input type="number" id="startup_mau" name="startup_mau" min="0"
+                                   value="<?php echo htmlspecialchars($startupData['startup_mau'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_registrations">Количество регистраций:</label>
+                            <input type="number" id="startup_registrations" name="startup_registrations" min="0"
+                                   value="<?php echo htmlspecialchars($startupData['startup_registrations'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_conversion_rate">Конверсии (conversion rate), %:</label>
+                            <input type="number" id="startup_conversion_rate" name="startup_conversion_rate" min="0" max="100" step="0.01"
+                                   value="<?php echo htmlspecialchars($startupData['startup_conversion_rate'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_retention_rate">Удержание клиентов (retention rate), %:</label>
+                            <input type="number" id="startup_retention_rate" name="startup_retention_rate" min="0" max="100" step="0.01"
+                                   value="<?php echo htmlspecialchars($startupData['startup_retention_rate'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_pilots_partnerships">Пилотные проекты/партнерства:</label>
+                            <textarea id="startup_pilots_partnerships" name="startup_pilots_partnerships" rows="3"><?php echo htmlspecialchars($startupData['startup_pilots_partnerships'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">IV. Команда</h3>
+                        <div class="form-group">
+                            <label for="startup_shareholders">Состав акционеров:</label>
+                            <textarea id="startup_shareholders" name="startup_shareholders" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_shareholders'] ?? null) ? json_encode($startupData['startup_shareholders'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_shareholders'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">ФИО, роль, подробный бэкграунд (образование, опыт)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_key_employees">Ключевые сотрудники:</label>
+                            <textarea id="startup_key_employees" name="startup_key_employees" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_key_employees'] ?? null) ? json_encode($startupData['startup_key_employees'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_key_employees'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">ФИО, роль, подробный бэкграунд (образование, опыт)</small>
+                            <?php if (isset($errors['startup_team'])): ?>
+                                <span class="error-message"><?php echo $errors['startup_team']; ?></span>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="personnel_count">Численность команды:</label>
+                            <input type="number" id="personnel_count" name="personnel_count" min="0"
+                                   value="<?php echo htmlspecialchars($_POST['personnel_count'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_social_links">Ссылки на соцсети:</label>
+                            <textarea id="startup_social_links" name="startup_social_links" rows="2"><?php echo htmlspecialchars($startupData['startup_social_links'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">ТГ-каналы и т.п.</small>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">V. Рынок и конкурентные преимущества</h3>
+                        <div class="form-group<?php echo requiredClass('startup_target_market', $companyType); ?>">
+                            <label for="startup_target_market">Целевой рынок:</label>
+                            <textarea id="startup_target_market" name="startup_target_market" rows="3"<?php echo requiredAttr('startup_target_market', $companyType); ?>><?php echo htmlspecialchars($startupData['startup_target_market'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <?php if (isset($errors['startup_target_market'])): ?>
+                                <span class="error-message"><?php echo $errors['startup_target_market']; ?></span>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_market_size">Размер рынка (TAM/SAM/SOM):</label>
+                            <textarea id="startup_market_size" name="startup_market_size" rows="2"><?php echo htmlspecialchars($startupData['startup_market_size'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_competitors">Конкуренты и аналоги:</label>
+                            <textarea id="startup_competitors" name="startup_competitors" rows="3"><?php echo htmlspecialchars($startupData['startup_competitors'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_competitive_advantages">Преимущества и недостатки существующих продуктов на рынке:</label>
+                            <textarea id="startup_competitive_advantages" name="startup_competitive_advantages" rows="3"><?php echo htmlspecialchars($startupData['startup_competitive_advantages'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="company_website">Сайт/продукт:</label>
+                            <input type="url" id="company_website" name="company_website"
+                                   value="<?php echo htmlspecialchars($_POST['company_website'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                   placeholder="https://example.com">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">VI. Дорожная карта развития</h3>
+                        <div class="form-group">
+                            <label for="startup_roadmap">План развития:</label>
+                            <textarea id="startup_roadmap" name="startup_roadmap" rows="5"><?php echo htmlspecialchars($startupData['startup_roadmap'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">Ключевые шаги на ближайшие 12-24 мес.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_scaling_plans">Планы по масштабированию:</label>
+                            <textarea id="startup_scaling_plans" name="startup_scaling_plans" rows="3"><?php echo htmlspecialchars($startupData['startup_scaling_plans'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_funding_usage">На что будет направлено финансирование, привлеченное в сделке (если cash-in):</label>
+                            <textarea id="startup_funding_usage" name="startup_funding_usage" rows="3"><?php echo htmlspecialchars($startupData['startup_funding_usage'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">VII. Финансовые показатели и прогнозы</h3>
+                        <h4 style="margin-top: 0; margin-bottom: 16px;">Фактические финансовые показатели за 2023-2025 (если есть):</h4>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                            <div class="form-group">
+                                <label>2023:</label>
+                                <input type="number" name="startup_revenue_2023" placeholder="Выручка" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="number" name="startup_expenses_2023" placeholder="Расходы" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="number" name="startup_profit_2023" placeholder="Прибыль/убыток" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="form-group">
+                                <label>2024:</label>
+                                <input type="number" name="startup_revenue_2024" placeholder="Выручка" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="number" name="startup_expenses_2024" placeholder="Расходы" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="number" name="startup_profit_2024" placeholder="Прибыль/убыток" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="form-group">
+                                <label>2025:</label>
+                                <input type="number" name="startup_revenue_2025" placeholder="Выручка" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="number" name="startup_expenses_2025" placeholder="Расходы" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="number" name="startup_profit_2025" placeholder="Прибыль/убыток" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_forecast">Прогнозные финансовые показатели (3-5 лет):</label>
+                            <textarea id="startup_forecast" name="startup_forecast" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_forecast'] ?? null) ? json_encode($startupData['startup_forecast'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_forecast'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">Выручка, Расходы, Прибыль/убыток по годам</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_unit_economics">Юнит-экономика:</label>
+                            <textarea id="startup_unit_economics" name="startup_unit_economics" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_unit_economics'] ?? null) ? json_encode($startupData['startup_unit_economics'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_unit_economics'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">Текущий объем продаж, цена за 1, переменные и постоянные затраты, точка безубыточности</small>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title">VIII. Инвестиции</h3>
+                        <div class="form-group">
+                            <label for="startup_valuation">Текущая оценка компании, руб.:</label>
+                            <input type="number" id="startup_valuation" name="startup_valuation" min="0" step="0.01"
+                                   value="<?php echo htmlspecialchars($startupData['startup_valuation'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_investment_amount">Требуемая сумма инвестиций, руб.:</label>
+                            <input type="number" id="startup_investment_amount" name="startup_investment_amount" min="0" step="0.01"
+                                   value="<?php echo htmlspecialchars($startupData['startup_investment_amount'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startup_previous_investments">Предыдущие инвестиции (если были):</label>
+                            <textarea id="startup_previous_investments" name="startup_previous_investments" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_previous_investments'] ?? null) ? json_encode($startupData['startup_previous_investments'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_previous_investments'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <small style="color: var(--text-secondary);">Сумма, инвестор, тип инвестора (друзья и родственники / бизнес-ангел / фонд или корпорация), как использовались инвестиции</small>
+                        </div>
+                    </div>
+                    <?php elseif ($companyType === 'mature'): ?>
+                    <!-- СЕКЦИИ ДЛЯ ЗРЕЛЫХ КОМПАНИЙ -->
                     <div class="form-section">
                         <h3 class="form-section-title">II. Описание бизнеса компании</h3>
-                        <div class="form-group<?php echo requiredClass('company_description'); ?>">
+                        <div class="form-group<?php echo requiredClass('company_description', $companyType); ?>">
                             <label for="company_description">Краткое описание деятельности компании:</label>
-                            <textarea id="company_description" name="company_description" rows="4"<?php echo requiredAttr('company_description'); ?>><?php echo htmlspecialchars($_POST['company_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <textarea id="company_description" name="company_description" rows="4"<?php echo requiredAttr('company_description', $companyType); ?>><?php echo htmlspecialchars($_POST['company_description'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
                         <div class="form-group">
@@ -1148,9 +1606,9 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             </div>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('products_services'); ?>">
+                        <div class="form-group<?php echo requiredClass('products_services', $companyType); ?>">
                             <label for="products_services">Продукция/услуги компании:</label>
-                            <textarea id="products_services" name="products_services" rows="3"<?php echo requiredAttr('products_services'); ?>><?php echo htmlspecialchars($_POST['products_services'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <textarea id="products_services" name="products_services" rows="3"<?php echo requiredAttr('products_services', $companyType); ?>><?php echo htmlspecialchars($_POST['products_services'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
                         <div class="form-group">
@@ -1341,12 +1799,12 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                                         <textarea id="online_sales_channels" name="online_sales_channels" rows="3"><?php echo htmlspecialchars($_POST['online_sales_channels'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('main_clients'); ?>">
+                        <div class="form-group<?php echo requiredClass('main_clients', $companyType); ?>">
                             <label for="main_clients">Основные клиенты:</label>
-                            <textarea id="main_clients" name="main_clients" rows="3"<?php echo requiredAttr('main_clients'); ?>><?php echo htmlspecialchars($_POST['main_clients'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            <textarea id="main_clients" name="main_clients" rows="3"<?php echo requiredAttr('main_clients', $companyType); ?>><?php echo htmlspecialchars($_POST['main_clients'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('sales_share'); ?>">
+                        <div class="form-group<?php echo requiredClass('sales_share', $companyType); ?>">
                             <label for="sales_share">Доля продаж в РФ, %</label>
                             <div class="input-suffix-container">
                                 <input type="number"
@@ -1362,9 +1820,9 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             <small style="color: var(--text-secondary); display: block; margin-top: 8px;">Введите число от 0 до 100, знак «%» подставится автоматически</small>
                         </div>
 
-                            <div class="form-group<?php echo requiredClass('personnel_count'); ?>">
+                            <div class="form-group<?php echo requiredClass('personnel_count', $companyType); ?>">
                             <label for="personnel_count">Численность персонала:</label>
-                            <input type="number" id="personnel_count" name="personnel_count" min="0"<?php echo requiredAttr('personnel_count'); ?>
+                            <input type="number" id="personnel_count" name="personnel_count" min="0"<?php echo requiredAttr('personnel_count', $companyType); ?>
                                        value="<?php echo htmlspecialchars($_POST['personnel_count'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
 
@@ -1436,11 +1894,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             </div>
                         </div>
 
-                            <div class="form-group<?php echo requiredClass('financial_results_vat'); ?>">
+                            <div class="form-group<?php echo requiredClass('financial_results_vat', $companyType); ?>">
                             <label>Финансовые результаты:</label>
                                 <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="financial_results_vat" value="with_vat" <?php echo (($_POST['financial_results_vat'] ?? '') === 'with_vat') ? 'checked' : ''; ?><?php echo requiredAttr('financial_results_vat'); ?>>
+                                    <input type="radio" name="financial_results_vat" value="with_vat" <?php echo (($_POST['financial_results_vat'] ?? '') === 'with_vat') ? 'checked' : ''; ?><?php echo requiredAttr('financial_results_vat', $companyType); ?>>
                                         <span>с НДС</span>
                                     </label>
                                 <label class="radio-label">
@@ -1575,11 +2033,11 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             </div>
                         </div>
 
-                        <div class="form-group<?php echo requiredClass('financial_source'); ?>">
+                        <div class="form-group<?php echo requiredClass('financial_source', $companyType); ?>">
                             <label>Источник финансовых показателей:</label>
                             <div class="radio-group">
                                 <label class="radio-label">
-                                    <input type="radio" name="financial_source" value="rsbu" <?php echo (($_POST['financial_source'] ?? '') === 'rsbu') ? 'checked' : ''; ?><?php echo requiredAttr('financial_source'); ?>>
+                                    <input type="radio" name="financial_source" value="rsbu" <?php echo (($_POST['financial_source'] ?? '') === 'rsbu') ? 'checked' : ''; ?><?php echo requiredAttr('financial_source', $companyType); ?>>
                                     <span>a. РСБУ</span>
                                 </label>
                                 <label class="radio-label">
@@ -1594,9 +2052,12 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         </div>
                     </div>
 
-                    <div class="form-group checkbox-group<?php echo requiredClass('agree'); ?>">
+                    <?php endif; ?>
+                    <!-- Конец условного рендеринга по типу компании -->
+
+                    <div class="form-group checkbox-group<?php echo requiredClass('agree', $companyType); ?>">
                         <label class="checkbox-label">
-                            <input type="checkbox" name="agree" <?php echo isset($_POST['agree']) ? 'checked' : ''; ?><?php echo requiredAttr('agree'); ?>>
+                            <input type="checkbox" name="agree" <?php echo isset($_POST['agree']) ? 'checked' : ''; ?><?php echo requiredAttr('agree', $companyType); ?>>
                             <span>Я соглашаюсь на обработку персональных данных и использование ИИ для подготовки<br>материалов<span style="color: red;">*</span></span>
                         </label>
                         <?php if (isset($errors['agree'])): ?>
@@ -1613,6 +2074,8 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     </button>
                     </div>
                 </form>
+                    <?php endif; ?>
+                    <!-- Конец блока выбора типа компании / формы -->
             </div>
         </div>
     </section>
