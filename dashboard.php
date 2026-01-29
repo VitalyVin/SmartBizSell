@@ -1417,21 +1417,37 @@ if ($selectedForm) {
  */
 function validateFormForTeaser(array $form): array
 {
-    $requiredFields = [
-        'company_inn',
-        'asset_name',
-        'deal_share_range',
-        'deal_goal',
-        'asset_disclosure',
-        'company_description',
-        'presence_regions',
-        'products_services',
-        'main_clients',
-        'sales_share',
-        'personnel_count',
-        'financial_results_vat',
-        'financial_source',
-    ];
+    // Определяем тип компании
+    $companyType = $form['company_type'] ?? null;
+    $isStartup = ($companyType === 'startup');
+    
+    // Для стартапов проверяем только минимально необходимые поля
+    if ($isStartup) {
+        $requiredFields = [
+            'company_inn',
+            'asset_name',
+            'deal_share_range',
+            'deal_goal',
+            'asset_disclosure',
+        ];
+    } else {
+        // Для зрелых компаний проверяем все поля
+        $requiredFields = [
+            'company_inn',
+            'asset_name',
+            'deal_share_range',
+            'deal_goal',
+            'asset_disclosure',
+            'company_description',
+            'presence_regions',
+            'products_services',
+            'main_clients',
+            'sales_share',
+            'personnel_count',
+            'financial_results_vat',
+            'financial_source',
+        ];
+    }
     
     $missingFields = [];
     
@@ -1454,31 +1470,33 @@ function validateFormForTeaser(array $form): array
         }
     }
     
-    // Проверяем наличие финансовых данных (хотя бы за один период)
-    $hasFinancialData = false;
-    if (!empty($form['financial_results'])) {
-        $financialData = json_decode($form['financial_results'], true);
-        if (is_array($financialData) && !empty($financialData)) {
-            // Проверяем, есть ли хотя бы один период с данными
-            foreach ($financialData as $key => $value) {
-                if (is_array($value) && !empty($value)) {
-                    // Проверяем наличие хотя бы одного непустого значения
-                    foreach ($value as $v) {
-                        if ($v !== null && $v !== '' && $v !== 0) {
-                            $hasFinancialData = true;
-                            break 2;
+    // Проверяем наличие финансовых данных только для зрелых компаний
+    if (!$isStartup) {
+        $hasFinancialData = false;
+        if (!empty($form['financial_results'])) {
+            $financialData = json_decode($form['financial_results'], true);
+            if (is_array($financialData) && !empty($financialData)) {
+                // Проверяем, есть ли хотя бы один период с данными
+                foreach ($financialData as $key => $value) {
+                    if (is_array($value) && !empty($value)) {
+                        // Проверяем наличие хотя бы одного непустого значения
+                        foreach ($value as $v) {
+                            if ($v !== null && $v !== '' && $v !== 0) {
+                                $hasFinancialData = true;
+                                break 2;
+                            }
                         }
+                    } elseif (!is_array($value) && $value !== null && $value !== '' && $value !== 0) {
+                        $hasFinancialData = true;
+                        break;
                     }
-                } elseif (!is_array($value) && $value !== null && $value !== '' && $value !== 0) {
-                    $hasFinancialData = true;
-                    break;
                 }
             }
         }
-    }
-    
-    if (!$hasFinancialData) {
-        $missingFields[] = 'financial_results';
+        
+        if (!$hasFinancialData) {
+            $missingFields[] = 'financial_results';
+        }
     }
     
     return [

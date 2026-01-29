@@ -407,29 +407,46 @@ if (empty($apiKey)) {
         error_log('generate_teaser.php: form loaded from DB - data_json is empty or null');
     }
 
+    // Определяем тип компании для условной генерации тизера
+    $companyType = $form['company_type'] ?? null;
+    $isStartup = ($companyType === 'startup');
+
     /**
      * Проверяет, заполнены ли все обязательные поля анкеты
      * 
      * @param array $form Данные анкеты из БД
+     * @param bool $isStartup Является ли компания стартапом
      * @return array ['valid' => bool, 'missing_fields' => array] Результат проверки
      */
-    function validateRequiredFields(array $form): array
+    function validateRequiredFields(array $form, bool $isStartup = false): array
     {
-        $requiredFields = [
-            'company_inn',
-            'asset_name',
-            'deal_share_range',
-            'deal_goal',
-            'asset_disclosure',
-            'company_description',
-            'presence_regions',
-            'products_services',
-            'main_clients',
-            'sales_share',
-            'personnel_count',
-            'financial_results_vat',
-            'financial_source',
-        ];
+        // Для стартапов проверяем только минимально необходимые поля
+        if ($isStartup) {
+            $requiredFields = [
+                'company_inn',
+                'asset_name',
+                'deal_share_range',
+                'deal_goal',
+                'asset_disclosure',
+            ];
+        } else {
+            // Для зрелых компаний проверяем все поля
+            $requiredFields = [
+                'company_inn',
+                'asset_name',
+                'deal_share_range',
+                'deal_goal',
+                'asset_disclosure',
+                'company_description',
+                'presence_regions',
+                'products_services',
+                'main_clients',
+                'sales_share',
+                'personnel_count',
+                'financial_results_vat',
+                'financial_source',
+            ];
+        }
         
         $missingFields = [];
         
@@ -452,31 +469,33 @@ if (empty($apiKey)) {
             }
         }
         
-        // Проверяем наличие финансовых данных (хотя бы за один период)
-        $hasFinancialData = false;
-        if (!empty($form['financial_results'])) {
-            $financialData = json_decode($form['financial_results'], true);
-            if (is_array($financialData) && !empty($financialData)) {
-                // Проверяем, есть ли хотя бы один период с данными
-                foreach ($financialData as $key => $value) {
-                    if (is_array($value) && !empty($value)) {
-                        // Проверяем наличие хотя бы одного непустого значения
-                        foreach ($value as $v) {
-                            if ($v !== null && $v !== '' && $v !== 0) {
-                                $hasFinancialData = true;
-                                break 2;
+        // Проверяем наличие финансовых данных только для зрелых компаний
+        if (!$isStartup) {
+            $hasFinancialData = false;
+            if (!empty($form['financial_results'])) {
+                $financialData = json_decode($form['financial_results'], true);
+                if (is_array($financialData) && !empty($financialData)) {
+                    // Проверяем, есть ли хотя бы один период с данными
+                    foreach ($financialData as $key => $value) {
+                        if (is_array($value) && !empty($value)) {
+                            // Проверяем наличие хотя бы одного непустого значения
+                            foreach ($value as $v) {
+                                if ($v !== null && $v !== '' && $v !== 0) {
+                                    $hasFinancialData = true;
+                                    break 2;
+                                }
                             }
+                        } elseif (!is_array($value) && $value !== null && $value !== '' && $value !== 0) {
+                            $hasFinancialData = true;
+                            break;
                         }
-                    } elseif (!is_array($value) && $value !== null && $value !== '' && $value !== 0) {
-                        $hasFinancialData = true;
-                        break;
                     }
                 }
             }
-        }
-        
-        if (!$hasFinancialData) {
-            $missingFields[] = 'financial_results';
+            
+            if (!$hasFinancialData) {
+                $missingFields[] = 'financial_results';
+            }
         }
         
         return [
@@ -486,10 +505,12 @@ if (empty($apiKey)) {
     }
     
     // Проверяем заполненность всех обязательных полей перед генерацией тизера
-    $validation = validateRequiredFields($form);
+    $validation = validateRequiredFields($form, $isStartup);
     if (!$validation['valid']) {
         $missingCount = count($validation['missing_fields']);
-        $message = "Анкета не полностью заполнена. Заполните все обязательные поля для генерации тизера.";
+        $message = $isStartup 
+            ? "Заполните минимально необходимые поля для генерации тизера стартапа."
+            : "Анкета не полностью заполнена. Заполните все обязательные поля для генерации тизера.";
         if ($missingCount <= 3) {
             // Если пропущено немного полей, показываем какие именно
             $fieldLabels = [
@@ -673,8 +694,8 @@ if (empty($apiKey)) {
         if (!function_exists('buildTeaserPrompt')) {
             throw new RuntimeException('Function buildTeaserPrompt not found');
         }
-        $prompt = buildTeaserPrompt($maskedPayload);
-        $logger->logStep('buildTeaserPrompt', ['prompt_length' => strlen($prompt), 'prompt_size' => round(strlen($prompt) / 1024, 2) . 'KB']);
+        $prompt = buildTeaserPrompt($maskedPayload, $isStartup);
+        $logger->logStep('buildTeaserPrompt', ['prompt_length' => strlen($prompt), 'prompt_size' => round(strlen($prompt) / 1024, 2) . 'KB', 'is_startup' => $isStartup]);
         error_log('buildTeaserPrompt completed, prompt length: ' . strlen($prompt));
         
         if (empty($prompt)) {
@@ -739,8 +760,8 @@ if (empty($apiKey)) {
         if (!function_exists('normalizeTeaserData')) {
             throw new RuntimeException('Function normalizeTeaserData not found');
         }
-        $teaserData = normalizeTeaserData($teaserData, $maskedPayload);
-        $logger->logStep('normalizeTeaserData', ['blocks_after_normalization' => array_keys($teaserData)]);
+        $teaserData = normalizeTeaserData($teaserData, $maskedPayload, $isStartup);
+        $logger->logStep('normalizeTeaserData', ['blocks_after_normalization' => array_keys($teaserData), 'is_startup' => $isStartup]);
         error_log('normalizeTeaserData completed');
         
         if (!function_exists('ensureOverviewWithAi')) {
@@ -829,7 +850,7 @@ if (empty($apiKey)) {
             throw new RuntimeException('Function renderTeaserHtml not found');
         }
         error_log('Rendering teaser HTML...');
-        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData, $logger, $apiKey);
+        $html = renderTeaserHtml($teaserData, $displayAssetName, $maskedPayload, $dcfData, $logger, $apiKey, $isStartup);
         $logger->logStep('renderTeaserHtml', ['html_length' => strlen($html), 'html_size' => round(strlen($html) / 1024, 2) . 'KB']);
         error_log('renderTeaserHtml completed, HTML length: ' . strlen($html));
         
@@ -1061,6 +1082,51 @@ function buildTeaserPayload(array $form): array
         $data['balance']    = !empty($form['balance_indicators']) ? (json_decode($form['balance_indicators'], true) ?: []) : [];
     }
     
+    // Добавляем данные стартапа, если они есть
+    // Проверяем company_type из data_json или из отдельного поля
+    $companyType = $data['company_type'] ?? $form['company_type'] ?? null;
+    if ($companyType === 'startup') {
+        // Извлекаем данные стартапа из data_json (уже в $data) или из отдельных полей формы
+        $startupFields = [
+            'startup_product_description', 'startup_technology_description', 'startup_patents_ip',
+            'startup_product_stage', 'startup_user_count', 'startup_mrr', 'startup_dau_mau',
+            'startup_registrations', 'startup_conversion_rate', 'startup_retention_rate',
+            'startup_pilot_projects', 'startup_shareholders', 'startup_key_employees',
+            'startup_social_links', 'startup_target_market', 'startup_market_size',
+            'startup_competitors', 'startup_competitive_advantages', 'startup_roadmap',
+            'startup_scaling_plans', 'startup_funding_usage',
+            'startup_revenue_2023', 'startup_revenue_2024', 'startup_revenue_2025',
+            'startup_expenses_2023', 'startup_expenses_2024', 'startup_expenses_2025',
+            'startup_profit_2023', 'startup_profit_2024', 'startup_profit_2025',
+            'startup_revenue_forecast_1', 'startup_expenses_forecast_1', 'startup_profit_forecast_1',
+            'startup_revenue_forecast_2', 'startup_expenses_forecast_2', 'startup_profit_forecast_2',
+            'startup_revenue_forecast_3', 'startup_expenses_forecast_3', 'startup_profit_forecast_3',
+            'startup_current_sales_volume', 'startup_price_per_unit', 'startup_variable_costs_per_unit',
+            'startup_fixed_costs', 'startup_break_even_volume', 'startup_current_valuation',
+            'startup_investment_needed', 'startup_previous_investments', 'startup_investment_usage',
+            'company_founded_date'
+        ];
+        
+        // Добавляем поля стартапа из формы, если их нет в data_json
+        foreach ($startupFields as $field) {
+            if (!isset($data[$field]) && isset($form[$field])) {
+                $data[$field] = $form[$field];
+            }
+        }
+        
+        // Также проверяем data_json напрямую, если он есть, но поля не были извлечены
+        if (!empty($form['data_json'])) {
+            $decodedDataJson = json_decode($form['data_json'], true);
+            if (is_array($decodedDataJson)) {
+                foreach ($startupFields as $field) {
+                    if (!isset($data[$field]) && isset($decodedDataJson[$field])) {
+                        $data[$field] = $decodedDataJson[$field];
+                    }
+                }
+            }
+        }
+    }
+    
     // Преобразуем массив регионов в строку для обратной совместимости (если данные из data_json)
     if (isset($data['presence_regions']) && is_array($data['presence_regions'])) {
         $data['presence_regions'] = implode(', ', array_filter(array_map('trim', $data['presence_regions'])));
@@ -1137,15 +1203,193 @@ function buildMaskedTeaserPayload(array $payload): array
  * с заранее известными ключами, чтобы дальнейший парсинг был детерминированным.
  * Дополнительно подмешиваются выдержки с корпоративного сайта, если они есть.
  */
-function buildTeaserPrompt(array $payload): string
+/**
+ * Очищает snapshot сайта от JavaScript кода, HTML тегов и странных символов.
+ * Оставляет только читаемый текст на русском языке.
+ * 
+ * @param string $snapshot Исходный snapshot сайта
+ * @return string Очищенный текст
+ */
+function cleanWebsiteSnapshot(string $snapshot): string
+{
+    // Удаляем HTML теги
+    $clean = strip_tags($snapshot);
+    
+    // Удаляем JavaScript код (функции, переменные, вызовы)
+    $clean = preg_replace('/function\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*\{[^}]*\}/s', '', $clean);
+    $clean = preg_replace('/var\s+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/', '', $clean);
+    $clean = preg_replace('/let\s+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/', '', $clean);
+    $clean = preg_replace('/const\s+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/', '', $clean);
+    $clean = preg_replace('/document\.(getElementById|querySelector|createElement|scripts|scripts\.length)/i', '', $clean);
+    $clean = preg_replace('/window\.(location|history|navigator)/i', '', $clean);
+    $clean = preg_replace('/[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\.(push|pop|shift|unshift|splice)/i', '', $clean);
+    $clean = preg_replace('/for\s*\([^)]*\)\s*\{[^}]*\}/s', '', $clean);
+    $clean = preg_replace('/if\s*\([^)]*\)\s*\{[^}]*\}/s', '', $clean);
+    $clean = preg_replace('/\bmi\s*=\s*[^;]+;/i', '', $clean);
+    $clean = preg_replace('/\bmi\.[a-zA-Z]+\s*=/i', '', $clean);
+    
+    // Удаляем строки, которые выглядят как код (содержат много специальных символов)
+    $lines = explode("\n", $clean);
+    $filteredLines = [];
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '') {
+            continue;
+        }
+        // Пропускаем строки, которые выглядят как код
+        if (preg_match('/[{}();=<>\[\]]{3,}/', $line)) {
+            continue;
+        }
+        // Пропускаем строки с большим количеством английских слов подряд без русских букв
+        if (preg_match('/^[a-zA-Z0-9\s.,;:(){}[\]<>=\-+*\/&|!@#$%^]+$/', $line) && 
+            !preg_match('/[а-яА-ЯёЁ]/u', $line) && 
+            mb_strlen($line) > 20) {
+            continue;
+        }
+        $filteredLines[] = $line;
+    }
+    $clean = implode("\n", $filteredLines);
+    
+    // Удаляем множественные пробелы и переносы строк
+    $clean = preg_replace('/\s+/', ' ', $clean);
+    $clean = preg_replace('/\n{3,}/', "\n\n", $clean);
+    
+    // Удаляем строки, которые повторяются более одного раза
+    $sentences = preg_split('/(?<=[\.\!\?])\s+/u', $clean);
+    $uniqueSentences = [];
+    foreach ($sentences as $sentence) {
+        $sentence = trim($sentence);
+        if ($sentence === '') {
+            continue;
+        }
+        // Проверяем, не является ли это повторением
+        $isDuplicate = false;
+        foreach ($uniqueSentences as $existing) {
+            if (mb_strtolower($sentence) === mb_strtolower($existing) || 
+                similar_text(mb_strtolower($sentence), mb_strtolower($existing)) > 90) {
+                $isDuplicate = true;
+                break;
+            }
+        }
+        if (!$isDuplicate) {
+            $uniqueSentences[] = $sentence;
+        }
+    }
+    $clean = implode(' ', $uniqueSentences);
+    
+    return trim($clean);
+}
+
+/**
+ * Формирует промпт для генерации тизера стартапа.
+ * 
+ * @param string $displayNameInPrompt Отображаемое имя компании
+ * @param string $nameInstruction Инструкция по скрытому имени
+ * @param string $cashOutInstruction Инструкция по cash-out
+ * @param string $json JSON данные анкеты
+ * @param string $siteNote Заметка о сайте
+ * @return string Промпт для AI
+ */
+function buildStartupTeaserPrompt(string $displayNameInPrompt, string $nameInstruction, string $cashOutInstruction, string $json, string $siteNote): string
+{
+    return <<<PROMPT
+Ты — инвестиционный банкир. Подготовь лаконичный тизер {$displayNameInPrompt} для потенциальных инвесторов.
+
+Важно:
+- Отвечай строго на русском языке. НЕ используй английские слова, кроме обязательных технических терминов (например, MVP, SaaS, B2B).
+- ИСПОЛЬЗУЙ ВСЮ ИМЕЮЩУЮСЯ ИНФОРМАЦИЮ из анкеты. Если поле заполнено — используй его. Если поле пустое или отсутствует — пиши «уточняется».
+- Для стартапов многие поля могут быть не заполнены — это нормально. Используй то, что есть, и указывай «уточняется» для отсутствующих данных.
+- При необходимости дополни данные публичными отраслевыми фактами (без выдумывания конкретных чисел, если они неупомянуты).
+- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.
+- Для блока "overview.summary": напиши 2-4 абзаца по 2-3 предложения в каждом. Каждый абзац должен быть отделён пустой строкой. Используй деловой стиль без канцелярита. Структура: 1) описание продукта и компании, 2) ключевые показатели и тракция, 3) рынок и конкурентные преимущества, 4) инвестиционный запрос и планы развития.
+- ИГНОРИРУЙ любые фрагменты JavaScript кода, HTML теги, технические символы ({}, [], (), =, function, var, let, const, document, window и т.д.) из данных сайта. Используй только читаемый текст на русском языке.
+- НЕ повторяй одни и те же предложения или фразы. Каждое предложение должно добавлять новую информацию.
+- Если в данных сайта есть повторяющиеся фразы или код — пропусти их и используй только уникальную информацию.{$nameInstruction}{$cashOutInstruction}
+
+Структура ответа — строго валидный JSON:
+{
+  "overview": {
+      "title": "...",
+      "summary": "...",
+      "key_metrics": ["...", "..."]
+  },
+  "product_technology": {
+      "product_description": "...",
+      "technology": "...",
+      "ip_patents": "...",
+      "product_stage": "..."
+  },
+  "team": {
+      "founders": "...",
+      "key_employees": "...",
+      "headcount": "...",
+      "social_links": "..."
+  },
+  "traction": {
+      "users": "...",
+      "mrr": "...",
+      "dau_mau": "...",
+      "conversion": "...",
+      "retention": "...",
+      "pilots": "..."
+  },
+  "market": {
+      "trend": "...",
+      "size": "...",
+      "growth": "...",
+      "sources": ["...", "..."]
+  },
+  "financials_forecast": {
+      "revenue_2023": "...",
+      "revenue_2024": "...",
+      "revenue_2025": "...",
+      "forecast": "...",
+      "unit_economics": "...",
+      "valuation": "..."
+  },
+  "roadmap": {
+      "development_plan": "...",
+      "scaling_plans": "...",
+      "funding_usage": "..."
+  },
+  "highlights": {
+      "bullets": ["...", "...", "..."]
+  },
+  "deal_terms": {
+      "structure": "...",
+      "share_for_sale": "...",
+      "valuation_expectation": "...",
+      "price": "...",
+      "use_of_proceeds": "..."
+  },
+  "next_steps": {
+      "cta": "...",
+      "contact": "...",
+      "disclaimer": "..."
+  }
+}
+
+Данные анкеты:
+{$json}
+{$siteNote}
+
+ВАЖНО: Если в данных анкеты указана цена предложения Продавца (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если цена предложения Продавца не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
+PROMPT;
+}
+
+function buildTeaserPrompt(array $payload, bool $isStartup = false): string
 {
     $assetName = $payload['asset_name'] ?? 'Неизвестный актив';
     $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     $siteNote = '';
     if (!empty($payload['company_website']) && !empty($payload['company_website_snapshot'])) {
+        // Очищаем snapshot от JavaScript кода и странных символов
+        $cleanedSnapshot = cleanWebsiteSnapshot($payload['company_website_snapshot']);
+        if (!empty($cleanedSnapshot)) {
         $siteNote = "\nДополнительные сведения с сайта {$payload['company_website']}:\n" .
-            $payload['company_website_snapshot'] .
-            "\n";
+                $cleanedSnapshot .
+                "\nВАЖНО: При использовании информации с сайта игнорируй любые фрагменты кода, JavaScript функции, технические символы. Используй только читаемый текст на русском языке. Если в тексте есть английские слова или код - пропусти их.\n";
+        }
     }
 
     // Проверяем, скрыто ли имя компании
@@ -1164,6 +1408,11 @@ function buildTeaserPrompt(array $payload): string
         $cashOutInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Цель сделки - только cash-out (выход продавца). Продавец забирает деньги и выходит из бизнеса. НЕ используй фразы о том, что инвестиции позволят ускорить развитие, расширить присутствие, поддержать рост выручки, масштабировать бизнес или что-либо подобное. НЕ упоминай направления использования инвестиций на развитие компании. Фокус должен быть на текущем состоянии бизнеса и его привлекательности для покупателя, а не на планах развития.";
     }
 
+    if ($isStartup) {
+        // Промпт для стартапов
+        return buildStartupTeaserPrompt($displayNameInPrompt, $nameInstruction, $cashOutInstruction, $json, $siteNote);
+    } else {
+        // Промпт для зрелых компаний (текущая структура)
     return <<<PROMPT
 Ты — инвестиционный банкир. Подготовь лаконичный тизер {$displayNameInPrompt} для потенциальных инвесторов.
 
@@ -1229,6 +1478,7 @@ function buildTeaserPrompt(array $payload): string
 
 ВАЖНО: Если в данных анкеты указана цена предложения Продавца (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если цена предложения Продавца не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
 PROMPT;
+    }
 }
 
 /**
@@ -1649,7 +1899,7 @@ function parseTeaserResponse(string $text): array
  * На этом этапе уже всё нормализовано — остаётся собрать карточки, графики
  * и вспомогательные блоки (кнопки, подсказки, подписи и т.п.).
  */
-function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null, ?TeaserLogger $logger = null, ?string $apiKey = null): string
+function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?array $dcfData = null, ?TeaserLogger $logger = null, ?string $apiKey = null, bool $isStartup = false): string
 {
     // Рендерим hero блок в начале
     $heroHtml = renderHeroBlock($assetName, $data, $payload, $dcfData, $logger, $apiKey);
@@ -1665,6 +1915,61 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         ], 'overview');
     }
 
+    if ($isStartup) {
+        // Блоки для стартапов
+        
+        // Продукт и технология
+        if (!empty($data['product_technology'])) {
+            $productTech = $data['product_technology'];
+            $bullets = array_filter([
+                formatMetric('Описание продукта', $productTech['product_description'] ?? ''),
+                formatMetric('Технология', $productTech['technology'] ?? ''),
+                formatMetric('Патенты и ИС', $productTech['ip_patents'] ?? ''),
+                formatMetric('Стадия продукта', $productTech['product_stage'] ?? ''),
+            ]);
+            if ($bullets) {
+                $blocks[] = renderCard('Продукт и технология', [
+                    'list' => $bullets,
+                ], 'product_technology');
+            }
+        }
+        
+        // Команда
+        if (!empty($data['team'])) {
+            $team = $data['team'];
+            $bullets = array_filter([
+                formatMetric('Основатели', $team['founders'] ?? ''),
+                formatMetric('Ключевые сотрудники', $team['key_employees'] ?? ''),
+                formatMetric('Численность команды', $team['headcount'] ?? ''),
+                formatMetric('Социальные сети', $team['social_links'] ?? ''),
+            ]);
+            if ($bullets) {
+                $blocks[] = renderCard('Команда', [
+                    'list' => $bullets,
+                ], 'team');
+            }
+        }
+        
+        // Traction
+        if (!empty($data['traction'])) {
+            $traction = $data['traction'];
+            $bullets = array_filter([
+                formatMetric('Пользователи/клиенты', $traction['users'] ?? ''),
+                formatMetric('MRR', $traction['mrr'] ?? ''),
+                formatMetric('DAU/MAU', $traction['dau_mau'] ?? ''),
+                formatMetric('Конверсия', $traction['conversion'] ?? ''),
+                formatMetric('Удержание', $traction['retention'] ?? ''),
+                formatMetric('Пилоты и партнерства', $traction['pilots'] ?? ''),
+            ]);
+            if ($bullets) {
+                $blocks[] = renderCard('Traction', [
+                    'list' => $bullets,
+                ], 'traction');
+            }
+        }
+    } else {
+        // Блоки для зрелых компаний
+
     if (!empty($data['company_profile'])) {
         $profile = $data['company_profile'];
         $bullets = array_filter([
@@ -1672,12 +1977,12 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
             formatMetric('Год основания', $profile['established'] ?? ''),
             formatMetric('Персонал', $profile['headcount'] ?? ''),
             formatMetric('Локации', $profile['locations'] ?? ''),
-            // Показываем "Операционная модель" только если есть полезная информация
-            (!empty($profile['operations']) && 
-             $profile['operations'] !== 'Дополнительные сведения доступны по запросу.' &&
-             trim($profile['operations']) !== '') 
-                ? formatMetric('Операционная модель', $profile['operations']) 
-                : null,
+                // Показываем "Операционная модель" только если есть полезная информация
+                (!empty($profile['operations']) && 
+                 $profile['operations'] !== 'Дополнительные сведения доступны по запросу.' &&
+                 trim($profile['operations']) !== '') 
+                    ? formatMetric('Операционная модель', $profile['operations']) 
+                    : null,
             formatMetric('Уникальные активы', $profile['unique_assets'] ?? ''),
         ]);
         if ($bullets) {
@@ -1699,6 +2004,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
             $blocks[] = renderCard('Продукты и клиенты', [
                 'list' => $bullets,
             ], 'products');
+            }
         }
     }
 
@@ -1711,15 +2017,50 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         ], 'market');
     }
 
+    if ($isStartup) {
+        // Финансовые показатели и прогнозы для стартапов
+        if (!empty($data['financials_forecast'])) {
+            $financials = $data['financials_forecast'];
+            $bullets = array_filter([
+                formatMetric('Выручка 2023', $financials['revenue_2023'] ?? ''),
+                formatMetric('Выручка 2024', $financials['revenue_2024'] ?? ''),
+                formatMetric('Выручка 2025', $financials['revenue_2025'] ?? ''),
+                formatMetric('Прогноз', $financials['forecast'] ?? ''),
+                formatMetric('Юнит-экономика', $financials['unit_economics'] ?? ''),
+                formatMetric('Текущая оценка', $financials['valuation'] ?? ''),
+            ]);
+            if ($bullets) {
+                $blocks[] = renderCard('Финансовые показатели и прогнозы', [
+                    'list' => $bullets,
+                ], 'financials_forecast');
+            }
+        }
+        
+        // Roadmap развития
+        if (!empty($data['roadmap'])) {
+            $roadmap = $data['roadmap'];
+            $bullets = array_filter([
+                formatMetric('План развития', $roadmap['development_plan'] ?? ''),
+                formatMetric('Планы масштабирования', $roadmap['scaling_plans'] ?? ''),
+                formatMetric('Использование инвестиций', $roadmap['funding_usage'] ?? ''),
+            ]);
+            if ($bullets) {
+                $blocks[] = renderCard('Roadmap развития', [
+                    'list' => $bullets,
+                ], 'roadmap');
+            }
+        }
+    } else {
+        // Финансовый профиль для зрелых компаний
     if (!empty($data['financials'])) {
         $financials = $data['financials'];
         
-        // Используем данные из DCF модели для первого прогнозного года (P1 - 2026П)
+            // Используем данные из DCF модели для первого прогнозного года (P1 - 2026П)
         $revenue = null;
         $profit = null;
         $margin = null;
         $capex = null;
-        $year = '2026';
+            $year = '2026';
         
         if ($dcfData && !empty($dcfData['rows']) && is_array($dcfData['rows'])) {
             foreach ($dcfData['rows'] as $row) {
@@ -1727,7 +2068,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
                     continue;
                 }
                 
-                // Получаем данные за P1 (2026П - первый прогнозный период)
+                    // Получаем данные за P1 (2026П - первый прогнозный период)
                 if ($row['label'] === 'Выручка' && isset($row['values']['P1']) && $row['values']['P1'] !== null && $row['values']['P1'] !== '') {
                     $revenue = (float)$row['values']['P1'];
                 }
@@ -1787,6 +2128,7 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         }
         if ($timeline) {
             $blocks[] = renderTeaserChart($timeline);
+            }
         }
     }
 
@@ -2695,9 +3037,10 @@ function renderTeaserChart(array $series): string
     return $html;
 }
 
-function normalizeTeaserData(array $data, array $payload): array
+function normalizeTeaserData(array $data, array $payload, bool $isStartup = false): array
 {
     $placeholder = 'Дополнительные сведения доступны по запросу.';
+    $placeholderStartup = 'уточняется'; // Более подходящий placeholder для стартапов
     $assetName = $payload['asset_name'] ?? 'Актив';
     $companyDesc = trim((string)($payload['company_description'] ?? ''));
 
@@ -2706,28 +3049,74 @@ function normalizeTeaserData(array $data, array $payload): array
         'summary' => buildHeroSummary(
             $data['overview']['summary'] ?? null,
             $payload,
-            $placeholder
+            $isStartup ? $placeholderStartup : $placeholder
         ),
         'key_metrics' => normalizeArray($data['overview']['key_metrics'] ?? [
-            formatMetric('Персонал', $payload['personnel_count'] ?? 'уточняется'),
-            formatMetric('Доля продаж онлайн', $payload['online_sales_share'] ?? 'уточняется'),
+            formatMetric('Персонал', $payload['personnel_count'] ?? ($isStartup ? $placeholderStartup : 'уточняется')),
+            formatMetric('Доля продаж онлайн', $payload['online_sales_share'] ?? ($isStartup ? $placeholderStartup : 'уточняется')),
         ]),
     ];
 
-    // Формируем описание операционной модели на основе данных анкеты
-    $operationsModel = $data['company_profile']['operations'] ?? null;
-    // Если AI не предоставил описание или это placeholder, пытаемся сформировать из данных анкеты
-    if (empty($operationsModel) || $operationsModel === $placeholder || trim($operationsModel) === '') {
-        $operationsModel = buildOperationsModel($payload);
-    }
+    if ($isStartup) {
+        // Нормализация данных для стартапов - используем "уточняется" для пустых полей
+        $data['product_technology'] = [
+            'product_description' => $data['product_technology']['product_description'] ?? ($payload['startup_product_description'] ?? $placeholderStartup),
+            'technology' => $data['product_technology']['technology'] ?? ($payload['startup_technology_description'] ?? $placeholderStartup),
+            'ip_patents' => $data['product_technology']['ip_patents'] ?? ($payload['startup_patents_ip'] ?? $placeholderStartup),
+            'product_stage' => $data['product_technology']['product_stage'] ?? ($payload['startup_product_stage'] ?? $placeholderStartup),
+        ];
+
+        $data['team'] = [
+            'founders' => $data['team']['founders'] ?? ($payload['startup_shareholders'] ?? $placeholderStartup),
+            'key_employees' => $data['team']['key_employees'] ?? ($payload['startup_key_employees'] ?? $placeholderStartup),
+            'headcount' => $data['team']['headcount'] ?? ($payload['personnel_count'] ?? $placeholderStartup),
+            'social_links' => $data['team']['social_links'] ?? ($payload['startup_social_links'] ?? $placeholderStartup),
+        ];
+
+        $data['traction'] = [
+            'users' => $data['traction']['users'] ?? ($payload['startup_user_count'] ?? $placeholderStartup),
+            'mrr' => $data['traction']['mrr'] ?? ($payload['startup_mrr'] ?? $placeholderStartup),
+            'dau_mau' => $data['traction']['dau_mau'] ?? ($payload['startup_dau_mau'] ?? $placeholderStartup),
+            'conversion' => $data['traction']['conversion'] ?? ($payload['startup_conversion_rate'] ?? $placeholderStartup),
+            'retention' => $data['traction']['retention'] ?? ($payload['startup_retention_rate'] ?? $placeholderStartup),
+            'pilots' => $data['traction']['pilots'] ?? ($payload['startup_pilot_projects'] ?? $placeholderStartup),
+        ];
+
+        $data['roadmap'] = [
+            'development_plan' => $data['roadmap']['development_plan'] ?? ($payload['startup_roadmap'] ?? $placeholderStartup),
+            'scaling_plans' => $data['roadmap']['scaling_plans'] ?? ($payload['startup_scaling_plans'] ?? $placeholderStartup),
+            'funding_usage' => $data['roadmap']['funding_usage'] ?? ($payload['startup_funding_usage'] ?? $placeholderStartup),
+        ];
+
+        // Финансовые показатели и прогнозы для стартапов
+        $revenue2023 = $payload['startup_revenue_2023'] ?? null;
+        $revenue2024 = $payload['startup_revenue_2024'] ?? null;
+        $revenue2025 = $payload['startup_revenue_2025'] ?? null;
+        
+        $data['financials_forecast'] = [
+            'revenue_2023' => $data['financials_forecast']['revenue_2023'] ?? ($revenue2023 !== null ? number_format($revenue2023, 0, '.', ' ') . ' млн ₽' : $placeholderStartup),
+            'revenue_2024' => $data['financials_forecast']['revenue_2024'] ?? ($revenue2024 !== null ? number_format($revenue2024, 0, '.', ' ') . ' млн ₽' : $placeholderStartup),
+            'revenue_2025' => $data['financials_forecast']['revenue_2025'] ?? ($revenue2025 !== null ? number_format($revenue2025, 0, '.', ' ') . ' млн ₽' : $placeholderStartup),
+            'forecast' => $data['financials_forecast']['forecast'] ?? $placeholderStartup,
+            'unit_economics' => $data['financials_forecast']['unit_economics'] ?? $placeholderStartup,
+            'valuation' => $data['financials_forecast']['valuation'] ?? ($payload['startup_current_valuation'] ?? $placeholderStartup),
+        ];
+    } else {
+        // Нормализация данных для зрелых компаний
+        // Формируем описание операционной модели на основе данных анкеты
+        $operationsModel = $data['company_profile']['operations'] ?? null;
+        // Если AI не предоставил описание или это placeholder, пытаемся сформировать из данных анкеты
+        if (empty($operationsModel) || $operationsModel === $placeholder || trim($operationsModel) === '') {
+            $operationsModel = buildOperationsModel($payload);
+        }
 
     $data['company_profile'] = [
         'industry' => $data['company_profile']['industry'] ?? ($payload['products_services'] ?? $placeholder),
         'established' => $data['company_profile']['established'] ?? ($payload['production_area'] ? 'Бизнес с развитой инфраструктурой' : $placeholder),
         'headcount' => $data['company_profile']['headcount'] ?? ($payload['personnel_count'] ?? $placeholder),
         'locations' => $data['company_profile']['locations'] ?? ($payload['presence_regions'] ?? $placeholder),
-        // Используем сформированное описание или null (будет скрыто при отображении)
-        'operations' => $operationsModel,
+            // Используем сформированное описание или null (будет скрыто при отображении)
+            'operations' => $operationsModel,
         'unique_assets' => $data['company_profile']['unique_assets'] ?? ($payload['company_brands'] ?? $placeholder),
     ];
 
@@ -2738,36 +3127,38 @@ function normalizeTeaserData(array $data, array $payload): array
         'sales_channels' => $data['products']['sales_channels'] ?? buildSalesChannelsText($payload),
     ];
 
+        // Извлекаем финансовые данные с учетом единиц измерения для зрелых компаний
+        $revenueRaw = $payload['financial']['revenue']['2024_fact'] ?? null;
+        $revenueUnit = detectFinancialUnit($payload['financial']['revenue']['unit'] ?? '');
+        $revenueValue = $revenueRaw !== null ? convertFinancialToMillions($revenueRaw, $revenueUnit) : null;
+        $revenueText = $revenueValue !== null ? number_format($revenueValue, 0, '.', ' ') . ' млн ₽' : $placeholder;
+        
+        $profitRaw = $payload['financial']['sales_profit']['2024_fact'] ?? null;
+        $profitUnit = detectFinancialUnit($payload['financial']['sales_profit']['unit'] ?? '');
+        $profitValue = $profitRaw !== null ? convertFinancialToMillions($profitRaw, $profitUnit) : null;
+        $profitText = $profitValue !== null ? number_format($profitValue, 0, '.', ' ') . ' млн ₽' : $placeholder;
+        
+        $capexRaw = $payload['financial']['fixed_assets_acquisition']['2024_fact'] ?? null;
+        $capexUnit = detectFinancialUnit($payload['financial']['fixed_assets_acquisition']['unit'] ?? '');
+        $capexValue = $capexRaw !== null ? convertFinancialToMillions($capexRaw, $capexUnit) : null;
+        $capexText = $capexValue !== null ? number_format($capexValue, 0, '.', ' ') . ' млн ₽' : 'Низкая CAPEX-нагрузка.';
+
+        $data['financials'] = [
+            'revenue' => $data['financials']['revenue'] ?? $revenueText,
+            'ebitda' => $data['financials']['ebitda'] ?? $profitText,
+            'margins' => $data['financials']['margins'] ?? 'Маржинальность уточняется.',
+            'capex' => $data['financials']['capex'] ?? $capexText,
+            'notes' => $data['financials']['notes'] ?? 'Финансовые показатели подтверждены данными анкеты.',
+        ];
+    }
+
+    // Блок market общий для обоих типов компаний
     $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
     $data['market'] = [
         'trend' => $marketInsight['trend'],
         'size' => $marketInsight['size'],
         'growth' => $marketInsight['growth'],
         'sources' => normalizeArray($marketInsight['sources']),
-    ];
-
-    // Извлекаем финансовые данные с учетом единиц измерения
-    $revenueRaw = $payload['financial']['revenue']['2024_fact'] ?? null;
-    $revenueUnit = detectFinancialUnit($payload['financial']['revenue']['unit'] ?? '');
-    $revenueValue = $revenueRaw !== null ? convertFinancialToMillions($revenueRaw, $revenueUnit) : null;
-    $revenueText = $revenueValue !== null ? number_format($revenueValue, 0, '.', ' ') . ' млн ₽' : $placeholder;
-    
-    $profitRaw = $payload['financial']['sales_profit']['2024_fact'] ?? null;
-    $profitUnit = detectFinancialUnit($payload['financial']['sales_profit']['unit'] ?? '');
-    $profitValue = $profitRaw !== null ? convertFinancialToMillions($profitRaw, $profitUnit) : null;
-    $profitText = $profitValue !== null ? number_format($profitValue, 0, '.', ' ') . ' млн ₽' : $placeholder;
-    
-    $capexRaw = $payload['financial']['fixed_assets_acquisition']['2024_fact'] ?? null;
-    $capexUnit = detectFinancialUnit($payload['financial']['fixed_assets_acquisition']['unit'] ?? '');
-    $capexValue = $capexRaw !== null ? convertFinancialToMillions($capexRaw, $capexUnit) : null;
-    $capexText = $capexValue !== null ? number_format($capexValue, 0, '.', ' ') . ' млн ₽' : 'Низкая CAPEX-нагрузка.';
-
-    $data['financials'] = [
-        'revenue' => $data['financials']['revenue'] ?? $revenueText,
-        'ebitda' => $data['financials']['ebitda'] ?? $profitText,
-        'margins' => $data['financials']['margins'] ?? 'Маржинальность уточняется.',
-        'capex' => $data['financials']['capex'] ?? $capexText,
-        'notes' => $data['financials']['notes'] ?? 'Финансовые показатели подтверждены данными анкеты.',
     ];
 
     $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
@@ -2868,14 +3259,49 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
         return $data;
     }
 
+    // Определяем, является ли это стартапом
+    $companyType = $payload['company_type'] ?? null;
+    $isStartup = ($companyType === 'startup');
+
     try {
-        $prompt = buildOverviewRefinementPrompt($data['overview'], $payload);
+        $prompt = buildOverviewRefinementPrompt($data['overview'], $payload, $isStartup);
         $aiText = trim(callAICompletions($prompt, $apiKey));
         $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
         // Remove "M&A платформа" and similar phrases
         $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
         $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
         $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
+        
+        // Удаляем JavaScript код и технические символы, если они попали в текст
+        $aiText = preg_replace('/function\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*\{[^}]*\}/s', '', $aiText);
+        $aiText = preg_replace('/var\s+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/', '', $aiText);
+        $aiText = preg_replace('/document\.(getElementById|querySelector|createElement|scripts)/i', '', $aiText);
+        $aiText = preg_replace('/\bmi\s*=\s*[^;]+;/i', '', $aiText);
+        $aiText = preg_replace('/\bmi\.[a-zA-Z]+\s*=/i', '', $aiText);
+        
+        // Удаляем строки, которые выглядят как код (содержат много специальных символов)
+        $lines = explode("\n", $aiText);
+        $filteredLines = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                $filteredLines[] = '';
+                continue;
+            }
+            // Пропускаем строки, которые выглядят как код
+            if (preg_match('/[{}();=<>\[\]]{3,}/', $line)) {
+                continue;
+            }
+            // Пропускаем строки с большим количеством английских слов подряд без русских букв
+            if (preg_match('/^[a-zA-Z0-9\s.,;:(){}[\]<>=\-+*\/&|!@#$%^]+$/', $line) && 
+                !preg_match('/[а-яА-ЯёЁ]/u', $line) && 
+                mb_strlen($line) > 20) {
+                continue;
+            }
+            $filteredLines[] = $line;
+        }
+        $aiText = implode("\n", $filteredLines);
+        
         // Сохраняем двойные переносы строк для абзацев, заменяем только множественные пробелы и табы
         $aiText = preg_replace('/[ \t]+/', ' ', $aiText); // Заменяем только пробелы и табы, не переносы строк
         // Нормализуем переносы строк: оставляем только одиночные и двойные
@@ -3035,6 +3461,35 @@ function shouldEnhanceOverview(array $overview): bool
 }
 
 /**
+ * Формирует промпт для улучшения блока "Обзор возможности" для стартапов.
+ * 
+ * @param array $overview Текущие данные блока overview
+ * @param string $factsJson JSON с фактами из анкеты
+ * @param string $nameInstruction Инструкция по скрытому имени
+ * @param string $languageInstruction Инструкция по языку
+ * @param string $fourthParagraphInstruction Инструкция для 4-го абзаца
+ * @return string Промпт для AI
+ */
+function buildStartupOverviewRefinementPrompt(array $overview, string $factsJson, string $nameInstruction, string $languageInstruction, string $fourthParagraphInstruction): string
+{
+    $existingSummary = trim((string)($overview['summary'] ?? ''));
+    
+    return <<<PROMPT
+Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}{$languageInstruction}
+- Стиль: деловой и живой тон без канцелярита.
+- Сформируй несколько абзацев (2-4 абзаца), в каждом по 2-3 предложения. Делай переходы логичными: 1) кто компания и что делает, 2) ключевые показатели и достижения, 3) конкурентные преимущества и потенциал, {$fourthParagraphInstruction}
+- Используй только приведённые факты, не придумывай цифры или названия.
+- Внутри предложений соединяй части запятыми, избегай сухих списков.
+- Каждый абзац должен быть отделён пустой строкой от предыдущего.
+
+Исходная версия: "{$existingSummary}"
+
+Факты:
+{$factsJson}
+PROMPT;
+}
+
+/**
  * Формирует промпт для улучшения блока "Обзор возможности" через AI.
  * 
  * Собирает факты из анкеты и формирует структурированный промпт для генерации
@@ -3042,9 +3497,10 @@ function shouldEnhanceOverview(array $overview): bool
  * 
  * @param array $overview Текущие данные блока overview
  * @param array $payload Данные анкеты
+ * @param bool $isStartup Является ли компания стартапом
  * @return string Промпт для AI
  */
-function buildOverviewRefinementPrompt(array $overview, array $payload): string
+function buildOverviewRefinementPrompt(array $overview, array $payload, bool $isStartup = false): string
 {
     $assetName = $payload['asset_name'] ?? '';
     $assetDisclosure = $payload['asset_disclosure'] ?? '';
@@ -3056,7 +3512,39 @@ function buildOverviewRefinementPrompt(array $overview, array $payload): string
         $nameFact = $assetName;
     }
     
+    if ($isStartup) {
+        // Факты для стартапов
     $facts = [
+            'Название' => $nameFact !== '' ? $nameFact : '',
+            'Продукт' => $payload['startup_product_description'] ?? '',
+            'Технология' => $payload['startup_technology_description'] ?? '',
+            'Стадия продукта' => $payload['startup_product_stage'] ?? '',
+            'Пользователи' => $payload['startup_users_count'] ?? '',
+            'MRR' => $payload['startup_mrr'] ?? '',
+            'DAU/MAU' => ($payload['startup_dau'] ?? '') . '/' . ($payload['startup_mau'] ?? ''),
+            'Конверсия' => $payload['startup_conversion_rate'] ?? '',
+            'Retention' => $payload['startup_retention_rate'] ?? '',
+            'Команда' => $payload['startup_key_employees'] ?? '',
+            'Акционеры' => $payload['startup_shareholders'] ?? '',
+            'Рынок' => $payload['startup_target_market'] ?? '',
+            'Конкуренты' => $payload['startup_competitors'] ?? '',
+            'Преимущества' => $payload['startup_competitive_advantages'] ?? '',
+            'Roadmap' => $payload['startup_roadmap'] ?? '',
+            'Планы масштабирования' => $payload['startup_scaling_plans'] ?? '',
+            'Использование инвестиций' => $payload['startup_funding_usage'] ?? '',
+            'Выручка 2023' => $payload['startup_revenue_2023'] ?? '',
+            'Выручка 2024' => $payload['startup_revenue_2024'] ?? '',
+            'Выручка 2025' => $payload['startup_revenue_2025'] ?? '',
+            'Прогноз роста' => $payload['startup_forecast'] ?? '',
+            'Оценка' => $payload['startup_valuation'] ?? '',
+            'Требуемые инвестиции' => $payload['startup_investment_amount'] ?? '',
+            'Цель сделки' => $payload['deal_goal'] ?? '',
+            'Доля к продаже' => $payload['deal_share_range'] ?? '',
+            'Источник сайта' => buildWebsiteInsightSentence($payload) ?? '',
+        ];
+    } else {
+        // Факты для зрелых компаний
+        $facts = [
         'Отрасль' => $payload['products_services'] ?? '',
         'Регионы присутствия' => $payload['presence_regions'] ?? '',
         'Клиенты' => $payload['main_clients'] ?? '',
@@ -3068,25 +3556,24 @@ function buildOverviewRefinementPrompt(array $overview, array $payload): string
         'Загрузка мощностей' => $payload['production_load'] ?? '',
         'Источник сайта' => buildWebsiteInsightSentence($payload) ?? '',
     ];
-    
-    // Добавляем название только если оно не скрыто
-    if ($nameFact !== '') {
-        $facts = array_merge(['Название' => $nameFact], $facts);
-    }
-    
-    // Не передаем бренды для скрытых активов
-    if (!$isNameHidden) {
-        $brands = $payload['company_brands'] ?? '';
-        if ($brands !== '') {
-            $facts['Бренды'] = $brands;
+        
+        // Добавляем название только если оно не скрыто
+        if ($nameFact !== '') {
+            $facts = array_merge(['Название' => $nameFact], $facts);
+        }
+        
+        // Не передаем бренды для скрытых активов
+        if (!$isNameHidden) {
+            $brands = $payload['company_brands'] ?? '';
+            if ($brands !== '') {
+                $facts['Бренды'] = $brands;
+            }
         }
     }
 
     $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
     $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
-    $existingSummary = trim((string)($overview['summary'] ?? ''));
-    
     $nameInstruction = '';
     if ($isNameHidden) {
         $nameInstruction = "\nВАЖНО: Название компании скрыто. НЕ используй слово 'Актив' в тексте вообще. Можно использовать 'Компания' или 'Фирма', но НЕ упоминай 'Актив' ни в каком виде (ни отдельно, ни в сочетаниях типа 'Компания Актив', 'Компания «Актив»' и т.д.).";
@@ -3100,9 +3587,21 @@ function buildOverviewRefinementPrompt(array $overview, array $payload): string
         $cashOutInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Цель сделки - только cash-out (выход продавца). Продавец забирает деньги и выходит из бизнеса. НЕ используй фразы о том, что инвестиции позволят ускорить развитие, расширить присутствие, поддержать рост выручки, масштабировать бизнес или что-либо подобное. НЕ упоминай направления использования инвестиций на развитие компании. Фокус должен быть на текущем состоянии бизнеса и его привлекательности для покупателя, а не на планах развития.";
         $fourthParagraphInstruction = '4) текущее состояние бизнеса и его привлекательность для покупателя.';
     }
+    
+    if ($isStartup) {
+        // Для стартапов используем отдельную функцию
+        $fourthParagraphInstruction = '4) планы развития, roadmap и использование инвестиций.';
+        $languageInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Отвечай строго на русском языке. НЕ используй английские слова, кроме обязательных технических терминов (MVP, SaaS, B2B). ИГНОРИРУЙ любые фрагменты JavaScript кода, HTML теги, технические символы ({}, [], (), =, function, var, let, const, document, window и т.д.) из данных сайта. НЕ повторяй одни и те же предложения. Каждое предложение должно добавлять новую информацию.";
+        return buildStartupOverviewRefinementPrompt($overview, $factsJson, $nameInstruction, $languageInstruction, $fourthParagraphInstruction);
+    } else {
+        // Для зрелых компаний используем оригинальный промпт
+        $languageInstruction = '';
+    }
+
+    $existingSummary = trim((string)($overview['summary'] ?? ''));
 
     return <<<PROMPT
-Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}{$cashOutInstruction}
+Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}{$cashOutInstruction}{$languageInstruction}
 - Стиль: деловой и живой тон без канцелярита.
 - Сформируй несколько абзацев (2-4 абзаца), в каждом по 2-3 предложения. Делай переходы логичными: 1) кто компания и что делает, 2) география и клиенты, 3) конкурентные преимущества, {$fourthParagraphInstruction}
 - Используй только приведённые факты, не придумывай цифры или названия.
@@ -4595,12 +5094,25 @@ function buildWebsiteInsightSentence(array $payload): ?string
     if ($snapshot === '') {
         return null;
     }
-    $clean = preg_replace('/\s+/', ' ', $snapshot);
+    
+    // Очищаем snapshot от JavaScript кода и странных символов
+    $clean = cleanWebsiteSnapshot($snapshot);
+    if ($clean === '') {
+        return null;
+    }
+    
     $sentences = preg_split('/(?<=[\.\!\?])\s+/u', $clean);
     $excerpt = '';
     foreach ($sentences as $sentence) {
         $sentence = trim($sentence);
         if ($sentence === '') {
+            continue;
+        }
+        // Пропускаем предложения, которые выглядят как код
+        if (preg_match('/[{}();=<>\[\]]{3,}/', $sentence) || 
+            (preg_match('/^[a-zA-Z0-9\s.,;:(){}[\]<>=\-+*\/&|!@#$%^]+$/', $sentence) && 
+             !preg_match('/[а-яА-ЯёЁ]/u', $sentence) && 
+             mb_strlen($sentence) > 20)) {
             continue;
         }
         $excerpt .= ($excerpt === '' ? '' : ' ') . $sentence;

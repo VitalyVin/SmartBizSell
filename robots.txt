@@ -5,7 +5,7 @@ User-agent: *
 Allow: /
 Disallow: /uploads/test/
 Disallow: /venv/
-Disallow: /SQL BACKUP/
+Disallow: /SQL%20BACKUP/
 Disallow: /db/
 Disallow: /scripts/
 Disallow: /dashboard.php
