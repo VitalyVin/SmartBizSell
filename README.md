@@ -237,7 +237,7 @@ SmartBizSell/
 
 ## Лицензия
 
-© 2025 SmartBizSell.ru. Все права защищены.
+© 2026 SmartBizSell.ru. Все права защищены.
 
 ## Контакты
 

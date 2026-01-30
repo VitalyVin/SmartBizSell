@@ -1204,6 +1204,80 @@ function buildMaskedTeaserPayload(array $payload): array
  * Дополнительно подмешиваются выдержки с корпоративного сайта, если они есть.
  */
 /**
+ * Проверяет, содержит ли значение полезную информацию (не пустое, не ноль, не placeholder).
+ * 
+ * @param mixed $value Значение для проверки
+ * @return bool true если значение содержит полезную информацию, false иначе
+ */
+function hasUsefulData($value): bool
+{
+    if ($value === null) {
+        return false;
+    }
+    
+    // Если это число, проверяем что оно не ноль
+    if (is_numeric($value)) {
+        $numValue = (float)$value;
+        return $numValue != 0;
+    }
+    
+    // Если это строка, проверяем что она не пустая и не placeholder
+    if (is_string($value)) {
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return false;
+        }
+        
+        // Проверяем на placeholder-тексты
+        $placeholders = [
+            'уточняется',
+            'обсуждается',
+            'не указано',
+            'не указана',
+            'не указан',
+            'не указаны',
+            'не заполнено',
+            'не заполнена',
+            'не заполнен',
+            'не заполнены',
+            'дополнительные сведения доступны по запросу',
+            'информация уточняется',
+            'данные уточняются',
+            'н/д',
+            'n/a',
+            'n/a.',
+            '—',
+            '-',
+            '0',
+            '0.0',
+            '0,0',
+        ];
+        
+        $lowerTrimmed = mb_strtolower($trimmed);
+        foreach ($placeholders as $placeholder) {
+            if ($lowerTrimmed === mb_strtolower($placeholder)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    // Для массивов проверяем, есть ли хотя бы один элемент с полезными данными
+    if (is_array($value)) {
+        foreach ($value as $item) {
+            if (hasUsefulData($item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    // Для других типов считаем полезным, если не null
+    return true;
+}
+
+/**
  * Очищает snapshot сайта от JavaScript кода, HTML тегов и странных символов.
  * Оставляет только читаемый текст на русском языке.
  * 
@@ -1977,15 +2051,30 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         // Traction
         if (!empty($data['traction'])) {
             $traction = $data['traction'];
-            $bullets = array_filter([
-                formatMetric('Пользователи/клиенты', $traction['users'] ?? ''),
-                formatMetric('MRR', $traction['mrr'] ?? ''),
-                formatMetric('DAU/MAU', $traction['dau_mau'] ?? ''),
-                formatMetric('Конверсия', $traction['conversion'] ?? ''),
-                formatMetric('Удержание', $traction['retention'] ?? ''),
-                formatMetric('Пилоты и партнерства', $traction['pilots'] ?? ''),
-            ]);
-            if ($bullets) {
+            $bullets = [];
+            
+            // Проверяем каждое поле на наличие полезных данных перед добавлением
+            if (hasUsefulData($traction['users'] ?? null)) {
+                $bullets[] = formatMetric('Пользователи/клиенты', $traction['users'] ?? '');
+            }
+            if (hasUsefulData($traction['mrr'] ?? null)) {
+                $bullets[] = formatMetric('MRR', $traction['mrr'] ?? '');
+            }
+            if (hasUsefulData($traction['dau_mau'] ?? null)) {
+                $bullets[] = formatMetric('DAU/MAU', $traction['dau_mau'] ?? '');
+            }
+            if (hasUsefulData($traction['conversion'] ?? null)) {
+                $bullets[] = formatMetric('Конверсия', $traction['conversion'] ?? '');
+            }
+            if (hasUsefulData($traction['retention'] ?? null)) {
+                $bullets[] = formatMetric('Удержание', $traction['retention'] ?? '');
+            }
+            if (hasUsefulData($traction['pilots'] ?? null)) {
+                $bullets[] = formatMetric('Пилоты и партнерства', $traction['pilots'] ?? '');
+            }
+            
+            // Показываем блок только если есть хотя бы одно поле с полезными данными
+            if (!empty($bullets)) {
                 $blocks[] = renderCard('Traction', [
                     'list' => $bullets,
                 ], 'traction');
@@ -2045,15 +2134,30 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         // Финансовые показатели и прогнозы для стартапов
         if (!empty($data['financials_forecast'])) {
             $financials = $data['financials_forecast'];
-            $bullets = array_filter([
-                formatMetric('Выручка 2023', $financials['revenue_2023'] ?? ''),
-                formatMetric('Выручка 2024', $financials['revenue_2024'] ?? ''),
-                formatMetric('Выручка 2025', $financials['revenue_2025'] ?? ''),
-                formatMetric('Прогноз', $financials['forecast'] ?? ''),
-                formatMetric('Юнит-экономика', $financials['unit_economics'] ?? ''),
-                formatMetric('Текущая оценка', $financials['valuation'] ?? ''),
-            ]);
-            if ($bullets) {
+            $bullets = [];
+            
+            // Проверяем каждое поле на наличие полезных данных перед добавлением
+            if (hasUsefulData($financials['revenue_2023'] ?? null)) {
+                $bullets[] = formatMetric('Выручка 2023', $financials['revenue_2023'] ?? '');
+            }
+            if (hasUsefulData($financials['revenue_2024'] ?? null)) {
+                $bullets[] = formatMetric('Выручка 2024', $financials['revenue_2024'] ?? '');
+            }
+            if (hasUsefulData($financials['revenue_2025'] ?? null)) {
+                $bullets[] = formatMetric('Выручка 2025', $financials['revenue_2025'] ?? '');
+            }
+            if (hasUsefulData($financials['forecast'] ?? null)) {
+                $bullets[] = formatMetric('Прогноз', $financials['forecast'] ?? '');
+            }
+            if (hasUsefulData($financials['unit_economics'] ?? null)) {
+                $bullets[] = formatMetric('Юнит-экономика', $financials['unit_economics'] ?? '');
+            }
+            if (hasUsefulData($financials['valuation'] ?? null)) {
+                $bullets[] = formatMetric('Текущая оценка', $financials['valuation'] ?? '');
+            }
+            
+            // Показываем блок только если есть хотя бы одно поле с полезными данными
+            if (!empty($bullets)) {
                 $blocks[] = renderCard('Финансовые показатели и прогнозы', [
                     'list' => $bullets,
                 ], 'financials_forecast');
@@ -2063,12 +2167,21 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         // Roadmap развития
         if (!empty($data['roadmap'])) {
             $roadmap = $data['roadmap'];
-            $bullets = array_filter([
-                formatMetric('План развития', $roadmap['development_plan'] ?? ''),
-                formatMetric('Планы масштабирования', $roadmap['scaling_plans'] ?? ''),
-                formatMetric('Использование инвестиций', $roadmap['funding_usage'] ?? ''),
-            ]);
-            if ($bullets) {
+            $bullets = [];
+            
+            // Проверяем каждое поле на наличие полезных данных перед добавлением
+            if (hasUsefulData($roadmap['development_plan'] ?? null)) {
+                $bullets[] = formatMetric('План развития', $roadmap['development_plan'] ?? '');
+            }
+            if (hasUsefulData($roadmap['scaling_plans'] ?? null)) {
+                $bullets[] = formatMetric('Планы масштабирования', $roadmap['scaling_plans'] ?? '');
+            }
+            if (hasUsefulData($roadmap['funding_usage'] ?? null)) {
+                $bullets[] = formatMetric('Использование инвестиций', $roadmap['funding_usage'] ?? '');
+            }
+            
+            // Показываем блок только если есть хотя бы одно поле с полезными данными
+            if (!empty($bullets)) {
                 $blocks[] = renderCard('Roadmap развития', [
                     'list' => $bullets,
                 ], 'roadmap');
@@ -2170,9 +2283,10 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
         if (!empty($deal['structure'])) {
             if (is_array($deal['structure'])) {
                 // Если структура - массив, преобразуем в понятный текст
+                // Для стартапов cash_in заменяем на "привлечение инвестиций на развитие"
                 $structureMap = [
                     'cash_out' => 'выход продавца',
-                    'cash_in' => 'привлечение инвестиций',
+                    'cash_in' => $isStartup ? 'привлечение инвестиций на развитие' : 'привлечение инвестиций',
                     'debt_refinancing' => 'рефинансирование долга',
                     'growth_capital' => 'капитал для роста',
                 ];
@@ -2196,9 +2310,10 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
                 if (preg_match('/^\[.*\]$/', $structureValue)) {
                     $decoded = json_decode($structureValue, true);
                     if (is_array($decoded)) {
+                        // Для стартапов cash_in заменяем на "привлечение инвестиций на развитие"
                         $structureMap = [
                             'cash_out' => 'выход продавца',
-                            'cash_in' => 'привлечение инвестиций',
+                            'cash_in' => $isStartup ? 'привлечение инвестиций на развитие' : 'привлечение инвестиций',
                             'debt_refinancing' => 'рефинансирование долга',
                             'growth_capital' => 'капитал для роста',
                         ];
@@ -2265,6 +2380,31 @@ function renderTeaserHtml(array $data, string $assetName, array $payload = [], ?
             // Показываем использование средств только если оно указано и цель сделки не только cash_out
             !empty($deal['use_of_proceeds']) ? formatMetric('Использование средств', $deal['use_of_proceeds']) : null,
         ]);
+        
+        // Для стартапов добавляем данные об оценке и инвестициях из анкеты
+        if ($isStartup) {
+            // Получаем единицы измерения из анкеты
+            $financialUnit = $payload['startup_financial_unit'] ?? 'тыс. руб.';
+            
+            // Текущая оценка компании
+            $valuation = $payload['startup_valuation'] ?? null;
+            if (hasUsefulData($valuation)) {
+                $valuationText = is_numeric($valuation) 
+                    ? number_format((float)$valuation, 0, '.', ' ') . ' ' . $financialUnit
+                    : $valuation;
+                $bullets[] = formatMetric('Текущая оценка компании', $valuationText);
+            }
+            
+            // Требуемая сумма инвестиций
+            $investmentAmount = $payload['startup_investment_amount'] ?? null;
+            if (hasUsefulData($investmentAmount)) {
+                $investmentText = is_numeric($investmentAmount)
+                    ? number_format((float)$investmentAmount, 0, '.', ' ') . ' ' . $financialUnit
+                    : $investmentAmount;
+                $bullets[] = formatMetric('Требуемая сумма инвестиций', $investmentText);
+            }
+        }
+        
         if ($bullets) {
             $blocks[] = renderCard('Параметры сделки', [
                 'list' => $bullets,

@@ -1721,7 +1721,7 @@ SVG;
                     </div>
                 </div>
                 <div class="footer-copyright">
-                    <p>&copy; 2025 SmartBizSell.ru. Все права защищены.</p>
+                    <p>&copy; 2026 SmartBizSell.ru. Все права защищены.</p>
                 </div>
             </div>
         </div>
