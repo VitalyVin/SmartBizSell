@@ -760,7 +760,7 @@ if (empty($apiKey)) {
         if (!function_exists('normalizeTeaserData')) {
             throw new RuntimeException('Function normalizeTeaserData not found');
         }
-        $teaserData = normalizeTeaserData($teaserData, $maskedPayload, $isStartup);
+        $teaserData = normalizeTeaserData($teaserData, $maskedPayload, $isStartup, $apiKey);
         $logger->logStep('normalizeTeaserData', ['blocks_after_normalization' => array_keys($teaserData), 'is_startup' => $isStartup]);
         error_log('normalizeTeaserData completed');
         
@@ -975,6 +975,12 @@ if (empty($apiKey)) {
  * В приоритете data_json — он содержит самую свежую версию опросника.
  * Если JSON отсутствует, достраиваем payload из отдельных колонок таблицы.
  * Также добавляем служебные поля (_meta) и моментальный снимок сайта.
+ * 
+ * ВАЖНО: Данные всегда загружаются из актуальной анкеты из базы данных при каждом вызове.
+ * Это гарантирует, что тизер всегда генерируется на основе последних обновленных данных анкеты.
+ * 
+ * @param array $form Данные формы из базы данных
+ * @return array Payload для генерации тизера
  */
 function buildTeaserPayload(array $form): array
 {
@@ -3201,7 +3207,7 @@ function renderTeaserChart(array $series): string
     return $html;
 }
 
-function normalizeTeaserData(array $data, array $payload, bool $isStartup = false): array
+function normalizeTeaserData(array $data, array $payload, bool $isStartup = false, string $apiKey = ''): array
 {
     $placeholder = 'Дополнительные сведения доступны по запросу.';
     $placeholderStartup = 'уточняется'; // Более подходящий placeholder для стартапов
@@ -3317,15 +3323,30 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
     }
 
     // Блок market общий для обоих типов компаний
-    $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
-    $data['market'] = [
-        'trend' => $marketInsight['trend'],
-        'size' => $marketInsight['size'],
-        'growth' => $marketInsight['growth'],
-        'sources' => normalizeArray($marketInsight['sources']),
-    ];
+    if ($isStartup && !empty($apiKey)) {
+        // Для стартапов используем специальную функцию улучшения через AI
+        $data['market'] = ensureMarketWithAiForStartup($data['market'] ?? [], $payload, $apiKey);
+    } else {
+        // Для зрелых компаний используем стандартную функцию
+        $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
+        $data['market'] = [
+            'trend' => $marketInsight['trend'],
+            'size' => $marketInsight['size'],
+            'growth' => $marketInsight['growth'],
+            'sources' => normalizeArray($marketInsight['sources']),
+        ];
+    }
 
-    $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
+    // Блок highlights
+    if ($isStartup && !empty($apiKey)) {
+        // Для стартапов используем специальную функцию улучшения через AI
+        $currentHighlights = $data['highlights'] ?? [];
+        $data['highlights'] = ensureHighlightsWithAiForStartup($currentHighlights, $payload, $apiKey);
+        $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? []);
+    } else {
+        // Для зрелых компаний используем стандартную функцию
+        $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
+    }
 
     // Используем финальную цену продажи, если она указана
     // Проверяем все возможные источники цены предложения продавца
@@ -4086,6 +4107,155 @@ function containsCyrillic(string $text): bool
     return (bool)preg_match('/\p{Cyrillic}/u', $text);
 }
 
+/**
+ * Генерирует качественный контент для блока "Инвестиционные преимущества" для стартапов через AI.
+ * 
+ * @param array $current Текущие данные блока highlights
+ * @param array $payload Данные анкеты стартапа
+ * @param string $apiKey API ключ для AI
+ * @return array Улучшенные данные блока highlights
+ */
+function ensureHighlightsWithAiForStartup(array $current, array $payload, string $apiKey): array
+{
+    // Проверяем, нужно ли улучшать блок
+    $bullets = $current['bullets'] ?? [];
+    $hasGoodContent = false;
+    
+    if (!empty($bullets) && is_array($bullets)) {
+        foreach ($bullets as $bullet) {
+            $bulletText = trim((string)$bullet);
+            if ($bulletText !== '' && 
+                stripos($bulletText, 'уточняется') === false && 
+                stripos($bulletText, 'обсуждается') === false &&
+                stripos($bulletText, 'не указано') === false) {
+                $hasGoodContent = true;
+                break;
+            }
+        }
+    }
+    
+    // Если есть хороший контент, возвращаем как есть
+    if ($hasGoodContent) {
+        return $current;
+    }
+    
+    // Собираем факты из анкеты
+    $facts = [];
+    
+    if (!empty($payload['startup_competitive_advantages'])) {
+        $facts['Конкурентные преимущества'] = $payload['startup_competitive_advantages'];
+    }
+    
+    if (!empty($payload['startup_product_stage'])) {
+        $facts['Стадия продукта'] = $payload['startup_product_stage'];
+    }
+    
+    if (!empty($payload['startup_user_count']) || !empty($payload['startup_mrr'])) {
+        $traction = [];
+        if (!empty($payload['startup_user_count'])) {
+            $traction[] = 'Пользователи: ' . $payload['startup_user_count'];
+        }
+        if (!empty($payload['startup_mrr'])) {
+            $traction[] = 'MRR: ' . $payload['startup_mrr'];
+        }
+        if (!empty($payload['startup_conversion_rate'])) {
+            $traction[] = 'Конверсия: ' . $payload['startup_conversion_rate'];
+        }
+        if (!empty($payload['startup_retention_rate'])) {
+            $traction[] = 'Retention: ' . $payload['startup_retention_rate'];
+        }
+        if (!empty($traction)) {
+            $facts['Traction'] = implode(', ', $traction);
+        }
+    }
+    
+    if (!empty($payload['startup_shareholders']) || !empty($payload['startup_key_employees'])) {
+        $team = [];
+        if (!empty($payload['startup_shareholders'])) {
+            $team[] = 'Основатели: ' . $payload['startup_shareholders'];
+        }
+        if (!empty($payload['startup_key_employees'])) {
+            $team[] = 'Ключевые сотрудники: ' . $payload['startup_key_employees'];
+        }
+        if (!empty($team)) {
+            $facts['Команда'] = implode(', ', $team);
+        }
+    }
+    
+    if (!empty($payload['startup_current_valuation'])) {
+        $facts['Текущая оценка'] = $payload['startup_current_valuation'];
+    }
+    
+    // Прогноз роста из финансовых данных
+    $forecast = [];
+    if (!empty($payload['startup_revenue_2024']) && !empty($payload['startup_revenue_2023'])) {
+        $forecast[] = 'Рост выручки 2023-2024';
+    }
+    if (!empty($payload['startup_revenue_forecast_1']) || !empty($payload['startup_revenue_forecast_2'])) {
+        $forecast[] = 'Прогноз роста';
+    }
+    if (!empty($forecast)) {
+        $facts['Прогноз'] = implode(', ', $forecast);
+    }
+    
+    $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
+    if (empty($facts)) {
+        return $current; // Если нет данных, возвращаем как есть
+    }
+    
+    $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    
+    $prompt = <<<PROMPT
+Напиши 3-5 преимуществ для инвесторов стартапа на основе фактов ниже.
+- Каждое преимущество — одно короткое предложение.
+- Фокусируйся на ценности для инвестора.
+- Используй только факты из списка, не придумывай.
+- Отвечай строго на русском языке.
+
+Верни JSON:
+{
+  "bullets": ["...", "...", "..."]
+}
+
+Факты:
+{$factsJson}
+PROMPT;
+    
+    try {
+        $aiResponse = trim(callAICompletions($prompt, $apiKey));
+        
+        // Парсим JSON ответ
+        $clean = $aiResponse;
+        if (substr($clean, 0, 3) === '```') {
+            $clean = preg_replace('/^```[a-z]*\s*/i', '', $clean);
+            $clean = preg_replace('/```\s*$/s', '', $clean);
+        }
+        $clean = trim($clean);
+        
+        // Ищем JSON в тексте
+        if ($clean[0] !== '{') {
+            $firstBrace = strpos($clean, '{');
+            if ($firstBrace !== false) {
+                $lastBrace = strrpos($clean, '}');
+                if ($lastBrace !== false && $lastBrace > $firstBrace) {
+                    $clean = substr($clean, $firstBrace, $lastBrace - $firstBrace + 1);
+                }
+            }
+        }
+        
+        $decoded = json_decode($clean, true);
+        if (is_array($decoded) && !empty($decoded['bullets']) && is_array($decoded['bullets'])) {
+            return [
+                'bullets' => array_filter($decoded['bullets'], fn($bullet) => trim((string)$bullet) !== ''),
+            ];
+        }
+    } catch (Throwable $e) {
+        error_log('Highlights AI generation for startup failed: ' . $e->getMessage());
+    }
+    
+    return $current;
+}
+
 function buildHighlightBullets(array $payload, string $placeholder): array
 {
     $bullets = array_filter([
@@ -4098,6 +4268,100 @@ function buildHighlightBullets(array $payload, string $placeholder): array
         $bullets[] = $placeholder;
     }
     return $bullets;
+}
+
+/**
+ * Генерирует качественный контент для блока "Рынок и тенденции" для стартапов через AI.
+ * 
+ * @param array $current Текущие данные блока market
+ * @param array $payload Данные анкеты стартапа
+ * @param string $apiKey API ключ для AI
+ * @return array Улучшенные данные блока market
+ */
+function ensureMarketWithAiForStartup(array $current, array $payload, string $apiKey): array
+{
+    // Проверяем, нужно ли улучшать блок
+    $trend = trim((string)($current['trend'] ?? ''));
+    $size = trim((string)($current['size'] ?? ''));
+    $growth = trim((string)($current['growth'] ?? ''));
+    
+    // Если все поля заполнены и не содержат placeholder-тексты, возвращаем как есть
+    if ($trend !== '' && $size !== '' && $growth !== '' && 
+        stripos($trend, 'уточняется') === false && 
+        stripos($size, 'уточняется') === false && 
+        stripos($growth, 'уточняется') === false) {
+        return $current;
+    }
+    
+    // Собираем факты из анкеты
+    $facts = [
+        'Продукт' => $payload['startup_product_description'] ?? '',
+        'Целевой рынок' => $payload['startup_target_market'] ?? '',
+        'Размер рынка' => $payload['startup_market_size'] ?? '',
+        'Конкуренты' => $payload['startup_competitors'] ?? '',
+        'Конкурентные преимущества' => $payload['startup_competitive_advantages'] ?? '',
+    ];
+    
+    $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
+    if (empty($facts)) {
+        return $current; // Если нет данных, возвращаем как есть
+    }
+    
+    $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    
+    $prompt = <<<PROMPT
+Напиши описание рынка для стартапа на основе фактов ниже.
+- Формат: 3 предложения о тенденциях, размере и росте рынка.
+- Используй только факты из списка, не придумывай цифры.
+- Отвечай строго на русском языке.
+
+Верни JSON:
+{
+  "trend": "...",
+  "size": "...",
+  "growth": "..."
+}
+
+Факты:
+{$factsJson}
+PROMPT;
+    
+    try {
+        $aiResponse = trim(callAICompletions($prompt, $apiKey));
+        
+        // Парсим JSON ответ
+        $clean = $aiResponse;
+        if (substr($clean, 0, 3) === '```') {
+            $clean = preg_replace('/^```[a-z]*\s*/i', '', $clean);
+            $clean = preg_replace('/```\s*$/s', '', $clean);
+        }
+        $clean = trim($clean);
+        
+        // Ищем JSON в тексте
+        if ($clean[0] !== '{') {
+            $firstBrace = strpos($clean, '{');
+            if ($firstBrace !== false) {
+                $lastBrace = strrpos($clean, '}');
+                if ($lastBrace !== false && $lastBrace > $firstBrace) {
+                    $clean = substr($clean, $firstBrace, $lastBrace - $firstBrace + 1);
+                }
+            }
+        }
+        
+        $decoded = json_decode($clean, true);
+        if (is_array($decoded) && !empty($decoded)) {
+            return [
+                'trend' => $decoded['trend'] ?? $current['trend'] ?? 'Рынок демонстрирует устойчивый интерес инвесторов.',
+                'size' => $decoded['size'] ?? $current['size'] ?? 'Объём рынка оценивается как значительный по отраслевым данным.',
+                'growth' => $decoded['growth'] ?? $current['growth'] ?? 'Ожидается стабильный рост 5–10% в год.',
+                'sources' => $current['sources'] ?? ['Отраслевые обзоры SmartBizSell'],
+            ];
+        }
+    } catch (Throwable $e) {
+        error_log('Market AI generation for startup failed: ' . $e->getMessage());
+    }
+    
+    return $current;
 }
 
 /**
