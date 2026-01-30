@@ -1110,7 +1110,7 @@ function buildTeaserPayload(array $form): array
             'startup_current_sales_volume', 'startup_price_per_unit', 'startup_variable_costs_per_unit',
             'startup_fixed_costs', 'startup_break_even_volume', 'startup_current_valuation',
             'startup_investment_needed', 'startup_previous_investments', 'startup_investment_usage',
-            'company_founded_date'
+            'startup_financial_unit', 'company_founded_date'
         ];
         
         // Добавляем поля стартапа из формы, если их нет в data_json
@@ -4930,6 +4930,10 @@ function limitSegmentToSevenWords(string $segment, ?string $apiKey = null): stri
  */
 function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?array $dcfData = null, ?TeaserLogger $logger = null, ?string $apiKey = null): string
 {
+    // Определяем тип компании
+    $companyType = $payload['company_type'] ?? null;
+    $isStartup = ($companyType === 'startup');
+    
     // Получаем описание из hero_description или из overview
     $heroDescription = '';
     if (!empty($teaserData['overview']['summary'])) {
@@ -4944,49 +4948,115 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
     // Формируем чипы (chips)
     $heroChips = [];
     
-    // 1. Сегмент рынка
-    $industry = trim((string)($payload['products_services'] ?? ''));
-    if ($industry !== '') {
-        // Ограничиваем сегмент до 7 слов с сохранением смысла
-        $industry = limitSegmentToSevenWords($industry, $apiKey);
-        if ($industry !== '') {
+    if ($isStartup) {
+        // Чипы для стартапов
+        
+        // 1. Сегмент (из описания продукта или целевого рынка)
+        $segment = trim((string)($payload['startup_product_description'] ?? $payload['startup_target_market'] ?? ''));
+        if ($segment !== '') {
+            // Ограничиваем сегмент до 7 слов с сохранением смысла
+            $segment = limitSegmentToSevenWords($segment, $apiKey);
+            if ($segment !== '') {
+                $heroChips[] = [
+                    'label' => 'СЕГМЕНТ',
+                    'value' => $segment,
+                    'icon' => 'segment'
+                ];
+            }
+        }
+        
+        // 2. Рынки (целевой рынок)
+        $targetMarket = trim((string)($payload['startup_target_market'] ?? ''));
+        if ($targetMarket !== '') {
             $heroChips[] = [
-                'label' => 'СЕГМЕНТ',
-                'value' => $industry,
-                'icon' => 'segment'
+                'label' => 'РЫНКИ',
+                'value' => $targetMarket,
+                'icon' => 'location'
+            ];
+        } else {
+            // По умолчанию "Россия" для стартапов
+            $heroChips[] = [
+                'label' => 'РЫНКИ',
+                'value' => 'Россия',
+                'icon' => 'location'
             ];
         }
-    }
-    
-    // 2. География присутствия
-    $region = trim((string)($payload['presence_regions'] ?? ''));
-    if ($region !== '') {
-        $heroChips[] = [
-            'label' => 'РЫНКИ',
-            'value' => $region,
-            'icon' => 'location'
-        ];
-    }
-    
-    // 3. Персонал
-    $personnelCount = trim((string)($payload['personnel_count'] ?? ''));
-    if ($personnelCount !== '' && $personnelCount !== '0') {
-        $heroChips[] = [
-            'label' => 'ПЕРСОНАЛ',
-            'value' => $personnelCount . ' чел.',
-            'icon' => 'people'
-        ];
-    }
-    
-    // 4. Онлайн продажи
-    $onlineShare = trim((string)($payload['online_sales_share'] ?? ''));
-    if ($onlineShare !== '' && $onlineShare !== '0') {
-        $onlineShare = rtrim($onlineShare, '%');
-        $heroChips[] = [
-            'label' => 'ОНЛАЙН',
-            'value' => $onlineShare . '%',
-            'icon' => 'online'
-        ];
+        
+        // 3. Команда (ключевые сотрудники или количество персонала)
+        $keyEmployees = trim((string)($payload['startup_key_employees'] ?? ''));
+        $personnelCount = trim((string)($payload['personnel_count'] ?? ''));
+        if ($keyEmployees !== '') {
+            // Если есть описание команды, используем его (ограничиваем длину)
+            $teamText = mb_strlen($keyEmployees) > 30 ? mb_substr($keyEmployees, 0, 30) . '…' : $keyEmployees;
+            $heroChips[] = [
+                'label' => 'КОМАНДА',
+                'value' => $teamText,
+                'icon' => 'people'
+            ];
+        } elseif ($personnelCount !== '' && $personnelCount !== '0') {
+            $heroChips[] = [
+                'label' => 'КОМАНДА',
+                'value' => $personnelCount . ' чел.',
+                'icon' => 'people'
+            ];
+        }
+        
+        // 4. Стадия продукта
+        $productStage = trim((string)($payload['startup_product_stage'] ?? ''));
+        if ($productStage !== '') {
+            $heroChips[] = [
+                'label' => 'СТАДИЯ',
+                'value' => $productStage,
+                'icon' => 'stage'
+            ];
+        }
+    } else {
+        // Чипы для зрелых компаний (существующая логика)
+        
+        // 1. Сегмент рынка
+        $industry = trim((string)($payload['products_services'] ?? ''));
+        if ($industry !== '') {
+            // Ограничиваем сегмент до 7 слов с сохранением смысла
+            $industry = limitSegmentToSevenWords($industry, $apiKey);
+            if ($industry !== '') {
+                $heroChips[] = [
+                    'label' => 'СЕГМЕНТ',
+                    'value' => $industry,
+                    'icon' => 'segment'
+                ];
+            }
+        }
+        
+        // 2. География присутствия
+        $region = trim((string)($payload['presence_regions'] ?? ''));
+        if ($region !== '') {
+            $heroChips[] = [
+                'label' => 'РЫНКИ',
+                'value' => $region,
+                'icon' => 'location'
+            ];
+        }
+        
+        // 3. Персонал
+        $personnelCount = trim((string)($payload['personnel_count'] ?? ''));
+        if ($personnelCount !== '' && $personnelCount !== '0') {
+            $heroChips[] = [
+                'label' => 'ПЕРСОНАЛ',
+                'value' => $personnelCount . ' чел.',
+                'icon' => 'people'
+            ];
+        }
+        
+        // 4. Онлайн продажи
+        $onlineShare = trim((string)($payload['online_sales_share'] ?? ''));
+        if ($onlineShare !== '' && $onlineShare !== '0') {
+            $onlineShare = rtrim($onlineShare, '%');
+            $heroChips[] = [
+                'label' => 'ОНЛАЙН',
+                'value' => $onlineShare . '%',
+                'icon' => 'online'
+            ];
+        }
     }
     
     // Ограничиваем до 4 элементов
@@ -4995,7 +5065,164 @@ function renderHeroBlock(string $assetName, array $teaserData, array $payload, ?
     // Формируем статистику
     $heroStats = [];
     
-    if (is_array($dcfData)) {
+    if ($isStartup) {
+        // Статистика для стартапов
+        
+        // Получаем единицу измерения финансовых данных и конвертируем в формат для detectFinancialUnit
+        $financialUnitRaw = $payload['startup_financial_unit'] ?? 'тыс. руб.';
+        // Проверяем также в data_json, если значение не найдено
+        if (empty($financialUnitRaw) || $financialUnitRaw === 'тыс. руб.') {
+            if (!empty($payload['data_json'])) {
+                $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+                if (is_array($formDataJson) && !empty($formDataJson['startup_financial_unit'])) {
+                    $financialUnitRaw = $formDataJson['startup_financial_unit'];
+                }
+            }
+        }
+        $financialUnit = detectFinancialUnit($financialUnitRaw);
+        
+        // 1. Оценка компании
+        // Поддерживаем оба варианта имен полей для обратной совместимости
+        $valuation = $payload['startup_current_valuation'] ?? $payload['startup_valuation'] ?? null;
+        // Проверяем также в data_json, если значение не найдено
+        if (($valuation === null || $valuation === '' || $valuation === 0) && !empty($payload['data_json'])) {
+            $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+            if (is_array($formDataJson)) {
+                $valuation = $formDataJson['startup_current_valuation'] ?? $formDataJson['startup_valuation'] ?? null;
+            }
+        }
+        if ($valuation !== null && $valuation !== '' && $valuation !== 0) {
+            $valuationValue = (float)$valuation;
+            // Конвертируем в миллионы рублей
+            $valuationInMillions = convertFinancialToMillions($valuationValue, $financialUnit);
+            if ($valuationInMillions > 0) {
+                $heroStats[] = [
+                    'label' => 'ОЦЕНКА',
+                    'value' => number_format($valuationInMillions, 0, '.', ' ') . ' млн Р',
+                    'caption' => 'текущая оценка компании',
+                ];
+            }
+        }
+        
+        // 2. Требуемые инвестиции
+        // Поддерживаем оба варианта имен полей для обратной совместимости
+        $investmentNeeded = $payload['startup_investment_needed'] ?? $payload['startup_investment_amount'] ?? null;
+        // Проверяем также в data_json, если значение не найдено
+        if (($investmentNeeded === null || $investmentNeeded === '' || $investmentNeeded === 0) && !empty($payload['data_json'])) {
+            $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+            if (is_array($formDataJson)) {
+                $investmentNeeded = $formDataJson['startup_investment_needed'] ?? $formDataJson['startup_investment_amount'] ?? null;
+            }
+        }
+        if ($investmentNeeded !== null && $investmentNeeded !== '' && $investmentNeeded !== 0) {
+            $investmentValue = (float)$investmentNeeded;
+            // Конвертируем в миллионы рублей
+            $investmentInMillions = convertFinancialToMillions($investmentValue, $financialUnit);
+            if ($investmentInMillions > 0) {
+                $heroStats[] = [
+                    'label' => 'ИНВЕСТИЦИИ',
+                    'value' => number_format($investmentInMillions, 0, '.', ' ') . ' млн Р',
+                    'caption' => 'требуемая сумма инвестиций',
+                ];
+            }
+        }
+        
+        // 3. Выручка (2024 или 2025, приоритет у 2025)
+        $revenue2025 = $payload['startup_revenue_2025'] ?? null;
+        $revenue2024 = $payload['startup_revenue_2024'] ?? null;
+        
+        // Проверяем также в data_json, если значения не найдены
+        if (($revenue2025 === null || $revenue2025 === '' || $revenue2025 === 0) && 
+            ($revenue2024 === null || $revenue2024 === '' || $revenue2024 === 0) && 
+            !empty($payload['data_json'])) {
+            $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+            if (is_array($formDataJson)) {
+                if (($revenue2025 === null || $revenue2025 === '' || $revenue2025 === 0)) {
+                    $revenue2025 = $formDataJson['startup_revenue_2025'] ?? null;
+                }
+                if (($revenue2024 === null || $revenue2024 === '' || $revenue2024 === 0)) {
+                    $revenue2024 = $formDataJson['startup_revenue_2024'] ?? null;
+                }
+            }
+        }
+        
+        $revenue = null;
+        $revenueYear = '';
+        
+        if ($revenue2025 !== null && $revenue2025 !== '' && $revenue2025 !== 0) {
+            $revenue = (float)$revenue2025;
+            $revenueYear = '2025';
+        } elseif ($revenue2024 !== null && $revenue2024 !== '' && $revenue2024 !== 0) {
+            $revenue = (float)$revenue2024;
+            $revenueYear = '2024';
+        }
+        
+        if ($revenue !== null && $revenue > 0) {
+            // Конвертируем в миллионы рублей
+            $revenueInMillions = convertFinancialToMillions($revenue, $financialUnit);
+            if ($revenueInMillions > 0) {
+                $heroStats[] = [
+                    'label' => 'ВЫРУЧКА ' . $revenueYear,
+                    'value' => number_format($revenueInMillions, 0, '.', ' ') . ' млн Р',
+                    'caption' => 'выручка за ' . $revenueYear,
+                ];
+            }
+        }
+        
+        // 4. Темп роста (рассчитываем из данных за 2023, 2024, 2025)
+        $revenue2023 = $payload['startup_revenue_2023'] ?? null;
+        $revenue2024ForGrowth = $payload['startup_revenue_2024'] ?? null;
+        $revenue2025ForGrowth = $payload['startup_revenue_2025'] ?? null;
+        
+        // Проверяем также в data_json, если значения не найдены
+        if (!empty($payload['data_json'])) {
+            $formDataJson = is_string($payload['data_json']) ? json_decode($payload['data_json'], true) : $payload['data_json'];
+            if (is_array($formDataJson)) {
+                if ($revenue2023 === null || $revenue2023 === '' || $revenue2023 === 0) {
+                    $revenue2023 = $formDataJson['startup_revenue_2023'] ?? null;
+                }
+                if ($revenue2024ForGrowth === null || $revenue2024ForGrowth === '' || $revenue2024ForGrowth === 0) {
+                    $revenue2024ForGrowth = $formDataJson['startup_revenue_2024'] ?? null;
+                }
+                if ($revenue2025ForGrowth === null || $revenue2025ForGrowth === '' || $revenue2025ForGrowth === 0) {
+                    $revenue2025ForGrowth = $formDataJson['startup_revenue_2025'] ?? null;
+                }
+            }
+        }
+        
+        // Пытаемся рассчитать рост между доступными годами
+        $growthValue = null;
+        $growthCaption = '';
+        
+        // Приоритет: рост 2024 к 2025
+        if ($revenue2024ForGrowth !== null && $revenue2024ForGrowth !== '' && $revenue2024ForGrowth !== 0 &&
+            $revenue2025ForGrowth !== null && $revenue2025ForGrowth !== '' && $revenue2025ForGrowth !== 0) {
+            $rev2024 = convertFinancialToMillions((float)$revenue2024ForGrowth, $financialUnit);
+            $rev2025 = convertFinancialToMillions((float)$revenue2025ForGrowth, $financialUnit);
+            if ($rev2024 > 0) {
+                $growthValue = (($rev2025 - $rev2024) / $rev2024) * 100;
+                $growthCaption = '2025 к 2024';
+            }
+        }
+        // Альтернатива: рост 2023 к 2024
+        elseif ($revenue2023 !== null && $revenue2023 !== '' && $revenue2023 !== 0 &&
+                 $revenue2024ForGrowth !== null && $revenue2024ForGrowth !== '' && $revenue2024ForGrowth !== 0) {
+            $rev2023 = convertFinancialToMillions((float)$revenue2023, $financialUnit);
+            $rev2024 = convertFinancialToMillions((float)$revenue2024ForGrowth, $financialUnit);
+            if ($rev2023 > 0) {
+                $growthValue = (($rev2024 - $rev2023) / $rev2023) * 100;
+                $growthCaption = '2024 к 2023';
+            }
+        }
+        
+        if ($growthValue !== null) {
+            $heroStats[] = [
+                'label' => 'ТЕМП РОСТА',
+                'value' => number_format($growthValue, 1, '.', ' ') . '%',
+                'caption' => $growthCaption,
+            ];
+        }
+    } elseif (is_array($dcfData)) {
         // Получаем выручку и прибыль P1 из DCF данных (P1 теперь соответствует 2026П)
         $p1Revenue = null;
         $p1Profit = null;
@@ -5223,6 +5450,7 @@ function getTeaserChipIconSvg(string $iconType): string
         'location' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 13C13.6569 13 15 11.6569 15 10C15 8.34315 13.6569 7 12 7C10.3431 7 9 8.34315 9 10C9 11.6569 10.3431 13 12 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         'people' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7C9 9.20914 7.20914 11 5 11C2.79086 11 1 9.20914 1 7C1 4.79086 2.79086 3 5 3C7.20914 3 9 4.79086 9 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         'online' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        'stage' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         'default' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     ];
     

@@ -236,8 +236,8 @@ function buildDraftPayload(array $source): array
         'startup_revenue_2023', 'startup_revenue_2024', 'startup_revenue_2025',
         'startup_expenses_2023', 'startup_expenses_2024', 'startup_expenses_2025',
         'startup_profit_2023', 'startup_profit_2024', 'startup_profit_2025',
-        'startup_forecast', 'startup_unit_economics', 'startup_valuation',
-        'startup_investment_amount', 'startup_previous_investments', 'startup_financial_unit'
+        'startup_forecast', 'startup_unit_economics', 'startup_valuation', 'startup_current_valuation',
+        'startup_investment_amount', 'startup_investment_needed', 'startup_previous_investments', 'startup_financial_unit'
     ];
     
     foreach ($startupFields as $field) {
@@ -769,74 +769,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // ========== РЕЖИМ СОХРАНЕНИЯ ЧЕРНОВИКА ==========
                 // Для черновика сохраняем только asset_name и data_json
                 // Статус всегда 'draft', остальные поля не заполняются
+                $effectiveUserId = getEffectiveUserId();
+                
                 if ($formId && $formId > 0) {
-                    // Если передан form_id, всегда обновляем существующую запись
-                    // Даже если $existingForm не найден, пытаемся обновить по form_id
+                    // Если передан form_id, проверяем существование формы ДО попытки обновления
                     if (!$existingForm) {
                         // Проверяем, существует ли форма с таким ID
-                        $checkStmt = $pdo->prepare("SELECT id FROM seller_forms WHERE id = ? AND user_id = ?");
-                        $checkStmt->execute([$formId, getEffectiveUserId()]);
-                        if (!$checkStmt->fetch()) {
-                            error_log("ERROR: Попытка обновить несуществующую форму form_id=$formId");
-                            $errors['general'] = 'Анкета не найдена.';
-                            // Не продолжаем сохранение
+                        $checkStmt = $pdo->prepare("SELECT id, status FROM seller_forms WHERE id = ? AND user_id = ?");
+                        $checkStmt->execute([$formId, $effectiveUserId]);
+                        $formExists = $checkStmt->fetch();
+                        
+                        if (!$formExists) {
+                            // Форма не найдена - это ошибка, не создаем новую
+                            error_log("ERROR: form_id=$formId не найден для user_id=$effectiveUserId");
+                            $errors['general'] = 'Анкета не найдена. Пожалуйста, создайте новую анкету.';
+                            // НЕ продолжаем сохранение, НЕ создаем новую запись
                         } else {
-                            // Форма существует, но не была загружена ранее - загружаем сейчас
+                            // Форма существует - загружаем её
                             $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-                            $stmt->execute([$formId, getEffectiveUserId()]);
+                            $stmt->execute([$formId, $effectiveUserId]);
                             $existingForm = $stmt->fetch();
                         }
                     }
                     
                     // Если ошибок нет, продолжаем обновление
-                    if (empty($errors['general'])) {
-                    // Обновление существующего черновика
-                    // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
-                    // чтобы не потерять их при сохранении формы
-                    $currentDataJson = [];
-                    if (!empty($existingForm['data_json'])) {
-                        $decoded = json_decode($existingForm['data_json'], true);
-                        if (is_array($decoded)) {
-                            $currentDataJson = $decoded;
-                        }
-                    }
-                    
-                    // Проверяем, пришел ли только выбор типа компании без других данных формы
-                    // Если в POST только company_type, form_id, save_draft и служебные поля - это выбор типа компании
-                    $postKeys = array_keys($_POST);
-                    $formDataKeys = array_filter($postKeys, function($key) {
-                        return !in_array($key, ['company_type', 'form_id', 'save_draft', 'save_draft_flag'], true);
-                    });
-                    $isOnlyCompanyTypeSelection = empty($formDataKeys);
-                    
-                    if ($isOnlyCompanyTypeSelection) {
-                        // Если выбран только тип компании, сохраняем только company_type, не трогая data_json
-                        $effectiveUserId = getEffectiveUserId();
-                        $stmt = $pdo->prepare("UPDATE seller_forms SET company_type = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
-                        $stmt->execute([$companyType ?: null, $formId, $effectiveUserId]);
-                        error_log("COMPANY TYPE UPDATED ONLY - form_id: $formId, company_type: " . ($companyType ?: 'NULL'));
-                    } else {
-                        // Объединяем текущие данные с новыми данными формы
-                        // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
-                        $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
-                        foreach ($preservedFields as $field) {
-                            if (isset($currentDataJson[$field])) {
-                                $draftPayload[$field] = $currentDataJson[$field];
+                    if (empty($errors['general']) && $existingForm) {
+                        // Обновление существующего черновика
+                        // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
+                        // чтобы не потерять их при сохранении формы
+                        $currentDataJson = [];
+                        if (!empty($existingForm['data_json'])) {
+                            $decoded = json_decode($existingForm['data_json'], true);
+                            if (is_array($decoded)) {
+                                $currentDataJson = $decoded;
                             }
                         }
                         
-                        // Обновляем data_json с сохранением важных полей
-                        $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                        // Проверяем, пришел ли только выбор типа компании без других данных формы
+                        // Если в POST только company_type, form_id, save_draft и служебные поля - это выбор типа компании
+                        $postKeys = array_keys($_POST);
+                        $postData = $_POST; // Копируем $_POST в локальную переменную для использования в замыкании
+                        $formDataKeys = array_filter($postKeys, function($key) use ($postData) {
+                            if (in_array($key, ['company_type', 'form_id', 'save_draft', 'save_draft_flag'], true)) {
+                                return false;
+                            }
+                            // Проверяем, что значение не пустое
+                            $value = $postData[$key] ?? null;
+                            if ($value === null || $value === '') {
+                                return false;
+                            }
+                            // Для массивов проверяем, что они не пустые
+                            if (is_array($value)) {
+                                return !empty($value);
+                            }
+                            return true;
+                        });
+                        $isOnlyCompanyTypeSelection = empty($formDataKeys);
                         
-                        $effectiveUserId = getEffectiveUserId();
-                        $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, company_type = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
-                        $stmt->execute([$asset_name, $companyInnDigits, $companyType ?: null, $dataJson, $formId, $effectiveUserId]);
-                        error_log("DRAFT UPDATED - form_id: $formId");
-                    }
+                        if ($isOnlyCompanyTypeSelection) {
+                            // Если выбран только тип компании, сохраняем только company_type, не трогая data_json
+                            $stmt = $pdo->prepare("UPDATE seller_forms SET company_type = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
+                            $stmt->execute([$companyType ?: null, $formId, $effectiveUserId]);
+                            error_log("COMPANY TYPE UPDATED ONLY - form_id: $formId, company_type: " . ($companyType ?: 'NULL'));
+                        } else {
+                            // Объединяем текущие данные с новыми данными формы
+                            // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
+                            $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
+                            foreach ($preservedFields as $field) {
+                                if (isset($currentDataJson[$field])) {
+                                    $draftPayload[$field] = $currentDataJson[$field];
+                                }
+                            }
+                            
+                            // Обновляем data_json с сохранением важных полей
+                            $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                            
+                            $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, company_type = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
+                            $stmt->execute([$asset_name, $companyInnDigits, $companyType ?: null, $dataJson, $formId, $effectiveUserId]);
+                            error_log("DRAFT UPDATED - form_id: $formId");
+                        }
                     }
                 } else {
-                    // Создание нового черновика
-                    $effectiveUserId = getEffectiveUserId();
+                    // Создание нового черновика (только если form_id НЕ передан)
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (user_id, asset_name, company_inn, company_type, data_json, status) VALUES (?, ?, ?, ?, ?, 'draft')");
                     $stmt->execute([$effectiveUserId, $asset_name, $companyInnDigits, $companyType ?: null, $dataJson]);
                     $formId = $pdo->lastInsertId();
@@ -909,27 +923,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $financialResults = isset($_POST['financial']) ? json_encode($_POST['financial'], JSON_UNESCAPED_UNICODE) : null;
                 $balanceIndicators = isset($_POST['balance']) ? json_encode($_POST['balance'], JSON_UNESCAPED_UNICODE) : null;
 
+                $effectiveUserId = getEffectiveUserId();
+                
                 if ($formId && $formId > 0) {
-                    // Если передан form_id, всегда обновляем существующую запись
-                    // Даже если $existingForm не найден, пытаемся обновить по form_id
+                    // Если передан form_id, проверяем существование формы ДО попытки обновления
                     if (!$existingForm) {
                         // Проверяем, существует ли форма с таким ID
-                        $checkStmt = $pdo->prepare("SELECT id FROM seller_forms WHERE id = ? AND user_id = ?");
-                        $checkStmt->execute([$formId, getEffectiveUserId()]);
-                        if (!$checkStmt->fetch()) {
-                            error_log("ERROR: Попытка обновить несуществующую форму form_id=$formId");
-                            $errors['general'] = 'Анкета не найдена.';
-                            // Не продолжаем сохранение
+                        $checkStmt = $pdo->prepare("SELECT id, status FROM seller_forms WHERE id = ? AND user_id = ?");
+                        $checkStmt->execute([$formId, $effectiveUserId]);
+                        $formExists = $checkStmt->fetch();
+                        
+                        if (!$formExists) {
+                            // Форма не найдена - это ошибка, не создаем новую
+                            error_log("ERROR: form_id=$formId не найден для user_id=$effectiveUserId при отправке");
+                            $errors['general'] = 'Анкета не найдена. Пожалуйста, создайте новую анкету.';
+                            // НЕ продолжаем сохранение, НЕ создаем новую запись
                         } else {
-                            // Форма существует, но не была загружена ранее - загружаем сейчас
+                            // Форма существует - загружаем её
                             $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-                            $stmt->execute([$formId, getEffectiveUserId()]);
+                            $stmt->execute([$formId, $effectiveUserId]);
                             $existingForm = $stmt->fetch();
                         }
                     }
                     
                     // Если ошибок нет, продолжаем обновление
-                    if (empty($errors['general'])) {
+                    if (empty($errors['general']) && $existingForm) {
                         // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
                         // чтобы не потерять их при финальной отправке формы
                         $currentDataJson = [];
@@ -940,19 +958,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                     
-                    // Объединяем текущие данные с новыми данными формы
-                    // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
-                    $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
-                    foreach ($preservedFields as $field) {
-                        if (isset($currentDataJson[$field])) {
-                            $draftPayload[$field] = $currentDataJson[$field];
+                        // Объединяем текущие данные с новыми данными формы
+                        // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
+                        $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
+                        foreach ($preservedFields as $field) {
+                            if (isset($currentDataJson[$field])) {
+                                $draftPayload[$field] = $currentDataJson[$field];
+                            }
                         }
-                    }
-                    
-                    // Обновляем data_json с сохранением важных полей
-                    $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
-                    
-                    $stmt = $pdo->prepare("UPDATE seller_forms SET
+                        
+                        // Обновляем data_json с сохранением важных полей
+                        $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                        
+                        $stmt = $pdo->prepare("UPDATE seller_forms SET
                         asset_name = ?, company_inn = ?, company_type = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
                         company_description = ?, presence_regions = ?, products_services = ?, company_brands = ?,
                         own_production = ?, production_sites_count = ?, production_sites_region = ?, production_area = ?,
@@ -978,10 +996,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $mainClients, $salesShare, $personnelCount, $companyWebsite, $additionalInfo,
                         $financialResultsVat, $financialSource,
                         $productionVolumes, $financialResults, $balanceIndicators, $dataJson,
-                        $formId, getEffectiveUserId()
+                        $formId, $effectiveUserId
                     ]);
                     }
                 } else {
+                    // Создание новой формы (только если form_id НЕ передан)
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (
                                     user_id, asset_name, company_inn, company_type, deal_subject, deal_purpose, asset_disclosure,
                                     company_description, presence_regions, products_services, company_brands,
@@ -996,8 +1015,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         production_volumes, financial_results, balance_indicators, data_json,
                         status, submitted_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
-                            $effectiveUserId = getEffectiveUserId();
-                            $stmt->execute([
+                    $stmt->execute([
                         $effectiveUserId, $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
                         $companyDescription, $presenceRegions, $productsServices, $companyBrands,
                         $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
