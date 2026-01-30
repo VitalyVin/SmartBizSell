@@ -36,25 +36,49 @@ if (!$user) {
 
 /**
  * Получение данных тизера из базы данных
- * Загружается последняя отправленная анкета пользователя со статусом
- * 'submitted', 'review' или 'approved', из которой извлекается
- * сохраненный HTML тизера (teaser_snapshot).
+ * Поддерживает form_id из URL параметра (как в dashboard.php)
+ * Если form_id не указан, ищет тизер во всех анкетах пользователя
  */
 try {
     $pdo = getDBConnection();
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM seller_forms
-        WHERE user_id = ?
-          AND status IN ('submitted','review','approved')
-        ORDER BY submitted_at DESC, updated_at DESC
-        LIMIT 1
-    ");
-    $stmt->execute([$user['id']]);
-    $form = $stmt->fetch();
+    $effectiveUserId = getEffectiveUserId();
+    
+    // Проверяем, передан ли form_id в URL
+    $formId = isset($_GET['form_id']) ? (int)$_GET['form_id'] : null;
+    $form = null;
+    
+    if ($formId && $formId > 0) {
+        // Если указан form_id, загружаем конкретную анкету
+        if (isModerator() && !isImpersonating()) {
+            // Модераторы (не в режиме impersonation) могут просматривать любые анкеты
+            $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ?");
+            $stmt->execute([$formId]);
+        } else {
+            // Обычные пользователи или модераторы в режиме impersonation - только свои анкеты
+            $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+            $stmt->execute([$formId, $effectiveUserId]);
+        }
+        $form = $stmt->fetch();
+    }
+    
+    // Если анкета не найдена по form_id, ищем тизер во всех анкетах пользователя
+    if (!$form) {
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM seller_forms
+            WHERE user_id = ?
+            ORDER BY 
+                CASE WHEN status IN ('submitted','review','approved') THEN 0 ELSE 1 END,
+                submitted_at DESC, 
+                updated_at DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$effectiveUserId]);
+        $form = $stmt->fetch();
+    }
 
     if (!$form) {
-        die('Нет отправленных анкет для формирования тизера.');
+        die('Нет анкет для формирования тизера.');
     }
 
     // Извлечение данных тизера из JSON поля data_json

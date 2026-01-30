@@ -6208,8 +6208,12 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
                 if (!teaserPrintBtn || teaserPrintBtn.disabled) {
                     return;
                 }
+                // Получаем form_id из URL или из переменной currentFormId
+                const urlParams = new URLSearchParams(window.location.search);
+                const formId = urlParams.get('form_id') || (typeof currentFormId !== 'undefined' && currentFormId ? currentFormId : '');
+                const pdfUrl = formId ? `teaser_pdf.php?form_id=${formId}` : 'teaser_pdf.php';
                 // Открытие PDF страницы в новом окне
-                window.open('teaser_pdf.php', '_blank');
+                window.open(pdfUrl, '_blank');
             };
 
             /**
