@@ -1412,71 +1412,27 @@ function buildTeaserPrompt(array $payload, bool $isStartup = false): string
         // Промпт для стартапов
         return buildStartupTeaserPrompt($displayNameInPrompt, $nameInstruction, $cashOutInstruction, $json, $siteNote);
     } else {
-        // Промпт для зрелых компаний (текущая структура)
+        // Промпт для зрелых компаний (максимально упрощенная версия)
     return <<<PROMPT
-Ты — инвестиционный банкир. Подготовь лаконичный тизер {$displayNameInPrompt} для потенциальных инвесторов.
+Подготовь тизер {$displayNameInPrompt} для инвесторов на русском языке.{$nameInstruction}{$cashOutInstruction}
 
-Важно:
-- Отвечай строго на русском языке.
-- Используй данные анкеты (если поле пустое, пиши «уточняется») и при необходимости дополни их публичными отраслевыми фактами (без выдумывания конкретных чисел, если они неупомянуты).
-- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.{$nameInstruction}{$cashOutInstruction}
+Используй данные анкеты. Если поле пустое — пиши «уточняется».
 
-Структура ответа — строго валидный JSON:
+Верни JSON:
 {
-  "overview": {
-      "title": "...",
-      "summary": "...",
-      "key_metrics": ["...", "..."]
-  },
-  "company_profile": {
-      "industry": "...",
-      "established": "...",
-      "headcount": "...",
-      "locations": "...",
-      "operations": "...",
-      "unique_assets": "..."
-  },
-  "products": {
-      "portfolio": "...",
-      "differentiators": "...",
-      "key_clients": "...",
-      "sales_channels": "..."
-  },
-  "market": {
-      "trend": "...",
-      "size": "...",
-      "growth": "...",
-      "sources": ["...", "..."]
-  },
-  "financials": {
-      "revenue": "...",
-      "ebitda": "...",
-      "margins": "...",
-      "capex": "...",
-      "notes": "..."
-  },
-  "highlights": {
-      "bullets": ["...", "...", "..."]
-  },
-  "deal_terms": {
-      "structure": "...",
-      "share_for_sale": "...",
-      "valuation_expectation": "...",
-      "price": "...",
-      "use_of_proceeds": "..."
-  },
-  "next_steps": {
-      "cta": "...",
-      "contact": "...",
-      "disclaimer": "..."
-  }
+  "overview": {"title": "...", "summary": "...", "key_metrics": ["...", "..."]},
+  "company_profile": {"industry": "...", "established": "...", "headcount": "...", "locations": "...", "operations": "...", "unique_assets": "..."},
+  "products": {"portfolio": "...", "differentiators": "...", "key_clients": "...", "sales_channels": "..."},
+  "market": {"trend": "...", "size": "...", "growth": "...", "sources": ["...", "..."]},
+  "financials": {"revenue": "...", "ebitda": "...", "margins": "...", "capex": "...", "notes": "..."},
+  "highlights": {"bullets": ["...", "...", "..."]},
+  "deal_terms": {"structure": "...", "share_for_sale": "...", "valuation_expectation": "...", "price": "...", "use_of_proceeds": "..."},
+  "next_steps": {"cta": "...", "contact": "...", "disclaimer": "..."}
 }
 
-Данные анкеты:
+Данные:
 {$json}
 {$siteNote}
-
-ВАЖНО: Если в данных анкеты указана цена предложения Продавца (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если цена предложения Продавца не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
 PROMPT;
     }
 }
@@ -1838,6 +1794,48 @@ function parseTeaserResponse(string $text): array
     if (json_last_error() === JSON_ERROR_NONE && is_array($json) && !empty($json)) {
         // Дополнительная валидация: проверяем, что это действительно структура тизера
         if (isset($json['overview']) || isset($json['company_profile']) || isset($json['products'])) {
+            // Проверяем, не содержит ли ответ промпт в текстовых полях
+            $promptPhrases = [
+                'Ты инвестиционный банкир',
+                'Ты — инвестиционный банкир',
+                'Подготовь лаконичный тизер',
+                'Подготовь тизер',
+                'На основе фактов ниже',
+                'Исходная версия',
+                'Факты:',
+                'Данные анкеты:',
+                'Структура ответа',
+                'Верни строго валидный JSON',
+            ];
+            
+            // Проверяем overview.summary
+            if (isset($json['overview']['summary'])) {
+                $summary = (string)$json['overview']['summary'];
+                foreach ($promptPhrases as $phrase) {
+                    if (stripos($summary, $phrase) !== false) {
+                        error_log('Parsed JSON contains prompt in overview.summary: ' . $phrase);
+                        // Заменяем на fallback
+                        $json['overview']['summary'] = 'Описание компании уточняется.';
+                        break;
+                    }
+                }
+            }
+            
+            // Проверяем другие текстовые поля в overview
+            if (isset($json['overview']) && is_array($json['overview'])) {
+                foreach ($json['overview'] as $key => $value) {
+                    if (is_string($value) && $key !== 'summary') {
+                        foreach ($promptPhrases as $phrase) {
+                            if (stripos($value, $phrase) !== false) {
+                                error_log("Parsed JSON contains prompt in overview.{$key}: " . $phrase);
+                                $json['overview'][$key] = 'Уточняется.';
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
             return $json;
         }
         // Если структура не похожа на тизер, но это валидный JSON, логируем и используем
@@ -1874,6 +1872,32 @@ function parseTeaserResponse(string $text): array
         if (json_last_error() === JSON_ERROR_NONE && is_array($json) && !empty($json)) {
             error_log('Successfully fixed JSON parsing errors');
             if (isset($json['overview']) || isset($json['company_profile']) || isset($json['products'])) {
+                // Проверяем, не содержит ли ответ промпт в текстовых полях
+                $promptPhrases = [
+                    'Ты инвестиционный банкир',
+                    'Ты — инвестиционный банкир',
+                    'Подготовь лаконичный тизер',
+                    'Подготовь тизер',
+                    'На основе фактов ниже',
+                    'Исходная версия',
+                    'Факты:',
+                    'Данные анкеты:',
+                    'Структура ответа',
+                    'Верни строго валидный JSON',
+                ];
+                
+                // Проверяем overview.summary
+                if (isset($json['overview']['summary'])) {
+                    $summary = (string)$json['overview']['summary'];
+                    foreach ($promptPhrases as $phrase) {
+                        if (stripos($summary, $phrase) !== false) {
+                            error_log('Fixed JSON contains prompt in overview.summary: ' . $phrase);
+                            $json['overview']['summary'] = 'Описание компании уточняется.';
+                            break;
+                        }
+                    }
+                }
+                
                 return $json;
             }
         }
@@ -3267,54 +3291,90 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
         $prompt = buildOverviewRefinementPrompt($data['overview'], $payload, $isStartup);
         $aiText = trim(callAICompletions($prompt, $apiKey));
         $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
-        // Remove "M&A платформа" and similar phrases
-        $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
-        $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
-        $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
         
-        // Удаляем JavaScript код и технические символы, если они попали в текст
-        $aiText = preg_replace('/function\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*\{[^}]*\}/s', '', $aiText);
-        $aiText = preg_replace('/var\s+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/', '', $aiText);
-        $aiText = preg_replace('/document\.(getElementById|querySelector|createElement|scripts)/i', '', $aiText);
-        $aiText = preg_replace('/\bmi\s*=\s*[^;]+;/i', '', $aiText);
-        $aiText = preg_replace('/\bmi\.[a-zA-Z]+\s*=/i', '', $aiText);
-        
-        // Удаляем строки, которые выглядят как код (содержат много специальных символов)
-        $lines = explode("\n", $aiText);
-        $filteredLines = [];
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line === '') {
-                $filteredLines[] = '';
-                continue;
+        // Проверяем, не содержит ли ответ сам промпт
+        $promptPhrases = [
+            'Ты инвестиционный банкир',
+            'На основе фактов ниже',
+            'Исходная версия',
+            'Факты:',
+            'Напиши описание компании',
+            'Формат:',
+            'Используй только факты',
+        ];
+        $containsPrompt = false;
+        foreach ($promptPhrases as $phrase) {
+            if (stripos($aiText, $phrase) !== false) {
+                $containsPrompt = true;
+                error_log('Overview response contains prompt phrase: ' . $phrase);
+                break;
             }
-            // Пропускаем строки, которые выглядят как код
-            if (preg_match('/[{}();=<>\[\]]{3,}/', $line)) {
-                continue;
-            }
-            // Пропускаем строки с большим количеством английских слов подряд без русских букв
-            if (preg_match('/^[a-zA-Z0-9\s.,;:(){}[\]<>=\-+*\/&|!@#$%^]+$/', $line) && 
-                !preg_match('/[а-яА-ЯёЁ]/u', $line) && 
-                mb_strlen($line) > 20) {
-                continue;
-            }
-            $filteredLines[] = $line;
         }
-        $aiText = implode("\n", $filteredLines);
         
-        // Сохраняем двойные переносы строк для абзацев, заменяем только множественные пробелы и табы
-        $aiText = preg_replace('/[ \t]+/', ' ', $aiText); // Заменяем только пробелы и табы, не переносы строк
-        // Нормализуем переносы строк: оставляем только одиночные и двойные
-        $aiText = preg_replace('/\n{3,}/', "\n\n", $aiText); // Множественные переносы -> двойные
-        $aiText = trim($aiText);
+        // Проверяем, не содержит ли ответ JSON структуру промпта
+        if (preg_match('/\{[\s\n]*"overview"[\s\n]*:/i', $aiText) || 
+            preg_match('/"summary"[\s\n]*:[\s\n]*"[^"]*Ты/i', $aiText)) {
+            $containsPrompt = true;
+            error_log('Overview response contains JSON prompt structure');
+        }
+        
+        // Если ответ содержит промпт, используем fallback
+        if ($containsPrompt) {
+            error_log('Overview response rejected: contains prompt text, using fallback');
+            $aiText = '';
+        }
+        
         if ($aiText !== '') {
-            $sentences = splitIntoSentences($aiText);
-            $data['overview']['summary'] = buildParagraphsFromSentences(
-                $sentences,
-                buildOverviewFallbackSentences($payload),
-                3,
-                3
-            );
+            // Remove "M&A платформа" and similar phrases
+            $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
+            $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
+            $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
+            
+            // Удаляем JavaScript код и технические символы, если они попали в текст
+            $aiText = preg_replace('/function\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*\{[^}]*\}/s', '', $aiText);
+            $aiText = preg_replace('/var\s+[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/', '', $aiText);
+            $aiText = preg_replace('/document\.(getElementById|querySelector|createElement|scripts)/i', '', $aiText);
+            $aiText = preg_replace('/\bmi\s*=\s*[^;]+;/i', '', $aiText);
+            $aiText = preg_replace('/\bmi\.[a-zA-Z]+\s*=/i', '', $aiText);
+            
+            // Удаляем строки, которые выглядят как код (содержат много специальных символов)
+            $lines = explode("\n", $aiText);
+            $filteredLines = [];
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '') {
+                    $filteredLines[] = '';
+                    continue;
+                }
+                // Пропускаем строки, которые выглядят как код
+                if (preg_match('/[{}();=<>\[\]]{3,}/', $line)) {
+                    continue;
+                }
+                // Пропускаем строки с большим количеством английских слов подряд без русских букв
+                if (preg_match('/^[a-zA-Z0-9\s.,;:(){}[\]<>=\-+*\/&|!@#$%^]+$/', $line) && 
+                    !preg_match('/[а-яА-ЯёЁ]/u', $line) && 
+                    mb_strlen($line) > 20) {
+                    continue;
+                }
+                $filteredLines[] = $line;
+            }
+            $aiText = implode("\n", $filteredLines);
+            
+            // Сохраняем двойные переносы строк для абзацев, заменяем только множественные пробелы и табы
+            $aiText = preg_replace('/[ \t]+/', ' ', $aiText); // Заменяем только пробелы и табы, не переносы строк
+            // Нормализуем переносы строк: оставляем только одиночные и двойные
+            $aiText = preg_replace('/\n{3,}/', "\n\n", $aiText); // Множественные переносы -> двойные
+            $aiText = trim($aiText);
+            
+            if ($aiText !== '') {
+                $sentences = splitIntoSentences($aiText);
+                $data['overview']['summary'] = buildParagraphsFromSentences(
+                    $sentences,
+                    buildOverviewFallbackSentences($payload),
+                    3,
+                    3
+                );
+            }
         }
     } catch (Throwable $e) {
         error_log('Overview AI refinement failed: ' . $e->getMessage());
@@ -3601,12 +3661,10 @@ function buildOverviewRefinementPrompt(array $overview, array $payload, bool $is
     $existingSummary = trim((string)($overview['summary'] ?? ''));
 
     return <<<PROMPT
-Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}{$cashOutInstruction}{$languageInstruction}
-- Стиль: деловой и живой тон без канцелярита.
-- Сформируй несколько абзацев (2-4 абзаца), в каждом по 2-3 предложения. Делай переходы логичными: 1) кто компания и что делает, 2) география и клиенты, 3) конкурентные преимущества, {$fourthParagraphInstruction}
-- Используй только приведённые факты, не придумывай цифры или названия.
-- Внутри предложений соединяй части запятыми, избегай сухих списков.
-- Каждый абзац должен быть отделён пустой строкой от предыдущего.
+Напиши описание компании на основе фактов ниже.{$nameInstruction}{$cashOutInstruction}{$languageInstruction}
+- Формат: 2-3 абзаца по 2-3 предложения в каждом.
+- Используй только факты из списка, не придумывай цифры.
+- Каждый абзац отделяй пустой строкой.
 
 Исходная версия: "{$existingSummary}"
 
