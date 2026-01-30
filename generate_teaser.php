@@ -1370,23 +1370,23 @@ function cleanWebsiteSnapshot(string $snapshot): string
  * @param string $siteNote Заметка о сайте
  * @return string Промпт для AI
  */
-function buildStartupTeaserPrompt(string $displayNameInPrompt, string $nameInstruction, string $cashOutInstruction, string $json, string $siteNote): string
+function buildStartupTeaserPrompt(string $displayNameInPrompt, string $nameInstruction, string $cashOutInstruction, string $json, string $siteNote, bool $isEarlyStage = false): string
 {
+    $earlyStageInstruction = '';
+    if ($isEarlyStage) {
+        $earlyStageInstruction = "\n\nВАЖНО: Проект находится на ранней стадии (идея, прототип или MVP) и не имеет выручки. НЕ используй фразы про устойчивость или стабильность бизнеса (устойчивая бизнес-модель, устойчивый бизнес, стабильная выручка, устоявшийся бизнес, доказанная бизнес-модель). Вместо этого используй формулировки про потенциал, перспективы, инновационность (перспективный проект, инновационное решение, потенциал роста, ранняя стадия развития).";
+    }
+    
     return <<<PROMPT
-Ты — инвестиционный банкир. Подготовь лаконичный тизер {$displayNameInPrompt} для потенциальных инвесторов.
+Подготовь тизер {$displayNameInPrompt} для инвесторов на русском языке.{$nameInstruction}{$cashOutInstruction}{$earlyStageInstruction}
 
-Важно:
-- Отвечай строго на русском языке. НЕ используй английские слова, кроме обязательных технических терминов (например, MVP, SaaS, B2B).
-- ИСПОЛЬЗУЙ ВСЮ ИМЕЮЩУЮСЯ ИНФОРМАЦИЮ из анкеты. Если поле заполнено — используй его. Если поле пустое или отсутствует — пиши «уточняется».
-- Для стартапов многие поля могут быть не заполнены — это нормально. Используй то, что есть, и указывай «уточняется» для отсутствующих данных.
-- При необходимости дополни данные публичными отраслевыми фактами (без выдумывания конкретных чисел, если они неупомянуты).
-- Соблюдай структуру данных. Все текстовые поля — короткие абзацы, списки — массивы строк.
-- Для блока "overview.summary": напиши 2-4 абзаца по 2-3 предложения в каждом. Каждый абзац должен быть отделён пустой строкой. Используй деловой стиль без канцелярита. Структура: 1) описание продукта и компании, 2) ключевые показатели и тракция, 3) рынок и конкурентные преимущества, 4) инвестиционный запрос и планы развития.
-- ИГНОРИРУЙ любые фрагменты JavaScript кода, HTML теги, технические символы ({}, [], (), =, function, var, let, const, document, window и т.д.) из данных сайта. Используй только читаемый текст на русском языке.
-- НЕ повторяй одни и те же предложения или фразы. Каждое предложение должно добавлять новую информацию.
-- Если в данных сайта есть повторяющиеся фразы или код — пропусти их и используй только уникальную информацию.{$nameInstruction}{$cashOutInstruction}
+Используй данные анкеты. Если поле пустое — пиши «уточняется».
 
-Структура ответа — строго валидный JSON:
+Для блока "overview.summary": напиши 2-4 абзаца по 2-3 предложения. Каждый абзац отделяй пустой строкой. Структура: 1) продукт и компания, 2) показатели и тракция, 3) рынок и преимущества, 4) инвестиционный запрос.
+
+Игнорируй код, HTML теги, технические символы из данных сайта. Используй только читаемый текст.
+
+Верни JSON:
 {
   "overview": {
       "title": "...",
@@ -1449,11 +1449,9 @@ function buildStartupTeaserPrompt(string $displayNameInPrompt, string $nameInstr
   }
 }
 
-Данные анкеты:
+Данные:
 {$json}
 {$siteNote}
-
-ВАЖНО: Если в данных анкеты указана цена предложения Продавца (final_selling_price или final_price), используй её в поле "price" раздела "deal_terms" как "Цена актива: X млн ₽". Если цена предложения Продавца не указана, используй поле "valuation_expectation" для указания ожидаемой оценки.
 PROMPT;
 }
 
@@ -1490,7 +1488,8 @@ function buildTeaserPrompt(array $payload, bool $isStartup = false): string
 
     if ($isStartup) {
         // Промпт для стартапов
-        return buildStartupTeaserPrompt($displayNameInPrompt, $nameInstruction, $cashOutInstruction, $json, $siteNote);
+        $isEarlyStage = isEarlyStageStartupWithoutRevenue($payload);
+        return buildStartupTeaserPrompt($displayNameInPrompt, $nameInstruction, $cashOutInstruction, $json, $siteNote, $isEarlyStage);
     } else {
         // Промпт для зрелых компаний (максимально упрощенная версия)
     return <<<PROMPT
@@ -3453,6 +3452,25 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
         $aiText = trim(callAICompletions($prompt, $apiKey));
         $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
         
+        // Валидация ответа: проверка на обрывки фраз и слишком короткий текст
+        if (mb_strlen($aiText) < 150) {
+            error_log('Overview response too short (' . mb_strlen($aiText) . ' chars), using fallback');
+            $aiText = '';
+        }
+        
+        // Проверка на обрывки фраз (предложения без точки в конце)
+        if ($aiText !== '') {
+            $sentences = preg_split('/[.!?]+/', $aiText);
+            $incompleteSentences = array_filter($sentences, function($s) {
+                $trimmed = trim($s);
+                return $trimmed !== '' && mb_strlen($trimmed) > 10 && !preg_match('/[.!?]$/', $trimmed);
+            });
+            if (count($incompleteSentences) > 2) {
+                error_log('Overview response contains too many incomplete sentences (' . count($incompleteSentences) . '), using fallback');
+                $aiText = '';
+            }
+        }
+        
         // Проверяем, не содержит ли ответ сам промпт
         $promptPhrases = [
             'Ты инвестиционный банкир',
@@ -3691,17 +3709,21 @@ function shouldEnhanceOverview(array $overview): bool
  * @param string $fourthParagraphInstruction Инструкция для 4-го абзаца
  * @return string Промпт для AI
  */
-function buildStartupOverviewRefinementPrompt(array $overview, string $factsJson, string $nameInstruction, string $languageInstruction, string $fourthParagraphInstruction): string
+function buildStartupOverviewRefinementPrompt(array $overview, string $factsJson, string $nameInstruction, string $languageInstruction, string $fourthParagraphInstruction, bool $isEarlyStage = false): string
 {
     $existingSummary = trim((string)($overview['summary'] ?? ''));
     
+    $earlyStageInstruction = '';
+    if ($isEarlyStage) {
+        $earlyStageInstruction = "\n\nВАЖНО: Проект находится на ранней стадии (идея, прототип или MVP) и не имеет выручки. НЕ используй фразы про устойчивость или стабильность бизнеса (устойчивая бизнес-модель, устойчивый бизнес, стабильная выручка, устоявшийся бизнес, доказанная бизнес-модель). Вместо этого используй формулировки про потенциал, перспективы, инновационность (перспективный проект, инновационное решение, потенциал роста, ранняя стадия развития).";
+    }
+    
     return <<<PROMPT
-Ты инвестиционный банкир. На основе фактов ниже напиши компактный блок "Обзор возможности" строго на русском языке.{$nameInstruction}{$languageInstruction}
-- Стиль: деловой и живой тон без канцелярита.
-- Сформируй несколько абзацев (2-4 абзаца), в каждом по 2-3 предложения. Делай переходы логичными: 1) кто компания и что делает, 2) ключевые показатели и достижения, 3) конкурентные преимущества и потенциал, {$fourthParagraphInstruction}
-- Используй только приведённые факты, не придумывай цифры или названия.
-- Внутри предложений соединяй части запятыми, избегай сухих списков.
-- Каждый абзац должен быть отделён пустой строкой от предыдущего.
+Напиши описание стартапа на основе фактов ниже.{$nameInstruction}{$languageInstruction}{$earlyStageInstruction}
+
+Формат: 2-4 абзаца по 2-3 предложения. Каждый абзац отделяй пустой строкой.
+Структура: 1) продукт и компания, 2) показатели и тракция, 3) рынок и преимущества, {$fourthParagraphInstruction}
+Используй только факты из списка, не придумывай цифры.
 
 Исходная версия: "{$existingSummary}"
 
@@ -3792,7 +3814,11 @@ function buildOverviewRefinementPrompt(array $overview, array $payload, bool $is
         }
     }
 
-    $facts = array_filter($facts, fn($value) => trim((string)$value) !== '');
+    // Улучшенная фильтрация фактов: убираем пустые, нулевые и невалидные значения
+    $facts = array_filter($facts, function($value) {
+        $val = trim((string)$value);
+        return $val !== '' && $val !== '0' && $val !== 'null' && $val !== 'undefined' && $val !== '/' && mb_strlen($val) > 0;
+    });
     $factsJson = json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
     $nameInstruction = '';
@@ -3812,8 +3838,9 @@ function buildOverviewRefinementPrompt(array $overview, array $payload, bool $is
     if ($isStartup) {
         // Для стартапов используем отдельную функцию
         $fourthParagraphInstruction = '4) планы развития, roadmap и использование инвестиций.';
-        $languageInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Отвечай строго на русском языке. НЕ используй английские слова, кроме обязательных технических терминов (MVP, SaaS, B2B). ИГНОРИРУЙ любые фрагменты JavaScript кода, HTML теги, технические символы ({}, [], (), =, function, var, let, const, document, window и т.д.) из данных сайта. НЕ повторяй одни и те же предложения. Каждое предложение должно добавлять новую информацию.";
-        return buildStartupOverviewRefinementPrompt($overview, $factsJson, $nameInstruction, $languageInstruction, $fourthParagraphInstruction);
+        $languageInstruction = "\nОтвечай строго на русском языке. Игнорируй код и технические символы из данных сайта.";
+        $isEarlyStage = isEarlyStageStartupWithoutRevenue($payload);
+        return buildStartupOverviewRefinementPrompt($overview, $factsJson, $nameInstruction, $languageInstruction, $fourthParagraphInstruction, $isEarlyStage);
     } else {
         // Для зрелых компаний используем оригинальный промпт
         $languageInstruction = '';
@@ -4731,11 +4758,27 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
     $isOnlyCashOut = isOnlyCashOut($payload['deal_goal'] ?? '');
 
     $sentences = [];
-    $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+    
+    // Проверяем, является ли это стартапом на ранней стадии без выручки
+    $companyType = $payload['company_type'] ?? null;
+    $isStartup = ($companyType === 'startup');
+    $isEarlyStage = $isStartup && isEarlyStageStartupWithoutRevenue($payload);
+    
+    // Выбираем дескриптор в зависимости от типа компании и стадии
+    if ($isEarlyStage) {
+        $descriptor = $industry !== '' ? $industry : 'перспективный проект';
+    } else {
+        $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+    }
+    
     if ($isOnlyCashOut) {
         $sentences[] = "{$displayName} — {$descriptor}, готовый к продаже.";
     } else {
-        $sentences[] = "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+        if ($isEarlyStage) {
+            $sentences[] = "{$displayName} — {$descriptor} на ранней стадии развития, ищущий инвестиции для роста.";
+        } else {
+            $sentences[] = "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+        }
     }
 
     if ($regions !== '') {
@@ -4804,9 +4847,21 @@ function buildHeroDescription(array $teaserData, array $payload): string
         // Для скрытых активов используем "Компания" или "Фирма", но не "Компания Актив"
         $displayName = $isNameHidden ? 'Компания' : $assetName;
         
+        // Проверяем, является ли это стартапом на ранней стадии без выручки
+        $companyType = $payload['company_type'] ?? null;
+        $isStartup = ($companyType === 'startup');
+        $isEarlyStage = $isStartup && isEarlyStageStartupWithoutRevenue($payload);
+        
         $industry = trim((string)($payload['products_services'] ?? ''));
-        $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
-        return "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+        
+        // Выбираем дескриптор в зависимости от типа компании и стадии
+        if ($isEarlyStage) {
+            $descriptor = $industry !== '' ? $industry : 'перспективный проект';
+            return "{$displayName} — {$descriptor} на ранней стадии развития, ищущий инвестиции для роста.";
+        } else {
+            $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+            return "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
+        }
     }
     
     // Убираем HTML теги и форматирование
@@ -5712,6 +5767,35 @@ function isOnlyCashOut($dealGoal): bool
     }
     
     return false;
+}
+
+/**
+ * Определяет, является ли стартап на ранней стадии без выручки.
+ * 
+ * Ранние стадии: идея, прототип, MVP
+ * Проверяет наличие выручки за все три года (2023, 2024, 2025)
+ * 
+ * @param array $payload Данные анкеты
+ * @return bool true, если стадия ранняя И нет выручки ни за один год
+ */
+function isEarlyStageStartupWithoutRevenue(array $payload): bool
+{
+    $productStage = trim((string)($payload['startup_product_stage'] ?? ''));
+    $earlyStages = ['idea', 'prototype', 'mvp'];
+    
+    if (!in_array($productStage, $earlyStages, true)) {
+        return false; // Не ранняя стадия
+    }
+    
+    // Проверяем выручку за все три года
+    $revenue2023 = parseNumericValue($payload['startup_revenue_2023'] ?? null);
+    $revenue2024 = parseNumericValue($payload['startup_revenue_2024'] ?? null);
+    $revenue2025 = parseNumericValue($payload['startup_revenue_2025'] ?? null);
+    
+    // Если нет выручки ни за один год
+    return ($revenue2023 === null || $revenue2023 <= 0) &&
+           ($revenue2024 === null || $revenue2024 <= 0) &&
+           ($revenue2025 === null || $revenue2025 <= 0);
 }
 
 function buildInvestorProspectSentence(array $payload): ?string
