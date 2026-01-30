@@ -2658,6 +2658,11 @@ section {
     .seller-form > .form-section {
         padding: 20px;
     }
+    
+    /* Адаптивность для финансовых показателей стартапов */
+    .startup-financial-grid {
+        grid-template-columns: 1fr !important;
+    }
 
     .form-subsection {
         padding: 16px;

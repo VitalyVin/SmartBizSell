@@ -237,7 +237,7 @@ function buildDraftPayload(array $source): array
         'startup_expenses_2023', 'startup_expenses_2024', 'startup_expenses_2025',
         'startup_profit_2023', 'startup_profit_2024', 'startup_profit_2025',
         'startup_forecast', 'startup_unit_economics', 'startup_valuation',
-        'startup_investment_amount', 'startup_previous_investments'
+        'startup_investment_amount', 'startup_previous_investments', 'startup_financial_unit'
     ];
     
     foreach ($startupFields as $field) {
@@ -1577,24 +1577,49 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     <div class="form-section">
                         <h3 class="form-section-title">VII. Финансовые показатели и прогнозы</h3>
                         <h4 style="margin-top: 0; margin-bottom: 16px;">Фактические финансовые показатели за 2023-2025 (если есть):</h4>
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                        
+                        <div style="margin: 8px 0 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <span style="color: var(--text-secondary);">Ед. изм. для финансовых показателей:</span>
+                            <select id="startup-financial-unit-select" name="startup_financial_unit" class="form-control" style="max-width: 200px;">
+                                <option value="">— выбрать —</option>
+                                <option value="тыс. руб." <?php echo (($startupData['startup_financial_unit'] ?? '') === 'тыс. руб.') ? 'selected' : ''; ?>>тыс. руб.</option>
+                                <option value="млн. руб." <?php echo (($startupData['startup_financial_unit'] ?? '') === 'млн. руб.') ? 'selected' : ''; ?>>млн. руб.</option>
+                            </select>
+                        </div>
+                        
+                        <div class="startup-financial-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
                             <div class="form-group">
-                                <label>2023:</label>
-                                <input type="number" name="startup_revenue_2023" placeholder="Выручка" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                <input type="number" name="startup_expenses_2023" placeholder="Расходы" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                <input type="number" name="startup_profit_2023" placeholder="Прибыль/убыток" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <label style="font-weight: 600; margin-bottom: 12px; display: block;">2023:</label>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <label for="startup_revenue_2023" style="font-size: 13px; color: var(--text-secondary);">Выручка:</label>
+                                    <input type="number" id="startup_revenue_2023" name="startup_revenue_2023" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <label for="startup_expenses_2023" style="font-size: 13px; color: var(--text-secondary);">Расходы:</label>
+                                    <input type="number" id="startup_expenses_2023" name="startup_expenses_2023" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <label for="startup_profit_2023" style="font-size: 13px; color: var(--text-secondary);">Прибыль/убыток:</label>
+                                    <input type="number" id="startup_profit_2023" name="startup_profit_2023" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2023'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label>2024:</label>
-                                <input type="number" name="startup_revenue_2024" placeholder="Выручка" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                <input type="number" name="startup_expenses_2024" placeholder="Расходы" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                <input type="number" name="startup_profit_2024" placeholder="Прибыль/убыток" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <label style="font-weight: 600; margin-bottom: 12px; display: block;">2024:</label>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <label for="startup_revenue_2024" style="font-size: 13px; color: var(--text-secondary);">Выручка:</label>
+                                    <input type="number" id="startup_revenue_2024" name="startup_revenue_2024" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <label for="startup_expenses_2024" style="font-size: 13px; color: var(--text-secondary);">Расходы:</label>
+                                    <input type="number" id="startup_expenses_2024" name="startup_expenses_2024" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <label for="startup_profit_2024" style="font-size: 13px; color: var(--text-secondary);">Прибыль/убыток:</label>
+                                    <input type="number" id="startup_profit_2024" name="startup_profit_2024" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2024'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label>2025:</label>
-                                <input type="number" name="startup_revenue_2025" placeholder="Выручка" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                <input type="number" name="startup_expenses_2025" placeholder="Расходы" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                                <input type="number" name="startup_profit_2025" placeholder="Прибыль/убыток" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <label style="font-weight: 600; margin-bottom: 12px; display: block;">2025:</label>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <label for="startup_revenue_2025" style="font-size: 13px; color: var(--text-secondary);">Выручка:</label>
+                                    <input type="number" id="startup_revenue_2025" name="startup_revenue_2025" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_revenue_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <label for="startup_expenses_2025" style="font-size: 13px; color: var(--text-secondary);">Расходы:</label>
+                                    <input type="number" id="startup_expenses_2025" name="startup_expenses_2025" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_expenses_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <label for="startup_profit_2025" style="font-size: 13px; color: var(--text-secondary);">Прибыль/убыток:</label>
+                                    <input type="number" id="startup_profit_2025" name="startup_profit_2025" step="0.01" value="<?php echo htmlspecialchars($startupData['startup_profit_2025'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                </div>
                             </div>
                         </div>
 
@@ -1614,13 +1639,13 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     <div class="form-section">
                         <h3 class="form-section-title">VIII. Инвестиции</h3>
                         <div class="form-group">
-                            <label for="startup_valuation">Текущая оценка компании, руб.:</label>
+                            <label for="startup_valuation">Текущая оценка компании:</label>
                             <input type="number" id="startup_valuation" name="startup_valuation" min="0" step="0.01"
                                    value="<?php echo htmlspecialchars($startupData['startup_valuation'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
 
                         <div class="form-group">
-                            <label for="startup_investment_amount">Требуемая сумма инвестиций, руб.:</label>
+                            <label for="startup_investment_amount">Требуемая сумма инвестиций:</label>
                             <input type="number" id="startup_investment_amount" name="startup_investment_amount" min="0" step="0.01"
                                    value="<?php echo htmlspecialchars($startupData['startup_investment_amount'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
@@ -2523,6 +2548,48 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                    initUnitSelect('financial-unit-select', '.financial-unit');
                    initUnitSelect('balance-unit-select', '.balance-unit');
+                   
+                   // Отображение единиц измерения для финансовых показателей стартапов
+                   const startupFinancialUnitSelect = document.getElementById('startup-financial-unit-select');
+                   if (startupFinancialUnitSelect) {
+                       const startupFinancialInputs = [
+                           'startup_revenue_2023', 'startup_revenue_2024', 'startup_revenue_2025',
+                           'startup_expenses_2023', 'startup_expenses_2024', 'startup_expenses_2025',
+                           'startup_profit_2023', 'startup_profit_2024', 'startup_profit_2025',
+                           'startup_valuation', 'startup_investment_amount'
+                       ];
+                       
+                       function updateStartupFinancialUnitDisplay() {
+                           const unit = startupFinancialUnitSelect.value;
+                           startupFinancialInputs.forEach(id => {
+                               const input = document.getElementById(id);
+                               if (input) {
+                                   // Ищем label, который связан с input через for атрибут
+                                   const label = document.querySelector('label[for="' + id + '"]');
+                                   if (label) {
+                                       // Обновляем label с единицами измерения
+                                       // Убираем старые единицы (если есть в скобках)
+                                       let baseText = label.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
+                                       // Если baseText пустой, используем исходный текст без единиц
+                                       if (!baseText) {
+                                           baseText = label.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
+                                       }
+                                       if (unit) {
+                                           label.textContent = baseText + ' (' + unit + ')';
+                                       } else {
+                                           label.textContent = baseText;
+                                       }
+                                   }
+                               }
+                           });
+                       }
+                       
+                       // Инициализация при загрузке (с небольшой задержкой для гарантии загрузки DOM)
+                       setTimeout(updateStartupFinancialUnitDisplay, 100);
+                       
+                       // Обновление при изменении выбора
+                       startupFinancialUnitSelect.addEventListener('change', updateStartupFinancialUnitDisplay);
+                   }
 
                    // Онлайн-продажи
                    const onlineSalesRadios = document.querySelectorAll('input[name="online_sales_presence"]');
