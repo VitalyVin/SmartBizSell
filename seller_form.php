@@ -357,24 +357,43 @@ function hydrateFormFromDb(array $form): void
 {
     error_log("HYDRATING FORM - form_id: " . ($form['id'] ?? 'unknown'));
 
-    // Если есть data_json (для черновиков), используем его для восстановления всех данных
+    // Инициализируем $_POST пустым массивом
+    $_POST = [];
+    
+    // Если есть data_json (для черновиков), используем его как основу
     // Это приоритетный источник, так как содержит полную структуру формы
     if (!empty($form['data_json'])) {
         $decodedData = json_decode($form['data_json'], true);
         error_log("HYDRATING FORM - data_json length: " . strlen($form['data_json']));
         if (is_array($decodedData)) {
-            $_POST = $decodedData; // Полностью заменяем $_POST данными из базы
+            $_POST = $decodedData; // Загружаем данные из data_json
             error_log("HYDRATING FORM - loaded data keys: " . implode(', ', array_keys($decodedData)));
             error_log("HYDRATING FORM - production data: " . (isset($_POST['production']) ? 'EXISTS (' . count($_POST['production']) . ' items)' : 'NOT SET'));
-            return; // Если data_json есть, используем только его
-                } else {
+        } else {
             error_log("HYDRATING FORM - failed to decode JSON");
         }
     } else {
         error_log("HYDRATING FORM - no data_json found");
     }
 
-    // Иначе используем отдельные поля из базы данных (для старых форм или отправленных форм)
+    // ВАЖНО: Всегда дополняем/перезаписываем данными из отдельных колонок БД
+    // Это гарантирует, что данные из отправленных форм (которые сохранены в отдельных колонках)
+    // будут доступны при редактировании, даже если data_json пустой или неполный
+    
+    // Основные поля - всегда из БД
+    if (!empty($form['asset_name'])) {
+        $_POST['asset_name'] = $form['asset_name'];
+    }
+    if (!empty($form['company_inn'])) {
+        $_POST['company_inn'] = $form['company_inn'];
+    }
+    if (isset($form['company_type'])) {
+        $_POST['company_type'] = $form['company_type'];
+    }
+
+    // Используем отдельные поля из базы данных
+    // Для отправленных форм (status = 'submitted') приоритет у данных из БД
+    // Для черновиков (status = 'draft') приоритет у data_json, но дополняем пустые поля из БД
     $mapping = [
         'company_inn' => 'company_inn',
         'asset_name' => 'asset_name',
@@ -414,8 +433,27 @@ function hydrateFormFromDb(array $form): void
         'financial_source' => 'financial_source',
     ];
 
+    $isSubmitted = ($form['status'] ?? '') === 'submitted';
+    
     foreach ($mapping as $postKey => $column) {
-        $_POST[$postKey] = $form[$column] ?? '';
+        $dbValue = $form[$column] ?? '';
+        // Для отправленных форм - приоритет у данных из БД
+        // Для черновиков - дополняем пустые поля данными из БД
+        if ($isSubmitted) {
+            // Для отправленных форм используем данные из БД, если они есть
+            if (!empty($dbValue)) {
+                $_POST[$postKey] = $dbValue;
+            } elseif (!isset($_POST[$postKey])) {
+                $_POST[$postKey] = '';
+            }
+        } else {
+            // Для черновиков дополняем только пустые поля
+            if (empty($_POST[$postKey]) && !empty($dbValue)) {
+                $_POST[$postKey] = $dbValue;
+            } elseif (!isset($_POST[$postKey])) {
+                $_POST[$postKey] = $dbValue;
+            }
+        }
     }
     
     // Преобразуем строку регионов в массив для чекбоксов (если это строка)
@@ -439,74 +477,77 @@ function hydrateFormFromDb(array $form): void
         if (is_array($_POST['deal_goal'])) {
             // Новый формат: массив значений
             $_POST['deal_goal'] = $_POST['deal_goal'];
-        } else {
-            // Старый формат: одиночное значение (для обратной совместимости)
-    if ($_POST['deal_goal'] === 'cash-out') $_POST['deal_goal'] = 'cash_out';
-    if ($_POST['deal_goal'] === 'cash-in') $_POST['deal_goal'] = 'cash_in';
-        }
-    }
-    $_POST['production_land_ownership'] = $form['production_land_ownership'] ?? '';
-    $_POST['contract_production_usage'] = $form['contract_production_usage'] ?? '';
-    $_POST['offline_sales_presence'] = $form['offline_sales_presence'] ?? '';
-    $_POST['offline_sales_third_party'] = $form['offline_sales_third_party'] ?? '';
-    $_POST['offline_sales_distributors'] = $form['offline_sales_distributors'] ?? '';
-
-    // Восстановление данных из JSON для таблиц
-    if (!empty($form['data_json'])) {
-        $data = json_decode($form['data_json'], true);
-        if (is_array($data)) {
-            // Восстановление данных таблиц
-            if (isset($data['production'])) {
-                $_POST['production'] = $data['production'];
-            }
-            if (isset($data['financial'])) {
-                $_POST['financial'] = $data['financial'];
-            }
-            if (isset($data['balance'])) {
-                $_POST['balance'] = $data['balance'];
-            }
-            // Восстановление остальных полей формы
-            foreach ($data as $key => $value) {
-                if (!isset($_POST[$key]) && $key !== 'production' && $key !== 'financial' && $key !== 'balance') {
-                    // Обрабатываем deal_goal: может быть JSON (массив) или строкой
-                    if ($key === 'deal_goal' && is_string($value)) {
-                        $decoded = json_decode($value, true);
-                        if (is_array($decoded)) {
-                            $_POST[$key] = $decoded; // Массив для checkboxes
-                        } else {
-                            $_POST[$key] = $value; // Строка для обратной совместимости
-                        }
-                    } else {
-                    $_POST[$key] = $value;
-                    }
-                }
-            }
-            
-            // Преобразуем строку регионов в массив для чекбоксов (если это строка из data_json)
-            // Если уже массив - оставляем как есть
-            if (isset($_POST['presence_regions'])) {
-                if (is_string($_POST['presence_regions']) && !empty($_POST['presence_regions'])) {
-                    // Строка - преобразуем в массив
-                    $_POST['presence_regions'] = array_map('trim', explode(',', $_POST['presence_regions']));
-                    $_POST['presence_regions'] = array_filter($_POST['presence_regions']); // Убираем пустые значения
-                } elseif (is_array($_POST['presence_regions'])) {
-                    // Уже массив - очищаем и оставляем как есть
-                    $_POST['presence_regions'] = array_map('trim', $_POST['presence_regions']);
-                    $_POST['presence_regions'] = array_filter($_POST['presence_regions']); // Убираем пустые значения
-                }
+        } elseif (is_string($_POST['deal_goal'])) {
+            // Может быть JSON-строка из БД
+            $decoded = json_decode($_POST['deal_goal'], true);
+            if (is_array($decoded)) {
+                $_POST['deal_goal'] = $decoded; // Массив для checkboxes
+            } else {
+                // Старый формат: одиночное значение (для обратной совместимости)
+                if ($_POST['deal_goal'] === 'cash-out') $_POST['deal_goal'] = 'cash_out';
+                if ($_POST['deal_goal'] === 'cash-in') $_POST['deal_goal'] = 'cash_in';
             }
         }
     }
+    // Дополняем отдельные поля из БД
+    if ($isSubmitted || empty($_POST['production_land_ownership'])) {
+        $_POST['production_land_ownership'] = $form['production_land_ownership'] ?? ($_POST['production_land_ownership'] ?? '');
+    }
+    if ($isSubmitted || empty($_POST['contract_production_usage'])) {
+        $_POST['contract_production_usage'] = $form['contract_production_usage'] ?? ($_POST['contract_production_usage'] ?? '');
+    }
+    if ($isSubmitted || empty($_POST['offline_sales_presence'])) {
+        $_POST['offline_sales_presence'] = $form['offline_sales_presence'] ?? ($_POST['offline_sales_presence'] ?? '');
+    }
+    if ($isSubmitted || empty($_POST['offline_sales_third_party'])) {
+        $_POST['offline_sales_third_party'] = $form['offline_sales_third_party'] ?? ($_POST['offline_sales_third_party'] ?? '');
+    }
+    if ($isSubmitted || empty($_POST['offline_sales_distributors'])) {
+        $_POST['offline_sales_distributors'] = $form['offline_sales_distributors'] ?? ($_POST['offline_sales_distributors'] ?? '');
+    }
 
-    // Также проверяем данные из отдельных полей (для совместимости с старыми формами)
-    if (empty($_POST['production']) && !empty($form['production_volumes'])) {
-        $_POST['production'] = json_decode($form['production_volumes'], true) ?: [];
-    }
-    if (empty($_POST['financial']) && !empty($form['financial_results'])) {
-        $_POST['financial'] = json_decode($form['financial_results'], true) ?: [];
-    }
-    if (empty($_POST['balance']) && !empty($form['balance_indicators'])) {
-        $_POST['balance'] = json_decode($form['balance_indicators'], true) ?: [];
+    // Восстановление данных таблиц из data_json или отдельных JSON-полей БД
+    // Для отправленных форм приоритет у отдельных полей БД
+    if ($isSubmitted) {
+        // Для отправленных форм загружаем таблицы из отдельных полей БД
+        if (!empty($form['production_volumes'])) {
+            $decoded = json_decode($form['production_volumes'], true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $_POST['production'] = $decoded;
+            }
+        }
+        if (!empty($form['financial_results'])) {
+            $decoded = json_decode($form['financial_results'], true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $_POST['financial'] = $decoded;
+            }
+        }
+        if (!empty($form['balance_indicators'])) {
+            $decoded = json_decode($form['balance_indicators'], true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $_POST['balance'] = $decoded;
+            }
+        }
+    } else {
+        // Для черновиков: если таблицы есть в data_json - используем их, иначе из отдельных полей
+        if (empty($_POST['production']) && !empty($form['production_volumes'])) {
+            $decoded = json_decode($form['production_volumes'], true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $_POST['production'] = $decoded;
+            }
+        }
+        if (empty($_POST['financial']) && !empty($form['financial_results'])) {
+            $decoded = json_decode($form['financial_results'], true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $_POST['financial'] = $decoded;
+            }
+        }
+        if (empty($_POST['balance']) && !empty($form['balance_indicators'])) {
+            $decoded = json_decode($form['balance_indicators'], true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $_POST['balance'] = $decoded;
+            }
+        }
     }
 
     // Нормализация старых полей 2025 года (budget -> fact, удаляем 9М 2025)
@@ -584,6 +625,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
         $stmt->execute([$formId, $effectiveUserId]);
         $existingForm = $stmt->fetch();
+        
+        // ВАЖНО: Если form_id передан, но форма не найдена - это ошибка
+        // Не создаем новую форму, а выдаем ошибку
+        if (!$existingForm && $formId > 0) {
+            error_log("ERROR: form_id=$formId передан, но форма не найдена для user_id=$effectiveUserId");
+            $errors['general'] = 'Анкета не найдена или у вас нет прав на её редактирование.';
+        }
     }
 
     // Определяем тип компании из POST или существующей формы
@@ -721,7 +769,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // ========== РЕЖИМ СОХРАНЕНИЯ ЧЕРНОВИКА ==========
                 // Для черновика сохраняем только asset_name и data_json
                 // Статус всегда 'draft', остальные поля не заполняются
-                if ($formId && $existingForm) {
+                if ($formId && $formId > 0) {
+                    // Если передан form_id, всегда обновляем существующую запись
+                    // Даже если $existingForm не найден, пытаемся обновить по form_id
+                    if (!$existingForm) {
+                        // Проверяем, существует ли форма с таким ID
+                        $checkStmt = $pdo->prepare("SELECT id FROM seller_forms WHERE id = ? AND user_id = ?");
+                        $checkStmt->execute([$formId, getEffectiveUserId()]);
+                        if (!$checkStmt->fetch()) {
+                            error_log("ERROR: Попытка обновить несуществующую форму form_id=$formId");
+                            $errors['general'] = 'Анкета не найдена.';
+                            // Не продолжаем сохранение
+                        } else {
+                            // Форма существует, но не была загружена ранее - загружаем сейчас
+                            $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+                            $stmt->execute([$formId, getEffectiveUserId()]);
+                            $existingForm = $stmt->fetch();
+                        }
+                    }
+                    
+                    // Если ошибок нет, продолжаем обновление
+                    if (empty($errors['general'])) {
                     // Обновление существующего черновика
                     // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
                     // чтобы не потерять их при сохранении формы
@@ -733,22 +801,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     
-                    // Объединяем текущие данные с новыми данными формы
-                    // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
-                    $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
-                    foreach ($preservedFields as $field) {
-                        if (isset($currentDataJson[$field])) {
-                            $draftPayload[$field] = $currentDataJson[$field];
+                    // Проверяем, пришел ли только выбор типа компании без других данных формы
+                    // Если в POST только company_type, form_id, save_draft и служебные поля - это выбор типа компании
+                    $postKeys = array_keys($_POST);
+                    $formDataKeys = array_filter($postKeys, function($key) {
+                        return !in_array($key, ['company_type', 'form_id', 'save_draft', 'save_draft_flag'], true);
+                    });
+                    $isOnlyCompanyTypeSelection = empty($formDataKeys);
+                    
+                    if ($isOnlyCompanyTypeSelection) {
+                        // Если выбран только тип компании, сохраняем только company_type, не трогая data_json
+                        $effectiveUserId = getEffectiveUserId();
+                        $stmt = $pdo->prepare("UPDATE seller_forms SET company_type = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
+                        $stmt->execute([$companyType ?: null, $formId, $effectiveUserId]);
+                        error_log("COMPANY TYPE UPDATED ONLY - form_id: $formId, company_type: " . ($companyType ?: 'NULL'));
+                    } else {
+                        // Объединяем текущие данные с новыми данными формы
+                        // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
+                        $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
+                        foreach ($preservedFields as $field) {
+                            if (isset($currentDataJson[$field])) {
+                                $draftPayload[$field] = $currentDataJson[$field];
+                            }
                         }
+                        
+                        // Обновляем data_json с сохранением важных полей
+                        $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                        
+                        $effectiveUserId = getEffectiveUserId();
+                        $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, company_type = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
+                        $stmt->execute([$asset_name, $companyInnDigits, $companyType ?: null, $dataJson, $formId, $effectiveUserId]);
+                        error_log("DRAFT UPDATED - form_id: $formId");
                     }
-                    
-                    // Обновляем data_json с сохранением важных полей
-                    $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
-                    
-                    $effectiveUserId = getEffectiveUserId();
-                    $stmt = $pdo->prepare("UPDATE seller_forms SET asset_name = ?, company_inn = ?, company_type = ?, data_json = ?, status = 'draft', updated_at = NOW() WHERE id = ? AND user_id = ?");
-                    $stmt->execute([$asset_name, $companyInnDigits, $companyType ?: null, $dataJson, $formId, $effectiveUserId]);
-                    error_log("DRAFT UPDATED - form_id: $formId");
+                    }
                 } else {
                     // Создание нового черновика
                     $effectiveUserId = getEffectiveUserId();
@@ -758,9 +843,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     error_log("DRAFT INSERTED - new form_id: $formId");
                 }
 
-                // Редирект с сообщением об успешном сохранении
-                header('Location: seller_form.php?saved=1&form_id=' . $formId);
-                exit;
+                // Редирект с сообщением об успешном сохранении (только если нет ошибок)
+                if (empty($errors)) {
+                    header('Location: seller_form.php?saved=1&form_id=' . $formId);
+                    exit;
+                }
             } else {
                 // ========== РЕЖИМ ФИНАЛЬНОЙ ОТПРАВКИ ==========
                 // Для отправленной формы сохраняем данные в отдельных полях БД
@@ -822,16 +909,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $financialResults = isset($_POST['financial']) ? json_encode($_POST['financial'], JSON_UNESCAPED_UNICODE) : null;
                 $balanceIndicators = isset($_POST['balance']) ? json_encode($_POST['balance'], JSON_UNESCAPED_UNICODE) : null;
 
-                if ($formId && $existingForm) {
-                    // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
-                    // чтобы не потерять их при финальной отправке формы
-                    $currentDataJson = [];
-                    if (!empty($existingForm['data_json'])) {
-                        $decoded = json_decode($existingForm['data_json'], true);
-                        if (is_array($decoded)) {
-                            $currentDataJson = $decoded;
+                if ($formId && $formId > 0) {
+                    // Если передан form_id, всегда обновляем существующую запись
+                    // Даже если $existingForm не найден, пытаемся обновить по form_id
+                    if (!$existingForm) {
+                        // Проверяем, существует ли форма с таким ID
+                        $checkStmt = $pdo->prepare("SELECT id FROM seller_forms WHERE id = ? AND user_id = ?");
+                        $checkStmt->execute([$formId, getEffectiveUserId()]);
+                        if (!$checkStmt->fetch()) {
+                            error_log("ERROR: Попытка обновить несуществующую форму form_id=$formId");
+                            $errors['general'] = 'Анкета не найдена.';
+                            // Не продолжаем сохранение
+                        } else {
+                            // Форма существует, но не была загружена ранее - загружаем сейчас
+                            $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+                            $stmt->execute([$formId, getEffectiveUserId()]);
+                            $existingForm = $stmt->fetch();
                         }
                     }
+                    
+                    // Если ошибок нет, продолжаем обновление
+                    if (empty($errors['general'])) {
+                        // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
+                        // чтобы не потерять их при финальной отправке формы
+                        $currentDataJson = [];
+                        if (!empty($existingForm['data_json'])) {
+                            $decoded = json_decode($existingForm['data_json'], true);
+                            if (is_array($decoded)) {
+                                $currentDataJson = $decoded;
+                            }
+                        }
                     
                     // Объединяем текущие данные с новыми данными формы
                     // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
@@ -873,6 +980,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $productionVolumes, $financialResults, $balanceIndicators, $dataJson,
                         $formId, getEffectiveUserId()
                     ]);
+                    }
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO seller_forms (
                                     user_id, asset_name, company_inn, company_type, deal_subject, deal_purpose, asset_disclosure,
@@ -905,9 +1013,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $formId = $pdo->lastInsertId();
                 }
 
-                // Для финальной отправки - редирект в кабинет
-                            header('Location: dashboard.php?success=1');
-                            exit;
+                // Для финальной отправки - редирект в кабинет (только если нет ошибок)
+                if (empty($errors)) {
+                    header('Location: dashboard.php?success=1');
+                    exit;
+                }
             }
                         } catch (PDOException $e) {
                             error_log("Error saving form: " . $e->getMessage());
@@ -1141,8 +1251,8 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     <input type="hidden" name="form_id" value="<?php echo htmlspecialchars($formId ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                     <input type="hidden" name="save_draft_flag" value="0" id="save-draft-flag">
                     
-                    <?php if (!$companyType): ?>
-                    <!-- Выбор типа компании - показывается только если тип не определен -->
+                    <?php if (!$companyType && !$existingForm): ?>
+                    <!-- Выбор типа компании - показывается только для новых анкет, если тип не определен -->
                     <div class="form-section" id="company-type-selection">
                         <h3 class="form-section-title">Выберите тип компании</h3>
                         <div class="form-group<?php echo requiredClass('company_type', $companyType); ?>">
@@ -1171,13 +1281,15 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         </div>
                     </div>
                     <?php else: ?>
-                    <!-- Форма отображается только если тип компании выбран -->
+                    <!-- Форма отображается если тип компании выбран или есть существующая форма -->
                     <div class="form-actions" style="margin-bottom:24px; text-align:right;">
                         <button type="submit" name="save_draft" value="1" class="btn btn-secondary" style="padding: 10px 20px;" formnovalidate>
                             Сохранить черновик
                         </button>
                     </div>
+                    <?php if ($companyType): ?>
                     <input type="hidden" name="company_type" value="<?php echo htmlspecialchars($companyType, ENT_QUOTES, 'UTF-8'); ?>">
+                    <?php endif; ?>
 
                     <div class="form-section">
                         <h3 class="form-section-title">I. Детали предполагаемой сделки</h3>
@@ -1519,8 +1631,8 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                             <small style="color: var(--text-secondary);">Сумма, инвестор, тип инвестора (друзья и родственники / бизнес-ангел / фонд или корпорация), как использовались инвестиции</small>
                         </div>
                     </div>
-                    <?php elseif ($companyType === 'mature'): ?>
-                    <!-- СЕКЦИИ ДЛЯ ЗРЕЛЫХ КОМПАНИЙ -->
+                    <?php else: ?>
+                    <!-- СЕКЦИИ ДЛЯ ЗРЕЛЫХ КОМПАНИЙ (по умолчанию, если не startup) -->
                     <div class="form-section">
                         <h3 class="form-section-title">II. Описание бизнеса компании</h3>
                         <div class="form-group<?php echo requiredClass('company_description', $companyType); ?>">
