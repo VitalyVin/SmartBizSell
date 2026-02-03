@@ -3262,10 +3262,32 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
         $revenue2024 = $payload['startup_revenue_2024'] ?? null;
         $revenue2025 = $payload['startup_revenue_2025'] ?? null;
         
+        // Получаем единицу измерения финансовых данных
+        $financialUnitRaw = $payload['startup_financial_unit'] ?? 'тыс. руб.';
+        $financialUnit = detectFinancialUnit($financialUnitRaw);
+        
+        // Функция для форматирования выручки с учетом единиц измерения
+        $formatRevenue = function($value, $unit) use ($placeholderStartup) {
+            if ($value === null || $value === '' || $value === 0) {
+                return $placeholderStartup;
+            }
+            // Преобразуем в число
+            $numValue = is_numeric($value) ? (float)$value : parseNumericValue($value);
+            if ($numValue === null || $numValue == 0) {
+                return $placeholderStartup;
+            }
+            // Конвертируем в миллионы рублей
+            $valueInMillions = convertFinancialToMillions($numValue, $unit);
+            if ($valueInMillions <= 0) {
+                return $placeholderStartup;
+            }
+            return number_format($valueInMillions, 0, '.', ' ') . ' млн ₽';
+        };
+        
         $data['financials_forecast'] = [
-            'revenue_2023' => $data['financials_forecast']['revenue_2023'] ?? ($revenue2023 !== null ? number_format($revenue2023, 0, '.', ' ') . ' млн ₽' : $placeholderStartup),
-            'revenue_2024' => $data['financials_forecast']['revenue_2024'] ?? ($revenue2024 !== null ? number_format($revenue2024, 0, '.', ' ') . ' млн ₽' : $placeholderStartup),
-            'revenue_2025' => $data['financials_forecast']['revenue_2025'] ?? ($revenue2025 !== null ? number_format($revenue2025, 0, '.', ' ') . ' млн ₽' : $placeholderStartup),
+            'revenue_2023' => $data['financials_forecast']['revenue_2023'] ?? $formatRevenue($revenue2023, $financialUnit),
+            'revenue_2024' => $data['financials_forecast']['revenue_2024'] ?? $formatRevenue($revenue2024, $financialUnit),
+            'revenue_2025' => $data['financials_forecast']['revenue_2025'] ?? $formatRevenue($revenue2025, $financialUnit),
             'forecast' => $data['financials_forecast']['forecast'] ?? $placeholderStartup,
             'unit_economics' => $data['financials_forecast']['unit_economics'] ?? $placeholderStartup,
             'valuation' => $data['financials_forecast']['valuation'] ?? ($payload['startup_current_valuation'] ?? $placeholderStartup),
