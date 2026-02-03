@@ -1272,6 +1272,32 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                     <?php if (!$companyType && !$existingForm): ?>
                     <!-- Выбор типа компании - показывается только для новых анкет, если тип не определен -->
                     <div class="form-section" id="company-type-selection">
+                        <!-- Мотивирующий информационный блок -->
+                        <div class="info-box" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-left: 4px solid #0ea5e9; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                            <div style="display: flex; align-items: flex-start; gap: 16px;">
+                                <div style="flex-shrink: 0; width: 24px; height: 24px; margin-top: 2px;">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%;">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#0ea5e9"/>
+                                    </svg>
+                                </div>
+                                <div style="flex: 1;">
+                                    <h4 style="margin: 0 0 12px 0; color: #0c4a6e; font-size: 18px; font-weight: 600;">
+                                        Чем больше информации — тем лучше результат
+                                    </h4>
+                                    <p style="margin: 0 0 10px 0; color: #075985; line-height: 1.6; font-size: 15px;">
+                                        Полнота и детальность предоставленных данных напрямую влияют на качество подготовленных материалов. 
+                                        Чем больше информации вы укажете о вашем бизнесе, продуктах, финансовых показателях и планах развития, 
+                                        тем более убедительным и привлекательным получится тизер для инвесторов.
+                                    </p>
+                                    <p style="margin: 0; color: #075985; line-height: 1.6; font-size: 15px;">
+                                        <strong>Качественные материалы</strong> помогают инвесторам быстрее понять потенциал вашего актива 
+                                        и принять решение о взаимодействии. Потратьте время на заполнение всех доступных полей — 
+                                        это увеличит ваши шансы на успешное привлечение инвестиций или продажу бизнеса.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <h3 class="form-section-title">Выберите тип компании</h3>
                         <div class="form-group<?php echo requiredClass('company_type', $companyType); ?>">
                             <label>Тип компании:</label>

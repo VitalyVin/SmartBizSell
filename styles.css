@@ -2118,6 +2118,16 @@ section {
     gap: 24px;
 }
 
+/* Информационный блок для мотивирующего текста */
+.info-box {
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
+    transition: box-shadow 0.2s ease;
+}
+
+.info-box:hover {
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15);
+}
+
 .form-section-title {
     font-size: 22px;
     font-weight: 700;
