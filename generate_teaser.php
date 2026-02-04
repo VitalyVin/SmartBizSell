@@ -726,7 +726,7 @@ if (empty($apiKey)) {
         try {
             $apiStartTime = microtime(true);
             $usedModelInfo = null;
-            $rawResponse = callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo); // 3 попытки с retry
+            $rawResponse = callAICompletions($prompt, $apiKey, 5, null, $usedModelInfo); // 5 попыток с retry для стабильности
             $apiDuration = round(microtime(true) - $apiStartTime, 3);
             $logData = [
                 'response_length' => strlen($rawResponse),
@@ -1130,7 +1130,12 @@ function buildTeaserPayload(array $form): array
         $data['financial']  = !empty($form['financial_results']) ? (json_decode($form['financial_results'], true) ?: []) : [];
         $data['balance']    = !empty($form['balance_indicators']) ? (json_decode($form['balance_indicators'], true) ?: []) : [];
     }
-    
+
+    // Доля из анкеты: если в data нет deal_share_range (например при данных из data_json), берём из формы (deal_subject)
+    if (trim((string)($data['deal_share_range'] ?? '')) === '' && trim((string)($form['deal_subject'] ?? '')) !== '') {
+        $data['deal_share_range'] = $form['deal_subject'];
+    }
+
     // Добавляем данные стартапа, если они есть
     // Проверяем company_type из data_json или из отдельного поля
     $companyType = $data['company_type'] ?? $form['company_type'] ?? null;
@@ -1413,15 +1418,15 @@ function cleanWebsiteSnapshot(string $snapshot): string
  * @param string $siteNote Заметка о сайте
  * @return string Промпт для AI
  */
-function buildStartupTeaserPrompt(string $displayNameInPrompt, string $nameInstruction, string $cashOutInstruction, string $json, string $siteNote, bool $isEarlyStage = false): string
+function buildStartupTeaserPrompt(string $displayNameInPrompt, string $nameInstruction, string $cashOutInstruction, string $json, string $siteNote, bool $isEarlyStage = false, string $minorityShareInstruction = ''): string
 {
     $earlyStageInstruction = '';
     if ($isEarlyStage) {
         $earlyStageInstruction = "\n\nВАЖНО: Проект находится на ранней стадии (идея, прототип или MVP) и не имеет выручки. НЕ используй фразы про устойчивость или стабильность бизнеса (устойчивая бизнес-модель, устойчивый бизнес, стабильная выручка, устоявшийся бизнес, доказанная бизнес-модель). Вместо этого используй формулировки про потенциал, перспективы, инновационность (перспективный проект, инновационное решение, потенциал роста, ранняя стадия развития).";
     }
-    
+
     return <<<PROMPT
-Подготовь тизер {$displayNameInPrompt} для инвесторов на русском языке.{$nameInstruction}{$cashOutInstruction}{$earlyStageInstruction}
+Подготовь тизер {$displayNameInPrompt} для инвесторов на русском языке.{$nameInstruction}{$cashOutInstruction}{$earlyStageInstruction}{$minorityShareInstruction}
 
 Используй данные анкеты. Если поле пустое — пиши «уточняется».
 
@@ -1529,14 +1534,25 @@ function buildTeaserPrompt(array $payload, bool $isStartup = false): string
         $cashOutInstruction = "\nКРИТИЧЕСКИ ВАЖНО: Цель сделки - только cash-out (выход продавца). Продавец забирает деньги и выходит из бизнеса. НЕ используй фразы о том, что инвестиции позволят ускорить развитие, расширить присутствие, поддержать рост выручки, масштабировать бизнес или что-либо подобное. НЕ упоминай направления использования инвестиций на развитие компании. Фокус должен быть на текущем состоянии бизнеса и его привлекательности для покупателя, а не на планах развития.";
     }
 
+    // Если продаётся доля менее 100% — продавец остаётся акционером, это не полный выход из бизнеса
+    $minorityShareInstruction = '';
+    $shareRaw = trim((string)($payload['deal_share_range'] ?? $payload['deal_subject'] ?? ''));
+    if ($shareRaw !== '' && preg_match('/\d+/', $shareRaw, $m)) {
+        $shareNum = (int) $m[0];
+        if ($shareNum > 0 && $shareNum < 100) {
+            $shareDisplay = $shareNum . '%';
+            $minorityShareInstruction = "\nВАЖНО: Продаётся доля {$shareDisplay}. Это не полный выход продавца из бизнеса — текущий акционер остаётся в капитале. Не описывай сделку как полный выход продавца или продажу компании целиком.";
+        }
+    }
+
     if ($isStartup) {
         // Промпт для стартапов
         $isEarlyStage = isEarlyStageStartupWithoutRevenue($payload);
-        return buildStartupTeaserPrompt($displayNameInPrompt, $nameInstruction, $cashOutInstruction, $json, $siteNote, $isEarlyStage);
+        return buildStartupTeaserPrompt($displayNameInPrompt, $nameInstruction, $cashOutInstruction, $json, $siteNote, $isEarlyStage, $minorityShareInstruction);
     } else {
         // Промпт для зрелых компаний (максимально упрощенная версия)
     return <<<PROMPT
-Подготовь тизер {$displayNameInPrompt} для инвесторов на русском языке.{$nameInstruction}{$cashOutInstruction}
+Подготовь тизер {$displayNameInPrompt} для инвесторов на русском языке.{$nameInstruction}{$cashOutInstruction}{$minorityShareInstruction}
 
 Используй данные анкеты. Если поле пустое — пиши «уточняется».
 
@@ -3538,7 +3554,7 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey, ?arra
 
     try {
         $prompt = buildOverviewRefinementPrompt($data['overview'], $payload, $isStartup);
-        $aiText = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
+        $aiText = trim(callAICompletions($prompt, $apiKey, 5, null, $usedModelInfo));
         $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
         
         // Валидация ответа: проверка на обрывки фраз и слишком короткий текст
@@ -3690,7 +3706,7 @@ function ensureProductsLocalized(array $data, array $payload, string $apiKey, ?a
 
     try {
         $prompt = buildProductsLocalizationPrompt($toTranslate, $payload);
-        $raw = callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo);
+        $raw = callAICompletions($prompt, $apiKey, 5, null, $usedModelInfo);
         $translations = parseProductsLocalizationResponse($raw);
         foreach ($translations as $field => $value) {
             $clean = trim(constrainToRussianNarrative(sanitizeAiArtifacts((string)$value)));
@@ -4338,7 +4354,7 @@ function ensureHighlightsWithAiForStartup(array $current, array $payload, string
 PROMPT;
     
     try {
-        $aiResponse = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
+        $aiResponse = trim(callAICompletions($prompt, $apiKey, 5, null, $usedModelInfo));
         
         // Парсим JSON ответ
         $clean = $aiResponse;
@@ -4443,7 +4459,7 @@ function ensureMarketWithAiForStartup(array $current, array $payload, string $ap
 PROMPT;
     
     try {
-        $aiResponse = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
+        $aiResponse = trim(callAICompletions($prompt, $apiKey, 5, null, $usedModelInfo));
         
         // Парсим JSON ответ
         $clean = $aiResponse;
@@ -5033,7 +5049,7 @@ function limitSegmentToSevenWords(string $segment, ?string $apiKey = null): stri
         try {
             $prompt = "Ты маркетолог. Сократи описание области деятельности компании до максимум 7 слов, сохраняя ключевую информацию о том, чем занимается компания.\n\nВажно:\n- Выдели основную область деятельности и специализацию компании\n- Укажи ключевые продукты, услуги или нишу рынка\n- Сохрани важные характеристики (сегмент, тип клиентов, если они важны для понимания деятельности)\n- Ответ должен быть только сокращенным текстом, без дополнительных объяснений\n- Используй деловой стиль\n\nТекст для сокращения: {$segment}";
             
-            $aiResponse = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
+            $aiResponse = trim(callAICompletions($prompt, $apiKey, 5, null, $usedModelInfo));
             
             // Очищаем ответ от возможных артефактов AI
             // Убираем префиксы на английском в начале строки
@@ -5650,7 +5666,7 @@ function generateHeroDescription(array $form, string $apiKey): ?string
 Верни только текст описания, без дополнительных комментариев.
 PROMPT;
         
-        $rawResponse = callAICompletions($prompt, $apiKey);
+        $rawResponse = callAICompletions($prompt, $apiKey, 5);
         
         // Очищаем ответ от артефактов ИИ
         $description = constrainToRussianNarrative(sanitizeAiArtifacts($rawResponse));

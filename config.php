@@ -79,9 +79,9 @@ define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'Qwen/Qwen3-Next-80B-A3B-In
 
 // Параметры для Together.ai
 // Можно переопределить через переменные окружения
-define('TOGETHER_MAX_TOKENS_NORMAL', (int)(getenv('TOGETHER_MAX_TOKENS_NORMAL') ?: 600));
+define('TOGETHER_MAX_TOKENS_NORMAL', (int)(getenv('TOGETHER_MAX_TOKENS_NORMAL') ?: 2500)); // Увеличено для полных тизеров без обрезки
 define('TOGETHER_MAX_TOKENS_LONG', (int)(getenv('TOGETHER_MAX_TOKENS_LONG') ?: 8000));
-define('TOGETHER_TEMPERATURE', (float)(getenv('TOGETHER_TEMPERATURE') ?: 0.2));
+define('TOGETHER_TEMPERATURE', (float)(getenv('TOGETHER_TEMPERATURE') ?: 0.15)); // Чуть ниже для стабильности текста
 define('TOGETHER_TOP_P', (float)(getenv('TOGETHER_TOP_P') ?: 0.9));
 
 // Настройки Alibaba Cloud Qwen 3 Max
@@ -95,9 +95,9 @@ define('ALIBABA_ENDPOINT', ALIBABA_BASE_URL . '/chat/completions');
 
 // Параметры оптимизации скорости для Alibaba Cloud
 // Можно переопределить через переменные окружения
-define('ALIBABA_MAX_TOKENS_NORMAL', (int)(getenv('ALIBABA_MAX_TOKENS_NORMAL') ?: 500)); // Уменьшено с 600 для скорости
-define('ALIBABA_MAX_TOKENS_LONG', (int)(getenv('ALIBABA_MAX_TOKENS_LONG') ?: 8000)); // Уменьшено с 12000 для Term Sheet
-define('ALIBABA_TEMPERATURE', (float)(getenv('ALIBABA_TEMPERATURE') ?: 0.3)); // Немного увеличено для ускорения
+define('ALIBABA_MAX_TOKENS_NORMAL', (int)(getenv('ALIBABA_MAX_TOKENS_NORMAL') ?: 2500)); // Увеличено для полных тизеров без обрезки
+define('ALIBABA_MAX_TOKENS_LONG', (int)(getenv('ALIBABA_MAX_TOKENS_LONG') ?: 8000));
+define('ALIBABA_TEMPERATURE', (float)(getenv('ALIBABA_TEMPERATURE') ?: 0.2)); // Чуть ниже для стабильности текста
 define('ALIBABA_TOP_P', (float)(getenv('ALIBABA_TOP_P') ?: 0.9));
 
 // Выбор провайдера AI по умолчанию: 'together' или 'alibaba'
