@@ -271,13 +271,24 @@ class TeaserLogger
         }
         
         // Добавляем ключевые поля, если они есть
-        $keyFields = ['form_id', 'id', 'asset_name', 'rows_count', 'payload_size'];
+        $keyFields = ['form_id', 'id', 'asset_name', 'rows_count', 'payload_size',
+                      'ai_provider', 'ai_model', 'fallback_used', 'original_provider'];
         $keyValues = [];
         foreach ($keyFields as $field) {
             if (isset($data[$field])) {
                 $keyValues[] = $field . "=" . (is_scalar($data[$field]) ? $data[$field] : gettype($data[$field]));
             }
         }
+        
+        // Если массив небольшой (меньше 15 элементов), логируем все скалярные значения
+        if (count($data) <= 15) {
+            foreach ($data as $key => $value) {
+                if (is_scalar($value) && !in_array($key, $keyFields)) {
+                    $keyValues[] = $key . "=" . $value;
+                }
+            }
+        }
+        
         if (!empty($keyValues)) {
             $summary .= ", " . implode(', ', $keyValues);
         }
@@ -714,9 +725,21 @@ if (empty($apiKey)) {
         
         try {
             $apiStartTime = microtime(true);
-            $rawResponse = callAICompletions($prompt, $apiKey, 3); // 3 попытки с retry
+            $usedModelInfo = null;
+            $rawResponse = callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo); // 3 попытки с retry
             $apiDuration = round(microtime(true) - $apiStartTime, 3);
-            $logger->logStep('callAICompletions', ['response_length' => strlen($rawResponse), 'response_size' => round(strlen($rawResponse) / 1024, 2) . 'KB', 'duration' => $apiDuration . 's']);
+            $logData = [
+                'response_length' => strlen($rawResponse),
+                'response_size' => round(strlen($rawResponse) / 1024, 2) . 'KB',
+                'duration' => $apiDuration . 's',
+                'ai_provider' => $usedModelInfo['provider'] ?? 'unknown',
+                'ai_model' => $usedModelInfo['model'] ?? 'unknown',
+                'fallback_used' => $usedModelInfo['fallback_used'] ?? false
+            ];
+            if (isset($usedModelInfo['original_provider'])) {
+                $logData['original_provider'] = $usedModelInfo['original_provider'];
+            }
+            $logger->logStep('callAICompletions', $logData);
             error_log('AI API call completed, response length: ' . strlen($rawResponse));
         } catch (RuntimeException $e) {
             // Логируем детали ошибки для отладки
@@ -760,7 +783,7 @@ if (empty($apiKey)) {
         if (!function_exists('normalizeTeaserData')) {
             throw new RuntimeException('Function normalizeTeaserData not found');
         }
-        $teaserData = normalizeTeaserData($teaserData, $maskedPayload, $isStartup, $apiKey);
+        $teaserData = normalizeTeaserData($teaserData, $maskedPayload, $isStartup, $apiKey, $logger);
         $logger->logStep('normalizeTeaserData', ['blocks_after_normalization' => array_keys($teaserData), 'is_startup' => $isStartup]);
         error_log('normalizeTeaserData completed');
         
@@ -771,8 +794,18 @@ if (empty($apiKey)) {
         $assetDisclosure = $maskedPayload['asset_disclosure'] ?? '';
         $isNameHidden = ($assetDisclosure === 'no' || $assetDisclosure === 'нет');
         
-        $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey);
-        $logger->logStep('ensureOverviewWithAi', ['has_overview_summary' => !empty($teaserData['overview']['summary'])]);
+        $overviewModelInfo = null;
+        $teaserData = ensureOverviewWithAi($teaserData, $maskedPayload, $apiKey, $overviewModelInfo);
+        $overviewLogData = ['has_overview_summary' => !empty($teaserData['overview']['summary'])];
+        if ($overviewModelInfo !== null) {
+            $overviewLogData['ai_provider'] = $overviewModelInfo['provider'] ?? 'unknown';
+            $overviewLogData['ai_model'] = $overviewModelInfo['model'] ?? 'unknown';
+            $overviewLogData['fallback_used'] = $overviewModelInfo['fallback_used'] ?? false;
+            if (isset($overviewModelInfo['original_provider'])) {
+                $overviewLogData['original_provider'] = $overviewModelInfo['original_provider'];
+            }
+        }
+        $logger->logStep('ensureOverviewWithAi', $overviewLogData);
         error_log('ensureOverviewWithAi completed');
         
         // Очищаем данные сразу после ensureOverviewWithAi (она делает дополнительный вызов к ИИ)
@@ -787,8 +820,18 @@ if (empty($apiKey)) {
         if (!function_exists('ensureProductsLocalized')) {
             throw new RuntimeException('Function ensureProductsLocalized not found');
         }
-        $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey);
-        $logger->logStep('ensureProductsLocalized', ['has_products' => !empty($teaserData['products'])]);
+        $productsModelInfo = null;
+        $teaserData = ensureProductsLocalized($teaserData, $maskedPayload, $apiKey, $productsModelInfo);
+        $productsLogData = ['has_products' => !empty($teaserData['products'])];
+        if ($productsModelInfo !== null) {
+            $productsLogData['ai_provider'] = $productsModelInfo['provider'] ?? 'unknown';
+            $productsLogData['ai_model'] = $productsModelInfo['model'] ?? 'unknown';
+            $productsLogData['fallback_used'] = $productsModelInfo['fallback_used'] ?? false;
+            if (isset($productsModelInfo['original_provider'])) {
+                $productsLogData['original_provider'] = $productsModelInfo['original_provider'];
+            }
+        }
+        $logger->logStep('ensureProductsLocalized', $productsLogData);
         error_log('ensureProductsLocalized completed');
         
         // Очищаем данные сразу после ensureProductsLocalized (она делает дополнительный вызов к ИИ)
@@ -3206,7 +3249,7 @@ function renderTeaserChart(array $series): string
     return $html;
 }
 
-function normalizeTeaserData(array $data, array $payload, bool $isStartup = false, string $apiKey = ''): array
+function normalizeTeaserData(array $data, array $payload, bool $isStartup = false, string $apiKey = '', ?TeaserLogger $logger = null): array
 {
     $placeholder = 'Дополнительные сведения доступны по запросу.';
     $placeholderStartup = 'уточняется'; // Более подходящий placeholder для стартапов
@@ -3346,7 +3389,19 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
     // Блок market общий для обоих типов компаний
     if ($isStartup && !empty($apiKey)) {
         // Для стартапов используем специальную функцию улучшения через AI
-        $data['market'] = ensureMarketWithAiForStartup($data['market'] ?? [], $payload, $apiKey);
+        $marketModelInfo = null;
+        $data['market'] = ensureMarketWithAiForStartup($data['market'] ?? [], $payload, $apiKey, $marketModelInfo);
+        if ($logger !== null && $marketModelInfo !== null) {
+            $marketLogData = [
+                'ai_provider' => $marketModelInfo['provider'] ?? 'unknown',
+                'ai_model' => $marketModelInfo['model'] ?? 'unknown',
+                'fallback_used' => $marketModelInfo['fallback_used'] ?? false
+            ];
+            if (isset($marketModelInfo['original_provider'])) {
+                $marketLogData['original_provider'] = $marketModelInfo['original_provider'];
+            }
+            $logger->logStep('ensureMarketWithAiForStartup', $marketLogData);
+        }
     } else {
         // Для зрелых компаний используем стандартную функцию
         $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
@@ -3362,8 +3417,20 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
     if ($isStartup && !empty($apiKey)) {
         // Для стартапов используем специальную функцию улучшения через AI
         $currentHighlights = $data['highlights'] ?? [];
-        $data['highlights'] = ensureHighlightsWithAiForStartup($currentHighlights, $payload, $apiKey);
+        $highlightsModelInfo = null;
+        $data['highlights'] = ensureHighlightsWithAiForStartup($currentHighlights, $payload, $apiKey, $highlightsModelInfo);
         $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? []);
+        if ($logger !== null && $highlightsModelInfo !== null) {
+            $highlightsLogData = [
+                'ai_provider' => $highlightsModelInfo['provider'] ?? 'unknown',
+                'ai_model' => $highlightsModelInfo['model'] ?? 'unknown',
+                'fallback_used' => $highlightsModelInfo['fallback_used'] ?? false
+            ];
+            if (isset($highlightsModelInfo['original_provider'])) {
+                $highlightsLogData['original_provider'] = $highlightsModelInfo['original_provider'];
+            }
+            $logger->logStep('ensureHighlightsWithAiForStartup', $highlightsLogData);
+        }
     } else {
         // Для зрелых компаний используем стандартную функцию
         $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
@@ -3456,7 +3523,7 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
  * Пост-обрабатывает блок overview: если AI вернул сухой/ломанный текст,
  * ещё раз обращаемся к модели, но уже с жёстким промптом и опорой на факты.
  */
-function ensureOverviewWithAi(array $data, array $payload, string $apiKey): array
+function ensureOverviewWithAi(array $data, array $payload, string $apiKey, ?array &$usedModelInfo = null): array
 {
     if (empty($data['overview'])) {
         $data['overview'] = [];
@@ -3471,7 +3538,7 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
 
     try {
         $prompt = buildOverviewRefinementPrompt($data['overview'], $payload, $isStartup);
-        $aiText = trim(callAICompletions($prompt, $apiKey));
+        $aiText = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
         $aiText = constrainToRussianNarrative(sanitizeAiArtifacts(strip_tags($aiText)));
         
         // Валидация ответа: проверка на обрывки фраз и слишком короткий текст
@@ -3594,7 +3661,7 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey): arra
  * - выявляет строки без кириллицы или с «сырой» структурой и
  *   отправляет их на дополнительную локализацию в Together.ai.
  */
-function ensureProductsLocalized(array $data, array $payload, string $apiKey): array
+function ensureProductsLocalized(array $data, array $payload, string $apiKey, ?array &$usedModelInfo = null): array
 {
     if (empty($data['products']) || !is_array($data['products'])) {
         return $data;
@@ -3623,7 +3690,7 @@ function ensureProductsLocalized(array $data, array $payload, string $apiKey): a
 
     try {
         $prompt = buildProductsLocalizationPrompt($toTranslate, $payload);
-        $raw = callAICompletions($prompt, $apiKey);
+        $raw = callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo);
         $translations = parseProductsLocalizationResponse($raw);
         foreach ($translations as $field => $value) {
             $clean = trim(constrainToRussianNarrative(sanitizeAiArtifacts((string)$value)));
@@ -4164,7 +4231,7 @@ function containsCyrillic(string $text): bool
  * @param string $apiKey API ключ для AI
  * @return array Улучшенные данные блока highlights
  */
-function ensureHighlightsWithAiForStartup(array $current, array $payload, string $apiKey): array
+function ensureHighlightsWithAiForStartup(array $current, array $payload, string $apiKey, ?array &$usedModelInfo = null): array
 {
     // Проверяем, нужно ли улучшать блок
     $bullets = $current['bullets'] ?? [];
@@ -4271,7 +4338,7 @@ function ensureHighlightsWithAiForStartup(array $current, array $payload, string
 PROMPT;
     
     try {
-        $aiResponse = trim(callAICompletions($prompt, $apiKey));
+        $aiResponse = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
         
         // Парсим JSON ответ
         $clean = $aiResponse;
@@ -4327,7 +4394,7 @@ function buildHighlightBullets(array $payload, string $placeholder): array
  * @param string $apiKey API ключ для AI
  * @return array Улучшенные данные блока market
  */
-function ensureMarketWithAiForStartup(array $current, array $payload, string $apiKey): array
+function ensureMarketWithAiForStartup(array $current, array $payload, string $apiKey, ?array &$usedModelInfo = null): array
 {
     // Проверяем, нужно ли улучшать блок
     $trend = trim((string)($current['trend'] ?? ''));
@@ -4376,7 +4443,7 @@ function ensureMarketWithAiForStartup(array $current, array $payload, string $ap
 PROMPT;
     
     try {
-        $aiResponse = trim(callAICompletions($prompt, $apiKey));
+        $aiResponse = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
         
         // Парсим JSON ответ
         $clean = $aiResponse;
@@ -4966,7 +5033,7 @@ function limitSegmentToSevenWords(string $segment, ?string $apiKey = null): stri
         try {
             $prompt = "Ты маркетолог. Сократи описание области деятельности компании до максимум 7 слов, сохраняя ключевую информацию о том, чем занимается компания.\n\nВажно:\n- Выдели основную область деятельности и специализацию компании\n- Укажи ключевые продукты, услуги или нишу рынка\n- Сохрани важные характеристики (сегмент, тип клиентов, если они важны для понимания деятельности)\n- Ответ должен быть только сокращенным текстом, без дополнительных объяснений\n- Используй деловой стиль\n\nТекст для сокращения: {$segment}";
             
-            $aiResponse = trim(callAICompletions($prompt, $apiKey));
+            $aiResponse = trim(callAICompletions($prompt, $apiKey, 3, null, $usedModelInfo));
             
             // Очищаем ответ от возможных артефактов AI
             // Убираем префиксы на английском в начале строки

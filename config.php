@@ -89,7 +89,7 @@ define('TOGETHER_TOP_P', (float)(getenv('TOGETHER_TOP_P') ?: 0.9));
 define('ALIBABA_API_KEY', getenv('ALIBABA_API_KEY') ?: 'sk-bfcf015974d0414281c1d9904e5e1f12');
 // Используем qwen-turbo для скорости (быстрее qwen-max, но все еще качественный)
 // Альтернативы: 'qwen3-max' (качество), 'qwen-plus' (баланс), 'qwen-turbo' (скорость)
-define('ALIBABA_MODEL', getenv('ALIBABA_MODEL') ?: 'qwen-turbo');
+define('ALIBABA_MODEL', getenv('ALIBABA_MODEL') ?: 'qwen3-max');
 define('ALIBABA_BASE_URL', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1');
 define('ALIBABA_ENDPOINT', ALIBABA_BASE_URL . '/chat/completions');
 
@@ -1144,10 +1144,11 @@ function parseWACCFromResponse(string $response): float
  * @param string $prompt Промпт для отправки в модель
  * @param string $apiKey API ключ Alibaba Cloud
  * @param int $maxRetries Максимальное количество попыток при ошибках
+ * @param array|null $usedModelInfo Массив для записи информации о использованной модели (заполняется по ссылке)
  * @return string Текст ответа модели
  * @throws RuntimeException При ошибках API или сети
  */
-function callAlibabaCloudCompletions(string $prompt, string $apiKey, int $maxRetries = 3): string
+function callAlibabaCloudCompletions(string $prompt, string $apiKey, int $maxRetries = 3, ?array &$usedModelInfo = null): string
 {
     // Валидация входных данных
     if (empty($prompt)) {
@@ -1260,8 +1261,20 @@ function callAlibabaCloudCompletions(string $prompt, string $apiKey, int $maxRet
 
             // Извлекаем текст ответа
             if (isset($decoded['choices'][0]['message']['content'])) {
+                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
+                $usedModelInfo = [
+                    'provider' => 'alibaba',
+                    'model' => ALIBABA_MODEL,
+                    'fallback_used' => false
+                ];
                 return trim($decoded['choices'][0]['message']['content']);
             } elseif (isset($decoded['choices'][0]['text'])) {
+                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
+                $usedModelInfo = [
+                    'provider' => 'alibaba',
+                    'model' => ALIBABA_MODEL,
+                    'fallback_used' => false
+                ];
                 return trim($decoded['choices'][0]['text']);
             } else {
                 error_log('Unexpected response structure: ' . json_encode($decoded));
@@ -1286,10 +1299,11 @@ function callAlibabaCloudCompletions(string $prompt, string $apiKey, int $maxRet
  * @param string $prompt Промпт для отправки в модель
  * @param string $apiKey API ключ Together.ai
  * @param int $maxRetries Максимальное количество попыток при ошибках
+ * @param array|null $usedModelInfo Массив для записи информации о использованной модели (заполняется по ссылке)
  * @return string Текст ответа модели
  * @throws RuntimeException При ошибках API или сети
  */
-function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries = 3): string
+function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries = 3, ?array &$usedModelInfo = null): string
 {
     // Валидация входных данных
     if (empty($prompt)) {
@@ -1395,8 +1409,20 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
 
             // Извлекаем текст ответа
             if (isset($decoded['choices'][0]['text'])) {
+                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
+                $usedModelInfo = [
+                    'provider' => 'together',
+                    'model' => TOGETHER_MODEL,
+                    'fallback_used' => false
+                ];
                 return trim($decoded['choices'][0]['text']);
             } elseif (isset($decoded['output']['choices'][0]['text'])) {
+                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
+                $usedModelInfo = [
+                    'provider' => 'together',
+                    'model' => TOGETHER_MODEL,
+                    'fallback_used' => false
+                ];
                 return trim($decoded['output']['choices'][0]['text']);
             } else {
                 error_log('Unexpected response structure: ' . json_encode($decoded));
@@ -1423,16 +1449,17 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
  * @param string|null $apiKey API ключ (если null, используется ключ текущего провайдера)
  * @param int $maxRetries Максимальное количество попыток при ошибках
  * @param array|null $systemMessage Опциональное system message для chat completions
+ * @param array|null $usedModelInfo Массив для записи информации о использованной модели (заполняется по ссылке)
  * @return string Текст ответа модели
  * @throws RuntimeException При ошибках API или сети
  */
-function callAICompletions($prompt, ?string $apiKey = null, int $maxRetries = 3, ?string $systemMessage = null): string
+function callAICompletions($prompt, ?string $apiKey = null, int $maxRetries = 3, ?string $systemMessage = null, ?array &$usedModelInfo = null): string
 {
     $provider = getCurrentAIProvider();
     
     // Если передан массив messages, используем chat completions
     if (is_array($prompt)) {
-        return callAIChatCompletions($prompt, $apiKey, $maxRetries);
+        return callAIChatCompletions($prompt, $apiKey, $maxRetries, $usedModelInfo);
     }
     
     // Если есть system message, формируем messages
@@ -1441,20 +1468,21 @@ function callAICompletions($prompt, ?string $apiKey = null, int $maxRetries = 3,
             ['role' => 'system', 'content' => $systemMessage],
             ['role' => 'user', 'content' => $prompt]
         ];
-        return callAIChatCompletions($messages, $apiKey, $maxRetries);
+        return callAIChatCompletions($messages, $apiKey, $maxRetries, $usedModelInfo);
     }
     
     // Обычный prompt-based запрос
     // Если передан ключ, но он не соответствует текущему провайдеру, игнорируем его
+    $originalProvider = $provider;
     try {
         if ($provider === 'alibaba') {
             // Для Alibaba используем только ALIBABA_API_KEY, игнорируем переданный ключ если он от Together
             $apiKey = ALIBABA_API_KEY;
-            return callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries);
+            return callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries, $usedModelInfo);
         }
         // По умолчанию используем Together.ai
         $apiKey = TOGETHER_API_KEY;
-        return callTogetherCompletions($prompt, $apiKey, $maxRetries);
+        return callTogetherCompletions($prompt, $apiKey, $maxRetries, $usedModelInfo);
     } catch (RuntimeException $e) {
         // Fallback на второго провайдера при 5xx/временной недоступности
         $message = $e->getMessage();
@@ -1462,11 +1490,23 @@ function callAICompletions($prompt, ?string $apiKey = null, int $maxRetries = 3,
             if ($provider === 'alibaba') {
                 error_log('Alibaba API temporary failure, fallback to Together.ai');
                 $apiKey = TOGETHER_API_KEY;
-                return callTogetherCompletions($prompt, $apiKey, $maxRetries);
+                $result = callTogetherCompletions($prompt, $apiKey, $maxRetries, $usedModelInfo);
+                // Обновляем информацию о модели для fallback
+                if ($usedModelInfo !== null) {
+                    $usedModelInfo['fallback_used'] = true;
+                    $usedModelInfo['original_provider'] = $originalProvider;
+                }
+                return $result;
             }
             error_log('Together API temporary failure, fallback to Alibaba Cloud');
             $apiKey = ALIBABA_API_KEY;
-            return callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries);
+            $result = callAlibabaCloudCompletions($prompt, $apiKey, $maxRetries, $usedModelInfo);
+            // Обновляем информацию о модели для fallback
+            if ($usedModelInfo !== null) {
+                $usedModelInfo['fallback_used'] = true;
+                $usedModelInfo['original_provider'] = $originalProvider;
+            }
+            return $result;
         }
         throw $e;
     }
@@ -1478,32 +1518,46 @@ function callAICompletions($prompt, ?string $apiKey = null, int $maxRetries = 3,
  * @param array $messages Массив сообщений [['role' => 'user', 'content' => '...'], ...]
  * @param string|null $apiKey API ключ
  * @param int $maxRetries Максимальное количество попыток
+ * @param array|null $usedModelInfo Массив для записи информации о использованной модели (заполняется по ссылке)
  * @return string Текст ответа модели
  * @throws RuntimeException При ошибках API или сети
  */
-function callAIChatCompletions(array $messages, ?string $apiKey = null, int $maxRetries = 3): string
+function callAIChatCompletions(array $messages, ?string $apiKey = null, int $maxRetries = 3, ?array &$usedModelInfo = null): string
 {
     $provider = getCurrentAIProvider();
+    $originalProvider = $provider;
     
     // Игнорируем переданный ключ, всегда используем ключ текущего провайдера
     try {
         if ($provider === 'alibaba') {
             $apiKey = ALIBABA_API_KEY;
-            return callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries);
+            return callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries, $usedModelInfo);
         }
         $apiKey = TOGETHER_API_KEY;
-        return callTogetherChatCompletions($messages, $apiKey, $maxRetries);
+        return callTogetherChatCompletions($messages, $apiKey, $maxRetries, $usedModelInfo);
     } catch (RuntimeException $e) {
         $message = $e->getMessage();
         if (mb_strpos($message, 'Сервер API временно недоступен') !== false) {
             if ($provider === 'alibaba') {
                 error_log('Alibaba Chat API temporary failure, fallback to Together.ai');
                 $apiKey = TOGETHER_API_KEY;
-                return callTogetherChatCompletions($messages, $apiKey, $maxRetries);
+                $result = callTogetherChatCompletions($messages, $apiKey, $maxRetries, $usedModelInfo);
+                // Обновляем информацию о модели для fallback
+                if ($usedModelInfo !== null) {
+                    $usedModelInfo['fallback_used'] = true;
+                    $usedModelInfo['original_provider'] = $originalProvider;
+                }
+                return $result;
             }
             error_log('Together Chat API temporary failure, fallback to Alibaba Cloud');
             $apiKey = ALIBABA_API_KEY;
-            return callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries);
+            $result = callAlibabaCloudChatCompletions($messages, $apiKey, $maxRetries, $usedModelInfo);
+            // Обновляем информацию о модели для fallback
+            if ($usedModelInfo !== null) {
+                $usedModelInfo['fallback_used'] = true;
+                $usedModelInfo['original_provider'] = $originalProvider;
+            }
+            return $result;
         }
         throw $e;
     }
@@ -1511,8 +1565,15 @@ function callAIChatCompletions(array $messages, ?string $apiKey = null, int $max
 
 /**
  * Вызов Alibaba Cloud Qwen для chat completions
+ * 
+ * @param array $messages Массив сообщений
+ * @param string $apiKey API ключ Alibaba Cloud
+ * @param int $maxRetries Максимальное количество попыток при ошибках
+ * @param array|null $usedModelInfo Массив для записи информации о использованной модели (заполняется по ссылке)
+ * @return string Текст ответа модели
+ * @throws RuntimeException При ошибках API или сети
  */
-function callAlibabaCloudChatCompletions(array $messages, string $apiKey, int $maxRetries = 3): string
+function callAlibabaCloudChatCompletions(array $messages, string $apiKey, int $maxRetries = 3, ?array &$usedModelInfo = null): string
 {
     if (empty($messages)) {
         throw new RuntimeException('Messages не могут быть пустыми');
@@ -1606,6 +1667,12 @@ function callAlibabaCloudChatCompletions(array $messages, string $apiKey, int $m
             }
 
             if (isset($decoded['choices'][0]['message']['content'])) {
+                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
+                $usedModelInfo = [
+                    'provider' => 'alibaba',
+                    'model' => ALIBABA_MODEL,
+                    'fallback_used' => false
+                ];
                 return trim($decoded['choices'][0]['message']['content']);
             } else {
                 error_log('Unexpected response structure: ' . json_encode($decoded));
@@ -1624,8 +1691,15 @@ function callAlibabaCloudChatCompletions(array $messages, string $apiKey, int $m
 
 /**
  * Вызов Together.ai для chat completions
+ * 
+ * @param array $messages Массив сообщений
+ * @param string $apiKey API ключ Together.ai
+ * @param int $maxRetries Максимальное количество попыток при ошибках
+ * @param array|null $usedModelInfo Массив для записи информации о использованной модели (заполняется по ссылке)
+ * @return string Текст ответа модели
+ * @throws RuntimeException При ошибках API или сети
  */
-function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRetries = 3): string
+function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRetries = 3, ?array &$usedModelInfo = null): string
 {
     if (empty($messages)) {
         throw new RuntimeException('Messages не могут быть пустыми');
@@ -1718,6 +1792,12 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
             }
 
             if (isset($decoded['choices'][0]['message']['content'])) {
+                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
+                $usedModelInfo = [
+                    'provider' => 'together',
+                    'model' => TOGETHER_MODEL,
+                    'fallback_used' => false
+                ];
                 return trim($decoded['choices'][0]['message']['content']);
             } else {
                 error_log('Unexpected response structure: ' . json_encode($decoded));
