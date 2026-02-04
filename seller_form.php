@@ -107,7 +107,7 @@ function isFieldRequired(string $field, ?string $companyType = null): bool
             return false;
         }
         // Для стартапов обязательны специфичные поля (проверяются отдельно в валидации)
-        $startupRequired = ['startup_product_description', 'startup_product_stage', 'startup_target_market'];
+        $startupRequired = ['startup_product_description', 'startup_product_stage', 'startup_target_market', 'startup_team'];
         if (in_array($field, $startupRequired, true)) {
             return true;
         }
@@ -924,111 +924,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $balanceIndicators = isset($_POST['balance']) ? json_encode($_POST['balance'], JSON_UNESCAPED_UNICODE) : null;
 
                 $effectiveUserId = getEffectiveUserId();
-                
-                if ($formId && $formId > 0) {
-                    // Если передан form_id, проверяем существование формы ДО попытки обновления
-                    if (!$existingForm) {
-                        // Проверяем, существует ли форма с таким ID
-                        $checkStmt = $pdo->prepare("SELECT id, status FROM seller_forms WHERE id = ? AND user_id = ?");
-                        $checkStmt->execute([$formId, $effectiveUserId]);
-                        $formExists = $checkStmt->fetch();
-                        
-                        if (!$formExists) {
-                            // Форма не найдена - это ошибка, не создаем новую
-                            error_log("ERROR: form_id=$formId не найден для user_id=$effectiveUserId при отправке");
-                            $errors['general'] = 'Анкета не найдена. Пожалуйста, создайте новую анкету.';
-                            // НЕ продолжаем сохранение, НЕ создаем новую запись
-                        } else {
-                            // Форма существует - загружаем её
-                            $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
-                            $stmt->execute([$formId, $effectiveUserId]);
-                            $existingForm = $stmt->fetch();
-                        }
-                    }
-                    
-                    // Если ошибок нет, продолжаем обновление
-                    if (empty($errors['general']) && $existingForm) {
-                        // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
-                        // чтобы не потерять их при финальной отправке формы
-                        $currentDataJson = [];
-                        if (!empty($existingForm['data_json'])) {
-                            $decoded = json_decode($existingForm['data_json'], true);
-                            if (is_array($decoded)) {
-                                $currentDataJson = $decoded;
-                            }
-                        }
-                    
-                        // Объединяем текущие данные с новыми данными формы
-                        // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
-                        $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
-                        foreach ($preservedFields as $field) {
-                            if (isset($currentDataJson[$field])) {
-                                $draftPayload[$field] = $currentDataJson[$field];
+
+                // Запись в БД только при успешной валидации — иначе при отправке незаполненной формы создавалась бы копия
+                if (empty($errors)) {
+                    if ($formId && $formId > 0) {
+                        // Если передан form_id, проверяем существование формы ДО попытки обновления
+                        if (!$existingForm) {
+                            // Проверяем, существует ли форма с таким ID
+                            $checkStmt = $pdo->prepare("SELECT id, status FROM seller_forms WHERE id = ? AND user_id = ?");
+                            $checkStmt->execute([$formId, $effectiveUserId]);
+                            $formExists = $checkStmt->fetch();
+                            
+                            if (!$formExists) {
+                                // Форма не найдена - это ошибка, не создаем новую
+                                error_log("ERROR: form_id=$formId не найден для user_id=$effectiveUserId при отправке");
+                                $errors['general'] = 'Анкета не найдена. Пожалуйста, создайте новую анкету.';
+                                // НЕ продолжаем сохранение, НЕ создаем новую запись
+                            } else {
+                                // Форма существует - загружаем её
+                                $stmt = $pdo->prepare("SELECT * FROM seller_forms WHERE id = ? AND user_id = ?");
+                                $stmt->execute([$formId, $effectiveUserId]);
+                                $existingForm = $stmt->fetch();
                             }
                         }
                         
-                        // Обновляем data_json с сохранением важных полей
-                        $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                        // Если ошибок нет, продолжаем обновление
+                        if (empty($errors['general']) && $existingForm) {
+                            // ВАЖНО: Сохраняем существующие поля data_json (final_price, multiplier_valuation и т.д.)
+                            // чтобы не потерять их при финальной отправке формы
+                            $currentDataJson = [];
+                            if (!empty($existingForm['data_json'])) {
+                                $decoded = json_decode($existingForm['data_json'], true);
+                                if (is_array($decoded)) {
+                                    $currentDataJson = $decoded;
+                                }
+                            }
                         
-                        $stmt = $pdo->prepare("UPDATE seller_forms SET
-                        asset_name = ?, company_inn = ?, company_type = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
-                        company_description = ?, presence_regions = ?, products_services = ?, company_brands = ?,
-                        own_production = ?, production_sites_count = ?, production_sites_region = ?, production_area = ?,
-                        production_capacity = ?, production_load = ?, production_building_ownership = ?, production_land_ownership = ?,
-                        contract_production_usage = ?, contract_production_region = ?, contract_production_logistics = ?,
-                        offline_sales_presence = ?, offline_sales_points = ?, offline_sales_regions = ?, offline_sales_area = ?,
-                        offline_sales_third_party = ?, offline_sales_distributors = ?,
-                        online_sales_presence = ?, online_sales_share = ?, online_sales_channels = ?,
-                        main_clients = ?, sales_share = ?, personnel_count = ?, company_website = ?, additional_info = ?,
-                        financial_results_vat = ?, financial_source = ?,
-                        production_volumes = ?, financial_results = ?, balance_indicators = ?, data_json = ?,
-                        status = 'submitted', submitted_at = NOW(), updated_at = NOW()
-                        WHERE id = ? AND user_id = ?");
-                    $stmt->execute([
-                        $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
-                        $companyDescription, $presenceRegions, $productsServices, $companyBrands,
-                        $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
-                        $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
-                        $contractProductionUsage, $contractProductionRegion, $contractProductionLogistics,
-                        $offlineSalesPresence, $offlineSalesPoints, $offlineSalesRegions, $offlineSalesArea,
-                        $offlineSalesThirdParty, $offlineSalesDistributors,
-                        $onlineSalesPresence, $onlineSalesShare, $onlineSalesChannels,
-                        $mainClients, $salesShare, $personnelCount, $companyWebsite, $additionalInfo,
-                        $financialResultsVat, $financialSource,
-                        $productionVolumes, $financialResults, $balanceIndicators, $dataJson,
-                        $formId, $effectiveUserId
-                    ]);
+                            // Объединяем текущие данные с новыми данными формы
+                            // Приоритет у новых данных формы, но сохраняем важные поля из текущих данных
+                            $preservedFields = ['final_price', 'final_selling_price', 'final_price_updated_at', 'multiplier_valuation', 'teaser_snapshot'];
+                            foreach ($preservedFields as $field) {
+                                if (isset($currentDataJson[$field])) {
+                                    $draftPayload[$field] = $currentDataJson[$field];
+                                }
+                            }
+                            
+                            // Обновляем data_json с сохранением важных полей
+                            $dataJson = json_encode($draftPayload, JSON_UNESCAPED_UNICODE);
+                            
+                            $stmt = $pdo->prepare("UPDATE seller_forms SET
+                            asset_name = ?, company_inn = ?, company_type = ?, deal_subject = ?, deal_purpose = ?, asset_disclosure = ?,
+                            company_description = ?, presence_regions = ?, products_services = ?, company_brands = ?,
+                            own_production = ?, production_sites_count = ?, production_sites_region = ?, production_area = ?,
+                            production_capacity = ?, production_load = ?, production_building_ownership = ?, production_land_ownership = ?,
+                            contract_production_usage = ?, contract_production_region = ?, contract_production_logistics = ?,
+                            offline_sales_presence = ?, offline_sales_points = ?, offline_sales_regions = ?, offline_sales_area = ?,
+                            offline_sales_third_party = ?, offline_sales_distributors = ?,
+                            online_sales_presence = ?, online_sales_share = ?, online_sales_channels = ?,
+                            main_clients = ?, sales_share = ?, personnel_count = ?, company_website = ?, additional_info = ?,
+                            financial_results_vat = ?, financial_source = ?,
+                            production_volumes = ?, financial_results = ?, balance_indicators = ?, data_json = ?,
+                            status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+                            WHERE id = ? AND user_id = ?");
+                        $stmt->execute([
+                            $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
+                            $companyDescription, $presenceRegions, $productsServices, $companyBrands,
+                            $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
+                            $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
+                            $contractProductionUsage, $contractProductionRegion, $contractProductionLogistics,
+                            $offlineSalesPresence, $offlineSalesPoints, $offlineSalesRegions, $offlineSalesArea,
+                            $offlineSalesThirdParty, $offlineSalesDistributors,
+                            $onlineSalesPresence, $onlineSalesShare, $onlineSalesChannels,
+                            $mainClients, $salesShare, $personnelCount, $companyWebsite, $additionalInfo,
+                            $financialResultsVat, $financialSource,
+                            $productionVolumes, $financialResults, $balanceIndicators, $dataJson,
+                            $formId, $effectiveUserId
+                        ]);
+                        }
+                    } else {
+                        // Создание новой формы (только если form_id НЕ передан)
+                        $stmt = $pdo->prepare("INSERT INTO seller_forms (
+                                        user_id, asset_name, company_inn, company_type, deal_subject, deal_purpose, asset_disclosure,
+                                        company_description, presence_regions, products_services, company_brands,
+                            own_production, production_sites_count, production_sites_region, production_area,
+                            production_capacity, production_load, production_building_ownership, production_land_ownership,
+                                        contract_production_usage, contract_production_region, contract_production_logistics,
+                                        offline_sales_presence, offline_sales_points, offline_sales_regions, offline_sales_area,
+                                        offline_sales_third_party, offline_sales_distributors,
+                                        online_sales_presence, online_sales_share, online_sales_channels,
+                                        main_clients, sales_share, personnel_count, company_website, additional_info,
+                            financial_results_vat, financial_source,
+                            production_volumes, financial_results, balance_indicators, data_json,
+                            status, submitted_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
+                        $stmt->execute([
+                            $effectiveUserId, $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
+                            $companyDescription, $presenceRegions, $productsServices, $companyBrands,
+                            $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
+                            $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
+                            $contractProductionUsage, $contractProductionRegion, $contractProductionLogistics,
+                            $offlineSalesPresence, $offlineSalesPoints, $offlineSalesRegions, $offlineSalesArea,
+                            $offlineSalesThirdParty, $offlineSalesDistributors,
+                            $onlineSalesPresence, $onlineSalesShare, $onlineSalesChannels,
+                            $mainClients, $salesShare, $personnelCount, $companyWebsite, $additionalInfo,
+                            $financialResultsVat, $financialSource,
+                            $productionVolumes, $financialResults, $balanceIndicators, $dataJson
+                        ]);
+                        $formId = $pdo->lastInsertId();
                     }
-                } else {
-                    // Создание новой формы (только если form_id НЕ передан)
-                    $stmt = $pdo->prepare("INSERT INTO seller_forms (
-                                    user_id, asset_name, company_inn, company_type, deal_subject, deal_purpose, asset_disclosure,
-                                    company_description, presence_regions, products_services, company_brands,
-                        own_production, production_sites_count, production_sites_region, production_area,
-                        production_capacity, production_load, production_building_ownership, production_land_ownership,
-                                    contract_production_usage, contract_production_region, contract_production_logistics,
-                                    offline_sales_presence, offline_sales_points, offline_sales_regions, offline_sales_area,
-                                    offline_sales_third_party, offline_sales_distributors,
-                                    online_sales_presence, online_sales_share, online_sales_channels,
-                                    main_clients, sales_share, personnel_count, company_website, additional_info,
-                        financial_results_vat, financial_source,
-                        production_volumes, financial_results, balance_indicators, data_json,
-                        status, submitted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', NOW())");
-                    $stmt->execute([
-                        $effectiveUserId, $asset_name, $companyInnDigits, $companyType ?: null, $dealSubject, $dealPurpose, $assetDisclosure,
-                        $companyDescription, $presenceRegions, $productsServices, $companyBrands,
-                        $ownProduction, $productionSitesCount, $productionSitesRegion, $productionArea,
-                        $productionCapacity, $productionLoad, $productionBuildingOwnership, $productionLandOwnership,
-                        $contractProductionUsage, $contractProductionRegion, $contractProductionLogistics,
-                        $offlineSalesPresence, $offlineSalesPoints, $offlineSalesRegions, $offlineSalesArea,
-                        $offlineSalesThirdParty, $offlineSalesDistributors,
-                        $onlineSalesPresence, $onlineSalesShare, $onlineSalesChannels,
-                        $mainClients, $salesShare, $personnelCount, $companyWebsite, $additionalInfo,
-                        $financialResultsVat, $financialSource,
-                        $productionVolumes, $financialResults, $balanceIndicators, $dataJson
-                    ]);
-                    $formId = $pdo->lastInsertId();
                 }
 
                 // Для финальной отправки - редирект в кабинет (только если нет ошибок)
@@ -1538,16 +1541,18 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
 
                     <div class="form-section">
                         <h3 class="form-section-title">IV. Команда</h3>
-                        <div class="form-group">
-                            <label for="startup_shareholders">Состав акционеров:</label>
-                            <textarea id="startup_shareholders" name="startup_shareholders" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_shareholders'] ?? null) ? json_encode($startupData['startup_shareholders'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_shareholders'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
-                            <small style="color: var(--text-secondary);">ФИО, роль, подробный бэкграунд (образование, опыт)</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="startup_key_employees">Ключевые сотрудники:</label>
-                            <textarea id="startup_key_employees" name="startup_key_employees" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_key_employees'] ?? null) ? json_encode($startupData['startup_key_employees'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_key_employees'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
-                            <small style="color: var(--text-secondary);">ФИО, роль, подробный бэкграунд (образование, опыт)</small>
+                        <div class="form-group<?php echo requiredClass('startup_team', $companyType); ?>">
+                            <label>Состав акционеров или ключевые сотрудники (хотя бы одно поле обязательно)</label>
+                            <div class="form-group">
+                                <label for="startup_shareholders">Состав акционеров:</label>
+                                <textarea id="startup_shareholders" name="startup_shareholders" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_shareholders'] ?? null) ? json_encode($startupData['startup_shareholders'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_shareholders'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                                <small style="color: var(--text-secondary);">ФИО, роль, подробный бэкграунд (образование, опыт)</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="startup_key_employees">Ключевые сотрудники:</label>
+                                <textarea id="startup_key_employees" name="startup_key_employees" rows="5"><?php echo htmlspecialchars(is_array($startupData['startup_key_employees'] ?? null) ? json_encode($startupData['startup_key_employees'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : ($startupData['startup_key_employees'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                                <small style="color: var(--text-secondary);">ФИО, роль, подробный бэкграунд (образование, опыт)</small>
+                            </div>
                             <?php if (isset($errors['startup_team'])): ?>
                                 <span class="error-message"><?php echo $errors['startup_team']; ?></span>
                             <?php endif; ?>
@@ -2246,6 +2251,8 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                         <?php endif; ?>
                     </div>
 
+                    <div id="client-validation-message" class="client-validation-error" style="display: none; margin: 20px 0; padding: 16px; border-radius: 12px; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24;" role="alert"></div>
+
                     <div class="form-actions" style="margin-top: 40px; text-align: center;">
                         <button type="submit" name="submit_form" value="1" class="btn btn-primary btn-large">
                         <span>Отправить анкету</span>
@@ -2705,26 +2712,99 @@ $yesNo = ['yes' => 'да', 'no' => 'нет'];
                            // Определяем, какая кнопка была нажата
                            let isDraftSave = false;
                            if (e.submitter) {
-                               // Современные браузеры
                                isDraftSave = e.submitter.name === 'save_draft' || 
                                            e.submitter.getAttribute('formnovalidate') !== null;
-                               console.log('Using e.submitter, isDraftSave:', isDraftSave);
                            } else if (clickedButton) {
-                               // Fallback для старых браузеров
                                isDraftSave = clickedButton.name === 'save_draft' || 
                                            clickedButton.getAttribute('formnovalidate') !== null;
-                               console.log('Using clickedButton, isDraftSave:', isDraftSave);
                            } else {
-                               // Если не удалось определить, проверяем наличие скрытого поля
                                const saveDraftFlag = document.querySelector('input[name="save_draft_flag"]');
                                isDraftSave = saveDraftFlag && saveDraftFlag.value === '1';
-                               console.log('Using saveDraftFlag, isDraftSave:', isDraftSave);
                            }
-                           
-                           // Регионы присутствия - необязательное поле, валидация убрана
-                           console.log('Form submit allowed, isDraftSave:', isDraftSave);
-                           // Сбрасываем отслеживание кнопки
                            clickedButton = null;
+
+                           // Клиентская валидация только при финальной отправке (не черновик)
+                           if (!isDraftSave) {
+                               const msgEl = document.getElementById('client-validation-message');
+                               const companyTypeInput = document.querySelector('input[name="company_type"]');
+                               const companyType = (companyTypeInput && companyTypeInput.value) ? companyTypeInput.value : '';
+
+                               function getVal(name) {
+                                   const el = document.querySelector('[name="' + name + '"]');
+                                   if (!el) return '';
+                                   if (el.type === 'checkbox') return el.checked ? '1' : '';
+                                   return (el.value || '').toString().trim();
+                               }
+                               function getRadio(name) {
+                                   const el = document.querySelector('input[name="' + name + '"]:checked');
+                                   return el ? (el.value || '').trim() : '';
+                               }
+                               function getDealGoal() {
+                                   const checked = document.querySelectorAll('input[name="deal_goal[]"]:checked');
+                                   return checked.length > 0;
+                               }
+                               function getPresenceRegions() {
+                                   const checked = document.querySelectorAll('input[name="presence_regions[]"]:checked');
+                                   return checked.length > 0;
+                               }
+
+                               var labels = {
+                                   company_inn: 'ИНН организации',
+                                   asset_name: 'Название актива',
+                                   deal_share_range: 'Предмет сделки (доля %)',
+                                   deal_goal: 'Цель сделки',
+                                   asset_disclosure: 'Раскрытие названия актива',
+                                   agree: 'Согласие на обработку данных',
+                                   startup_product_description: 'Описание продукта/решения',
+                                   startup_product_stage: 'Стадия продукта',
+                                   startup_target_market: 'Целевой рынок',
+                                   startup_team: 'Состав акционеров или ключевых сотрудников',
+                                   company_description: 'Описание деятельности компании',
+                                   presence_regions: 'Регионы присутствия',
+                                   products_services: 'Продукция/услуги',
+                                   main_clients: 'Основные клиенты',
+                                   sales_share: 'Доля продаж (крупнейшие клиенты)',
+                                   personnel_count: 'Численность персонала',
+                                   financial_results_vat: 'Финансовые результаты (НДС)',
+                                   financial_source: 'Источник финансовых показателей'
+                               };
+
+                               var missing = [];
+                               // Общие поля
+                               if (!getVal('company_inn')) missing.push(labels.company_inn);
+                               if (!getVal('asset_name')) missing.push(labels.asset_name);
+                               if (!getVal('deal_share_range')) missing.push(labels.deal_share_range);
+                               if (!getDealGoal()) missing.push(labels.deal_goal);
+                               if (!getRadio('asset_disclosure')) missing.push(labels.asset_disclosure);
+                               if (!document.querySelector('input[name="agree"]') || !document.querySelector('input[name="agree"]').checked) missing.push(labels.agree);
+
+                               if (companyType === 'startup') {
+                                   if (!getVal('startup_product_description')) missing.push(labels.startup_product_description);
+                                   if (!getVal('startup_product_stage')) missing.push(labels.startup_product_stage);
+                                   if (!getVal('startup_target_market')) missing.push(labels.startup_target_market);
+                                   var sh = (document.querySelector('textarea[name="startup_shareholders"]') && document.querySelector('textarea[name="startup_shareholders"]').value.trim()) || '';
+                                   var ke = (document.querySelector('textarea[name="startup_key_employees"]') && document.querySelector('textarea[name="startup_key_employees"]').value.trim()) || '';
+                                   if (!sh && !ke) missing.push(labels.startup_team);
+                               } else if (companyType === 'mature') {
+                                   if (!getVal('company_description')) missing.push(labels.company_description);
+                                   if (!getPresenceRegions()) missing.push(labels.presence_regions);
+                                   if (!getVal('products_services')) missing.push(labels.products_services);
+                                   if (!getVal('main_clients')) missing.push(labels.main_clients);
+                                   if (!getVal('sales_share')) missing.push(labels.sales_share);
+                                   if (!getVal('personnel_count')) missing.push(labels.personnel_count);
+                                   if (!getRadio('financial_results_vat')) missing.push(labels.financial_results_vat);
+                                   if (!getVal('financial_source')) missing.push(labels.financial_source);
+                               }
+
+                               if (missing.length > 0 && msgEl) {
+                                   e.preventDefault();
+                                   msgEl.innerHTML = '<strong>Форма не отправлена.</strong> Не заполнены обязательные поля: ' + missing.join(', ') + '. Заполните их и нажмите «Отправить анкету» снова.';
+                                   msgEl.style.display = 'block';
+                                   msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                   return;
+                               }
+                               if (msgEl) { msgEl.style.display = 'none'; msgEl.innerHTML = ''; }
+                           }
                        });
                    }
 

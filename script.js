@@ -1649,16 +1649,17 @@ function initTeaserCharts() {
 
 console.log('SmartBizSell.ru - Platform loaded successfully');
 
-// Проверка инициализации модального окна
-if (typeof businessModal !== 'undefined' && businessModal) {
-    console.log('Business modal initialized:', businessModal);
-} else {
-    console.error('Business modal not initialized!');
-}
-
-if (typeof openBusinessModal !== 'undefined' && typeof openBusinessModal === 'function') {
-    console.log('openBusinessModal function is available');
-} else {
-    console.error('openBusinessModal function is not available!');
+// Проверка инициализации модального окна — только на страницах, где есть модальное окно
+if (document.getElementById('business-modal')) {
+    if (typeof businessModal !== 'undefined' && businessModal) {
+        console.log('Business modal initialized:', businessModal);
+    } else {
+        console.error('Business modal not initialized!');
+    }
+    if (typeof openBusinessModal !== 'undefined' && typeof openBusinessModal === 'function') {
+        console.log('openBusinessModal function is available');
+    } else {
+        console.error('openBusinessModal function is not available!');
+    }
 }
 
