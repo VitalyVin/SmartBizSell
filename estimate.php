@@ -118,7 +118,7 @@ $canonicalUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="profit_last">Прибыль от продаж за последний год</label>
+                    <label for="profit_last">EBITDA (Прибыль от продаж за год)</label>
                     <input type="number" id="profit_last" name="profit_last" min="0" step="0.01" placeholder="Опционально">
                 </div>
                 <div class="form-group">
