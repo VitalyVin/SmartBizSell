@@ -3420,13 +3420,13 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
         }
     } else {
         // Для зрелых компаний используем стандартную функцию
-        $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
-        $data['market'] = [
-            'trend' => $marketInsight['trend'],
-            'size' => $marketInsight['size'],
-            'growth' => $marketInsight['growth'],
-            'sources' => normalizeArray($marketInsight['sources']),
-        ];
+    $marketInsight = enrichMarketInsight($payload, $data['market'] ?? []);
+    $data['market'] = [
+        'trend' => $marketInsight['trend'],
+        'size' => $marketInsight['size'],
+        'growth' => $marketInsight['growth'],
+        'sources' => normalizeArray($marketInsight['sources']),
+    ];
     }
 
     // Блок highlights
@@ -3449,7 +3449,7 @@ function normalizeTeaserData(array $data, array $payload, bool $isStartup = fals
         }
     } else {
         // Для зрелых компаний используем стандартную функцию
-        $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
+    $data['highlights']['bullets'] = normalizeArray($data['highlights']['bullets'] ?? buildHighlightBullets($payload, $placeholder));
     }
 
     // Используем финальную цену продажи, если она указана
@@ -3609,10 +3609,10 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey, ?arra
         }
         
         if ($aiText !== '') {
-            // Remove "M&A платформа" and similar phrases
-            $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
-            $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
-            $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
+        // Remove "M&A платформа" and similar phrases
+        $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформа\b/ui', '', $aiText);
+        $aiText = preg_replace('/\bM&[Aa]mp;?[Aa]тр?[АA]?\s+платформы?\b/ui', '', $aiText);
+        $aiText = preg_replace('/\bплатформа\s+M&[Aa]mp;?[Aa]тр?[АA]?\b/ui', '', $aiText);
             
             // Удаляем JavaScript код и технические символы, если они попали в текст
             $aiText = preg_replace('/function\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*\([^)]*\)\s*\{[^}]*\}/s', '', $aiText);
@@ -3650,14 +3650,14 @@ function ensureOverviewWithAi(array $data, array $payload, string $apiKey, ?arra
             $aiText = preg_replace('/\n{3,}/', "\n\n", $aiText); // Множественные переносы -> двойные
             $aiText = trim($aiText);
             
-            if ($aiText !== '') {
-                $sentences = splitIntoSentences($aiText);
-                $data['overview']['summary'] = buildParagraphsFromSentences(
-                    $sentences,
-                    buildOverviewFallbackSentences($payload),
+        if ($aiText !== '') {
+            $sentences = splitIntoSentences($aiText);
+            $data['overview']['summary'] = buildParagraphsFromSentences(
+                $sentences,
+                buildOverviewFallbackSentences($payload),
                     3,
                     3
-                );
+            );
             }
         }
     } catch (Throwable $e) {
@@ -3904,7 +3904,7 @@ function buildOverviewRefinementPrompt(array $overview, array $payload, bool $is
         'Загрузка мощностей' => $payload['production_load'] ?? '',
         'Источник сайта' => buildWebsiteInsightSentence($payload) ?? '',
     ];
-        
+
         // Добавляем название только если оно не скрыто
         if ($nameFact !== '') {
             $facts = array_merge(['Название' => $nameFact], $facts);
@@ -4873,7 +4873,7 @@ function buildHeroSummary(?string $aiSummary, array $payload, string $fallback):
     if ($isEarlyStage) {
         $descriptor = $industry !== '' ? $industry : 'перспективный проект';
     } else {
-        $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+    $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
     }
     
     if ($isOnlyCashOut) {
@@ -4964,7 +4964,7 @@ function buildHeroDescription(array $teaserData, array $payload): string
             $descriptor = $industry !== '' ? $industry : 'перспективный проект';
             return "{$displayName} — {$descriptor} на ранней стадии развития, ищущий инвестиции для роста.";
         } else {
-            $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
+        $descriptor = $industry !== '' ? $industry : 'устойчивый бизнес';
             return "{$displayName} — {$descriptor}, готовый к привлечению инвестора для следующего этапа роста.";
         }
     }
