@@ -14,6 +14,10 @@
 
 require_once 'config.php';
 
+if (defined('ESTIMATE_VALUATION_API')) {
+    goto ESTIMATE_API_FUNCTIONS;
+}
+
 /**
  * Проверка авторизации пользователя
  * Если пользователь не авторизован, происходит редирект на страницу входа
@@ -215,6 +219,7 @@ $statusColors = [
  * Вспомогательные функции для DCF
  */
 
+ESTIMATE_API_FUNCTIONS:
 /**
  * Определяет единицы измерения из строки
  * Поддерживает: "тыс. руб.", "млн. руб.", "тыс руб", "млн руб" и их варианты
@@ -1366,6 +1371,10 @@ function calculateUserDCF(array $form): array {
             'discounted_sum' => $pvSum,
         ],
     ];
+}
+
+if (defined('ESTIMATE_VALUATION_API')) {
+    return;
 }
 
 $latestForm = null;

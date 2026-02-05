@@ -16,59 +16,54 @@
 
 require_once 'config.php';
 
-header('Content-Type: application/json; charset=utf-8');
-
-/**
- * Определяет единицы измерения из строки
- * Поддерживает: "тыс. руб.", "млн. руб.", "тыс руб", "млн руб" и их варианты
- * 
- * @param string $unit Строка с единицами измерения
- * @return string 'thousands' для тысяч, 'millions' для миллионов, 'unknown' если не определено
- */
-function detectUnit(string $unit): string {
-    $unit = mb_strtolower(trim($unit));
-    if (empty($unit)) {
-        return 'unknown';
-    }
-    // Проверяем на наличие "тыс" (тысячи)
-    if (preg_match('/тыс/', $unit)) {
-        return 'thousands';
-    }
-    // Проверяем на наличие "млн" (миллионы)
-    if (preg_match('/млн/', $unit)) {
-        return 'millions';
-    }
-    return 'unknown';
+if (defined('ESTIMATE_VALUATION_API')) {
+    goto ESTIMATE_API_SKIP_MAIN;
 }
 
-/**
- * Конвертирует значение в миллионы рублей с учетом единиц измерения
- * Если значение в тысячах, делит на 1000; если в миллионах, оставляет как есть
- * 
- * @param mixed $value Значение для конвертации
- * @param string $unit Единицы измерения ('thousands', 'millions', 'unknown')
- * @return float Значение в миллионах рублей
- */
-function convertToMillions($value, string $unit): float {
-    if ($value === null || $value === '') {
-        return 0.0;
+header('Content-Type: application/json; charset=utf-8');
+
+// Объявляем только если ещё не загружены (например, из dashboard.php при вызове API оценки)
+if (!function_exists('detectUnit')) {
+    /**
+     * Определяет единицы измерения из строки
+     * Поддерживает: "тыс. руб.", "млн. руб.", "тыс руб", "млн руб" и их варианты
+     */
+    function detectUnit(string $unit): string {
+        $unit = mb_strtolower(trim($unit));
+        if (empty($unit)) {
+            return 'unknown';
+        }
+        if (preg_match('/тыс/', $unit)) {
+            return 'thousands';
+        }
+        if (preg_match('/млн/', $unit)) {
+            return 'millions';
+        }
+        return 'unknown';
     }
-    $numValue = is_numeric($value) ? (float)$value : 0.0;
-    if ($numValue == 0) {
-        return 0.0;
-    }
-    
-    switch ($unit) {
-        case 'thousands':
-            // Конвертируем из тысяч в миллионы (делим на 1000)
-            return $numValue / 1000.0;
-        case 'millions':
-            // Уже в миллионах, возвращаем как есть
-            return $numValue;
-        case 'unknown':
-        default:
-            // Если единицы не определены, предполагаем миллионы (для обратной совместимости)
-            return $numValue;
+}
+
+if (!function_exists('convertToMillions')) {
+    /**
+     * Конвертирует значение в миллионы рублей с учетом единиц измерения
+     */
+    function convertToMillions($value, string $unit): float {
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+        $numValue = is_numeric($value) ? (float)$value : 0.0;
+        if ($numValue == 0) {
+            return 0.0;
+        }
+        switch ($unit) {
+            case 'thousands':
+                return $numValue / 1000.0;
+            case 'millions':
+                return $numValue;
+            case 'unknown':
+            default:
+                return $numValue;
+        }
     }
 }
 
@@ -194,21 +189,20 @@ try {
     echo json_encode(['success' => false, 'message' => 'Ошибка при расчете оценки: ' . $e->getMessage()]);
 }
 
-/**
- * Вспомогательная функция для извлечения значения из массива по нескольким возможным ключам.
- * 
- * @param array $row Массив данных
- * @param array $keys Массив возможных ключей для поиска
- * @return string Найденное значение или пустая строка
- */
-function pickValue(array $row, array $keys): string
-{
-    foreach ($keys as $key) {
-        if (isset($row[$key]) && $row[$key] !== '') {
-            return (string)$row[$key];
+ESTIMATE_API_SKIP_MAIN:
+if (!function_exists('pickValue')) {
+    /**
+     * Вспомогательная функция для извлечения значения из массива по нескольким возможным ключам.
+     */
+    function pickValue(array $row, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (isset($row[$key]) && $row[$key] !== '') {
+                return (string)$row[$key];
+            }
         }
+        return '';
     }
-    return '';
 }
 
 /**
@@ -798,3 +792,6 @@ function calculateMultiplierValuation(string $sector, array $financialData): arr
     ];
 }
 
+if (defined('ESTIMATE_VALUATION_API')) {
+    return;
+}

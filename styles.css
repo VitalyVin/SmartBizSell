@@ -340,6 +340,19 @@ body {
     transform: translateY(-2px);
 }
 
+.btn-estimate {
+    background: #f97316; /* заметный оранжевый цвет заливки */
+    color: #ffffff;
+    box-shadow: var(--shadow-md);
+    border: none;
+}
+
+.btn-estimate:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    background: #ea580c; /* чуть темнее при наведении */
+}
+
 .btn-large {
     padding: 16px 32px;
     font-size: 18px;

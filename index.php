@@ -818,6 +818,9 @@ SVG;
                     <a href="#how-it-works" class="btn btn-secondary">
                         <span>Узнать больше</span>
                     </a>
+                    <a href="/estimate.php" class="btn btn-estimate">
+                        <span>Оценить бизнес</span>
+                    </a>
                 </div>
                 <div class="hero-stats">
                     <div class="stat-item" data-stat="500">
