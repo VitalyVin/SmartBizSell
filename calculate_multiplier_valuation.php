@@ -67,6 +67,21 @@ if (!function_exists('convertToMillions')) {
     }
 }
 
+if (!function_exists('pickValue')) {
+    /**
+     * Вспомогательная функция для извлечения значения из массива по нескольким возможным ключам.
+     */
+    function pickValue(array $row, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (isset($row[$key]) && $row[$key] !== '') {
+                return (string)$row[$key];
+            }
+        }
+        return '';
+    }
+}
+
 if (!isLoggedIn()) {
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'Необходима авторизация.']);
