@@ -772,6 +772,15 @@ section {
     box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4) !important;
 }
 
+.business-card .card-badge.card-badge-startup,
+.business-card .card-badge.badge-startup {
+    left: 20px !important;
+    right: auto !important;
+    background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%) !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
+}
+
 .business-card .card-content {
     padding: 24px !important;
     flex: 1;
@@ -2817,6 +2826,11 @@ section {
         right: 12px !important;
     }
 
+    .business-card .card-badge.card-badge-startup {
+        left: 12px !important;
+        right: auto !important;
+    }
+
     .business-card .card-icon-bg {
         width: 70px !important;
         height: 70px !important;
@@ -3212,6 +3226,11 @@ section {
         padding: 5px 12px !important;
         top: 10px !important;
         right: 10px !important;
+    }
+
+    .business-card .card-badge.card-badge-startup {
+        left: 10px !important;
+        right: auto !important;
     }
 
     .business-card .card-icon-bg {

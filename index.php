@@ -32,6 +32,7 @@ try {
             pt.card_title,
             sf.asset_name,
             sf.data_json,
+            sf.company_type,
             sf.presence_regions,
             sf.company_description,
             sf.financial_results,
@@ -111,6 +112,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         $title = $shouldMaskName ? 'Актив' : $titleSource;
     }
 
+    $companyType = $teaser['company_type'] ?? (is_array($formData) ? ($formData['company_type'] ?? null) : null);
     $cardData = [
         'id' => $teaser['id'],
         'title' => $title,
@@ -131,7 +133,8 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         'contact' => '',
         'html' => $teaser['moderated_html'] ?: '',
         'chips' => [],
-        'stats' => []
+        'stats' => [],
+        'is_startup' => ($companyType === 'startup')
     ];
     
     // Парсим HTML тизера для извлечения данных из hero блока
@@ -1460,6 +1463,9 @@ SVG;
                                 <div class="card-icon-bg">
                                     <div class="card-icon"><?php echo $icon; ?></div>
                                 </div>
+                                <?php if (!empty($card['is_startup'])): ?>
+                                    <div class="card-badge card-badge-startup">Стартап</div>
+                                <?php endif; ?>
                                 <?php if ($teaser['published_at'] && (time() - strtotime($teaser['published_at'])) < 86400 * 7): ?>
                                     <div class="card-badge">Новое</div>
                                 <?php endif; ?>
