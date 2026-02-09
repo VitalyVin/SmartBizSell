@@ -176,7 +176,7 @@ $result = $this->runner->executeLocalFile('path/to/file.php', $params, 'POST');
 ### CatalogTest
 Тестирование каталога бизнесов:
 - Отображение каталога
-- Отображение card_title
+- Отображение card_title и бейджа «Стартап» для объявлений с типом стартап
 - Фильтрация по отраслям
 
 ### DocumentTest

@@ -58,6 +58,7 @@ tail -f /home/u3064951/data/www/smartbizsell.ru/error_log
 SELECT 
     id, 
     asset_name, 
+    company_type,
     status, 
     LENGTH(data_json) as json_size,
     SUBSTRING(data_json, 1, 200) as json_preview,

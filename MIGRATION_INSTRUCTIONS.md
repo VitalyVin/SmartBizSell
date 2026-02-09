@@ -1,5 +1,7 @@
 # Инструкция по выполнению миграции блога
 
+Этот документ описывает только миграцию блога (таблица `blog_posts`). Полный список миграций БД и рекомендуемый порядок выполнения см. в [INSTALL.md](INSTALL.md) и [db/README.md](db/README.md).
+
 ## Способ 1: Через PHP-скрипт (Рекомендуется)
 
 ### Вариант A: Через браузер
@@ -35,10 +37,8 @@ php run_migration_blog.php
 Если у вас есть доступ к MySQL через командную строку:
 
 ```bash
-# Подключение к MySQL
+# Подключение к MySQL (используйте пароль из config.php)
 mysql -u u3064951_default -p u3064951_SmartBizSell
-
-# Введите пароль (m6t7EWLS9q89mbRv)
 
 # Выполните миграцию
 source /path/to/SmartBizSell/db/migration_blog.sql;
