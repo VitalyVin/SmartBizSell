@@ -30,6 +30,7 @@ try {
             pt.moderated_html,
             pt.published_at,
             pt.card_title,
+            pt.views,
             sf.asset_name,
             sf.data_json,
             sf.company_type,
@@ -134,7 +135,8 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         'html' => $teaser['moderated_html'] ?: '',
         'chips' => [],
         'stats' => [],
-        'is_startup' => ($companyType === 'startup')
+        'is_startup' => ($companyType === 'startup'),
+        'views' => (int)($teaser['views'] ?? 0)
     ];
     
     // Парсим HTML тизера для извлечения данных из hero блока
@@ -1610,6 +1612,7 @@ SVG;
                     <div class="modal-title-section">
                         <h2 class="modal-title" id="modal-title">Название бизнеса</h2>
                         <p class="modal-location" id="modal-location">📍 Город</p>
+                        <span id="modal-views" class="modal-views" style="display: none;"></span>
                     </div>
                     <div class="modal-badge" id="modal-badge"></div>
                     <button class="modal-share-btn" id="modal-share-btn" title="Поделиться ссылкой" aria-label="Поделиться ссылкой">

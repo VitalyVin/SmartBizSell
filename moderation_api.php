@@ -198,6 +198,20 @@ try {
             ");
             $stmt->execute([$teaserId]);
             
+            // Наследуем просмотры от всех предыдущих версий тизера этой анкеты
+            // Суммируем views всех других строк с тем же seller_form_id
+            $stmt = $pdo->prepare("
+                UPDATE published_teasers pt
+                SET pt.views = (
+                    SELECT COALESCE(SUM(p2.views), 0)
+                    FROM published_teasers p2
+                    WHERE p2.seller_form_id = pt.seller_form_id
+                    AND p2.id != pt.id
+                )
+                WHERE pt.id = ?
+            ");
+            $stmt->execute([$teaserId]);
+            
             echo json_encode([
                 'success' => true,
                 'message' => 'Тизер успешно опубликован на главной странице.'

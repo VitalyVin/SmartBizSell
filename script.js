@@ -934,6 +934,38 @@ async function openBusinessModal(card) {
         }
     }
     
+    // Увеличиваем счётчик просмотров и отображаем его
+    const modalViewsEl = document.getElementById('modal-views');
+    if (teaserId && modalViewsEl) {
+        // Показываем элемент просмотров
+        modalViewsEl.style.display = 'block';
+        
+        // Вызываем API для увеличения счётчика
+        fetch(`/api/increment_teaser_views.php?teaser_id=${teaserId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && typeof data.views === 'number') {
+                    const viewsCount = data.views;
+                    const viewsText = viewsCount === 0 ? 'Пока нет просмотров' : 
+                                    viewsCount === 1 ? '1 просмотр' :
+                                    viewsCount < 5 ? `${viewsCount} просмотра` : 
+                                    `${viewsCount} просмотров`;
+                    modalViewsEl.textContent = viewsText;
+                } else {
+                    // Если API вернул ошибку, скрываем элемент
+                    modalViewsEl.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error incrementing views:', error);
+                // При ошибке скрываем элемент
+                modalViewsEl.style.display = 'none';
+            });
+    } else if (modalViewsEl) {
+        // Если нет teaserId, скрываем элемент просмотров
+        modalViewsEl.style.display = 'none';
+    }
+    
     // Загружаем полный HTML тизера
     const teaserSection = document.getElementById('modal-teaser-section');
     const teaserContent = document.getElementById('modal-teaser-content');

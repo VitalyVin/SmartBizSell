@@ -1900,6 +1900,13 @@ section {
     gap: 4px;
 }
 
+.modal-views {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    opacity: 0.8;
+}
+
 .modal-badge {
     position: absolute;
     top: 0;

@@ -61,7 +61,7 @@ define('DB_PASS', 'ваш_пароль_от_БД'); // Пароль от баз�
 | **users** | Пользователи (продавцы) |
 | **seller_forms** | Анкеты продавцов. Ключевые поля: `company_type` (ENUM 'startup', 'mature'), `data_json`, а также поля сделки, описания, финансов |
 | **user_sessions** | Сессии пользователей (опционально) |
-| **published_teasers** | Тизеры на модерации и опубликованные. Поля: `card_title` (кастомное название карточки), `moderation_status`, `seller_form_id`, `moderated_html`, `published_at` |
+| **published_teasers** | Тизеры на модерации и опубликованные. Поля: `card_title` (кастомное название карточки), `views` (счётчик просмотров), `moderation_status`, `seller_form_id`, `moderated_html`, `published_at` |
 | **asset_documents** | Документы, привязанные к активам |
 | **password_reset_tokens** | Токены для восстановления пароля |
 | **blog_posts** | Статьи блога (создаётся миграцией блога) |
@@ -76,6 +76,7 @@ define('DB_PASS', 'ваш_пароль_от_БД'); // Пароль от баз�
 | `migration_published_teasers.sql` | Таблица `published_teasers` (модерация и публикация тизеров) |
 | `migration_add_company_type.sql` | Колонка `seller_forms.company_type` (startup/mature) |
 | `migration_add_card_title.sql` | Колонка `published_teasers.card_title` |
+| `migration_teaser_views.sql` | Колонка `published_teasers.views` (счётчик просмотров) |
 | `migration_asset_documents.sql` | Таблица `asset_documents` |
 | `migration_password_reset.sql` | Таблица `password_reset_tokens` |
 | `migration_blog.sql` | Таблица `blog_posts` |
