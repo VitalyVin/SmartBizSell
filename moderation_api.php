@@ -200,17 +200,22 @@ try {
             
             // Наследуем просмотры от всех предыдущих версий тизера этой анкеты
             // Суммируем views всех других строк с тем же seller_form_id
+            // Используем два отдельных запроса, чтобы избежать ошибки MySQL 1093
             $stmt = $pdo->prepare("
-                UPDATE published_teasers pt
-                SET pt.views = (
-                    SELECT COALESCE(SUM(p2.views), 0)
-                    FROM published_teasers p2
-                    WHERE p2.seller_form_id = pt.seller_form_id
-                    AND p2.id != pt.id
-                )
-                WHERE pt.id = ?
+                SELECT COALESCE(SUM(views), 0) AS total_views
+                FROM published_teasers
+                WHERE seller_form_id = ?
+                  AND id != ?
             ");
-            $stmt->execute([$teaserId]);
+            $stmt->execute([$teaser['seller_form_id'], $teaserId]);
+            $totalViews = (int) ($stmt->fetchColumn() ?? 0);
+
+            $stmt = $pdo->prepare("
+                UPDATE published_teasers
+                SET views = ?
+                WHERE id = ?
+            ");
+            $stmt->execute([$totalViews, $teaserId]);
             
             echo json_encode([
                 'success' => true,
