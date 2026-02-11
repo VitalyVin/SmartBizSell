@@ -118,39 +118,22 @@ if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
         });
     });
     
-    // Анимация карточек бизнесов
+    // Анимация карточек бизнесов (без JS-hover, чтобы не конфликтовать с CSS :hover)
     gsap.utils.toArray('.business-card').forEach((card, index) => {
         gsap.from(card, {
-            duration: 0.8,
-            y: 80,
+            duration: 0.7,
+            y: 24,
             opacity: 0,
-            scale: 0.9,
-            ease: 'power3.out',
+            scale: 0.98,
+            ease: 'power2.out',
+            immediateRender: false,
             scrollTrigger: {
                 trigger: card,
-                start: 'top 85%',
-                toggleActions: 'play none none none'
+                start: 'top 88%',
+                toggleActions: 'play none none none',
+                once: true
             },
-            delay: index * 0.1
-        });
-        
-        // Плавное увеличение при hover
-        card.addEventListener('mouseenter', () => {
-            gsap.to(card, {
-                duration: 0.4,
-                scale: 1.02,
-                y: -8,
-                ease: 'power2.out'
-            });
-        });
-        
-        card.addEventListener('mouseleave', () => {
-            gsap.to(card, {
-                duration: 0.4,
-                scale: 1,
-                y: 0,
-                ease: 'power2.out'
-            });
+            delay: index * 0.05
         });
     });
     
