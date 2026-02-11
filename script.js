@@ -619,91 +619,340 @@ if ('IntersectionObserver' in window) {
 /**
  * Функциональность фильтрации карточек бизнесов
  * 
- * Фильтры:
- * - По отрасли (IT, рестораны, e-commerce и т.д.)
- * - По максимальной цене
- * - По городу/региону
+ * Опции фильтров строятся ДИНАМИЧЕСКИ из data-* атрибутов карточек в DOM.
+ * Это гарантирует 100% совпадение фильтров с реальными карточками.
  * 
- * Карточки скрываются/показываются в зависимости от выбранных фильтров
+ * Фильтры:
+ * - По отрасли (data-industry)
+ * - По максимальной цене (data-price)
+ * - По городу/региону (data-location)
  */
 const filterIndustry = document.getElementById('filter-industry');
 const filterPrice = document.getElementById('filter-price');
 const filterLocation = document.getElementById('filter-location');
+const filterApplyBtn = document.getElementById('filter-apply');
 const businessesGrid = document.getElementById('businesses-grid');
 const noResults = document.getElementById('no-results');
-const businessCards = document.querySelectorAll('.business-card');
+
+// Словари для человекочитаемых названий (код → подпись)
+const INDUSTRY_LABELS = {
+    'it': 'IT и технологии',
+    'restaurant': 'Рестораны и кафе',
+    'ecommerce': 'E-commerce',
+    'retail': 'Розничная торговля',
+    'services': 'Услуги',
+    'manufacturing': 'Производство',
+    'real_estate': 'Недвижимость'
+};
+const INDUSTRY_ORDER = ['it', 'restaurant', 'ecommerce', 'retail', 'services', 'manufacturing', 'real_estate'];
+
+const LOCATION_LABELS = {
+    'moscow': 'Москва',
+    'spb': 'Санкт-Петербург',
+    'ekb': 'Екатеринбург',
+    'other': 'Другие города'
+};
+const LOCATION_ORDER = ['moscow', 'spb', 'ekb', 'other'];
+
+// Ценовые пороги (значение в рублях → подпись)
+const PRICE_TIERS = [
+    { value: 5000000,   label: 'до 5 млн ₽' },
+    { value: 10000000,  label: 'до 10 млн ₽' },
+    { value: 50000000,  label: 'до 50 млн ₽' },
+    { value: 100000000, label: 'до 100 млн ₽' },
+    { value: 500000000, label: 'до 500 млн ₽' },
+    { value: 1000000000, label: 'до 1 млрд ₽' },
+    { value: 999999999999, label: 'свыше 1 млрд ₽' }
+];
 
 /**
- * Фильтрация карточек бизнесов по выбранным критериям
- * Показывает сообщение "Нет результатов", если ничего не найдено
+ * Сканирует карточки в DOM и заполняет <select> фильтров реальными опциями.
+ * Повторяет попытки до тех пор, пока карточки не будут найдены.
+ * 
+ * @param {number} attempt - Номер текущей попытки (для рекурсивных вызовов)
  */
-function filterBusinesses() {
-    const industryValue = filterIndustry?.value || '';
-    const priceValue = filterPrice?.value || '';
-    const locationValue = filterLocation?.value || '';
+function populateFilterOptions(attempt = 0) {
+    const maxAttempts = 10;
+    const delay = 100; // мс
     
-    let visibleCount = 0;
-    
-    businessCards.forEach(card => {
-        const cardIndustry = card.getAttribute('data-industry');
-        const cardPrice = parseInt(card.getAttribute('data-price'));
-        const cardLocation = card.getAttribute('data-location');
-        
-        let shouldShow = true;
-        
-        // Filter by industry
-        if (industryValue && cardIndustry !== industryValue) {
-            shouldShow = false;
-        }
-        
-        // Filter by price
-        if (priceValue && cardPrice > parseInt(priceValue)) {
-            shouldShow = false;
-        }
-        
-        // Filter by location
-        if (locationValue) {
-            if (locationValue === 'other' && ['moscow', 'spb', 'ekb'].includes(cardLocation)) {
-                shouldShow = false;
-            } else if (locationValue !== 'other' && cardLocation !== locationValue) {
-                shouldShow = false;
-            }
-        }
-        
-        if (shouldShow) {
-            card.classList.remove('hidden');
-            card.style.display = '';
-            visibleCount++;
+    // Переопределяем businessesGrid на случай, если он был null при первой загрузке
+    const grid = document.getElementById('businesses-grid');
+    const cards = grid
+        ? grid.querySelectorAll('.business-card')
+        : document.querySelectorAll('.business-card');
+
+    if (!cards.length) {
+        if (attempt < maxAttempts) {
+            setTimeout(() => populateFilterOptions(attempt + 1), delay);
+            return;
         } else {
-            card.classList.add('hidden');
-            card.style.display = 'none';
+            console.warn('populateFilterOptions: карточки не найдены после', maxAttempts, 'попыток');
+            return;
         }
+    }
+
+    console.log('populateFilterOptions: найдено карточек:', cards.length);
+
+    // Собираем уникальные значения из карточек
+    const industries = new Set();
+    const locations = new Set();
+    const prices = [];
+
+    cards.forEach(card => {
+        const label = card.getAttribute('data-industry-label') || card.getAttribute('data-industry');
+        const loc = card.getAttribute('data-location');
+        const price = parseInt(card.getAttribute('data-price'), 10);
+
+        if (label) industries.add(label);
+        if (loc) locations.add(loc);
+        if (price > 0 && !isNaN(price)) prices.push(price);
     });
-    
-    // Show/hide "no results" message
-    if (noResults) {
-        if (visibleCount === 0) {
-            noResults.style.display = 'block';
-            businessesGrid.style.display = 'none';
-        } else {
-            noResults.style.display = 'none';
-            businessesGrid.style.display = 'grid';
+
+    console.log('populateFilterOptions: сегменты (data-industry-label):', Array.from(industries));
+    console.log('populateFilterOptions: города:', Array.from(locations));
+    console.log('populateFilterOptions: цены:', prices.length, 'значений (мин:', Math.min(...prices), 'макс:', Math.max(...prices), ')');
+
+    // --- Отрасль: реальные названия сегментов с карточек (data-industry-label) ---
+    if (filterIndustry) {
+        while (filterIndustry.children.length > 1) {
+            filterIndustry.removeChild(filterIndustry.lastChild);
         }
+        const sortedLabels = Array.from(industries).sort((a, b) => a.localeCompare(b, 'ru'));
+        sortedLabels.forEach(label => {
+            const opt = document.createElement('option');
+            opt.value = label;
+            opt.textContent = label;
+            opt.title = label; // Полное название в tooltip при наведении
+            filterIndustry.appendChild(opt);
+        });
+        console.log('populateFilterOptions: добавлено сегментов:', sortedLabels.length, sortedLabels);
+    }
+
+    // --- Город ---
+    if (filterLocation) {
+        // Очищаем старые опции (кроме первой "Все города")
+        while (filterLocation.children.length > 1) {
+            filterLocation.removeChild(filterLocation.lastChild);
+        }
+        
+        const sortedLocations = Array.from(locations).sort((a, b) => {
+            const ia = LOCATION_ORDER.indexOf(a);
+            const ib = LOCATION_ORDER.indexOf(b);
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
+        
+        sortedLocations.forEach(code => {
+            const opt = document.createElement('option');
+            opt.value = code;
+            opt.textContent = LOCATION_LABELS[code] || code;
+            filterLocation.appendChild(opt);
+        });
+        
+        console.log('populateFilterOptions: добавлено городов:', sortedLocations.length, sortedLocations);
+    }
+
+    // --- Цена ---
+    if (filterPrice && prices.length > 0) {
+        // Очищаем старые опции (кроме первой "Любая цена")
+        while (filterPrice.children.length > 1) {
+            filterPrice.removeChild(filterPrice.lastChild);
+        }
+        
+        const maxPrice = Math.max(...prices);
+        
+        PRICE_TIERS.forEach(tier => {
+            if (tier.value >= 999999999999) {
+                // Последний порог «свыше» — показываем только если есть карточки дороже 1 млрд
+                if (maxPrice > 1000000000) {
+                    const opt = document.createElement('option');
+                    opt.value = tier.value;
+                    opt.textContent = tier.label;
+                    filterPrice.appendChild(opt);
+                }
+            } else {
+                // Показываем, если хотя бы одна карточка попадает в этот диапазон
+                const hasCardInRange = prices.some(p => p <= tier.value);
+                if (hasCardInRange) {
+                    const opt = document.createElement('option');
+                    opt.value = tier.value;
+                    opt.textContent = tier.label;
+                    filterPrice.appendChild(opt);
+                }
+            }
+        });
+        
+        console.log('populateFilterOptions: добавлено ценовых порогов:', filterPrice.children.length - 1);
     }
 }
 
-// Add event listeners to filters
-if (filterIndustry) {
-    filterIndustry.addEventListener('change', filterBusinesses);
+/**
+ * Фильтрация карточек бизнесов по выбранным критериям.
+ * Показывает сообщение "Нет результатов", если ничего не найдено.
+ * Ссылки на элементы берутся при каждом вызове, чтобы не зависеть от порядка загрузки скрипта.
+ */
+function filterBusinesses() {
+    console.log('filterBusinesses: начало выполнения');
+    const filterIndustryEl = document.getElementById('filter-industry');
+    const filterPriceEl = document.getElementById('filter-price');
+    const filterLocationEl = document.getElementById('filter-location');
+    const grid = document.getElementById('businesses-grid');
+    const noResultsEl = document.getElementById('no-results');
+
+    const industryValue = (filterIndustryEl && filterIndustryEl.value) ? filterIndustryEl.value : '';
+    const priceValue = (filterPriceEl && filterPriceEl.value) ? filterPriceEl.value : '';
+    const locationValue = (filterLocationEl && filterLocationEl.value) ? filterLocationEl.value : '';
+
+    console.log('filterBusinesses: значения фильтров:', { industryValue, priceValue, locationValue });
+
+    const businessCards = grid
+        ? grid.querySelectorAll('.business-card')
+        : document.querySelectorAll('.business-card');
+    
+    console.log('filterBusinesses: найдено карточек:', businessCards.length);
+    let visibleCount = 0;
+
+    businessCards.forEach((card, index) => {
+        const cardIndustryLabelRaw = card.getAttribute('data-industry-label') || card.getAttribute('data-industry');
+        const cardPrice = parseInt(card.getAttribute('data-price'), 10);
+        const cardLocation = card.getAttribute('data-location');
+        const cardTitle = card.getAttribute('data-title') || `Карточка ${index + 1}`;
+
+        // Нормализуем строки для сравнения: trim и декодируем HTML-entities
+        const normalizeString = (str) => {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.innerHTML = str;
+            return div.textContent || div.innerText || '';
+        };
+        const cardIndustryLabel = normalizeString(cardIndustryLabelRaw).trim();
+        const normalizedIndustryValue = normalizeString(industryValue).trim();
+
+        let shouldShow = true;
+        let hideReason = '';
+
+        // Фильтр по отрасли (сравниваем нормализованные строки)
+        if (industryValue) {
+            if (cardIndustryLabel !== normalizedIndustryValue) {
+                shouldShow = false;
+                hideReason = `отрасль не совпадает: "${cardIndustryLabel}" !== "${normalizedIndustryValue}"`;
+            }
+        }
+        
+        // Фильтр по цене
+        if (shouldShow && priceValue && !isNaN(cardPrice) && cardPrice > parseInt(priceValue, 10)) {
+            shouldShow = false;
+            hideReason = `цена превышает: ${cardPrice} > ${priceValue}`;
+        }
+        
+        // Фильтр по городу
+        if (shouldShow && locationValue) {
+            if (locationValue === 'other' && ['moscow', 'spb', 'ekb'].includes(cardLocation)) {
+                shouldShow = false;
+                hideReason = `город не "other": ${cardLocation}`;
+            } else if (locationValue !== 'other' && cardLocation !== locationValue) {
+                shouldShow = false;
+                hideReason = `город не совпадает: ${cardLocation} !== ${locationValue}`;
+            }
+        }
+
+        if (shouldShow) {
+            card.classList.remove('hidden');
+            // Показываем карточку только через CSS/inline без clearProps, чтобы GSAP не сбрасывал display
+            card.style.removeProperty('display');
+            card.style.removeProperty('visibility');
+            card.style.removeProperty('height');
+            card.style.removeProperty('opacity');
+            card.style.removeProperty('overflow');
+            card.style.removeProperty('margin');
+            card.style.removeProperty('padding');
+            if (typeof gsap !== 'undefined') {
+                gsap.killTweensOf(card);
+            }
+            visibleCount++;
+            if (industryValue) {
+                console.log(`✓ Показана: "${cardTitle.substring(0, 40)}" (отрасль: "${cardIndustryLabel}")`);
+            }
+        } else {
+            card.classList.add('hidden');
+            // Скрываем карточку без clearProps, чтобы не сбрасывать display обратно
+            card.style.setProperty('display', 'none', 'important');
+            card.style.setProperty('visibility', 'hidden', 'important');
+            card.style.setProperty('height', '0', 'important');
+            card.style.setProperty('overflow', 'hidden', 'important');
+            card.style.setProperty('opacity', '0', 'important');
+            card.style.setProperty('margin', '0', 'important');
+            card.style.setProperty('padding', '0', 'important');
+            // Останавливаем GSAP анимации для скрытой карточки
+            if (typeof gsap !== 'undefined') {
+                gsap.killTweensOf(card);
+            }
+            // Отключаем ScrollTrigger для скрытой карточки (более агрессивный поиск)
+            if (typeof ScrollTrigger !== 'undefined') {
+                const allTriggers = ScrollTrigger.getAll();
+                allTriggers.forEach(trigger => {
+                    if (trigger.vars && (trigger.vars.trigger === card || trigger.trigger === card)) {
+                        trigger.kill();
+                    }
+                });
+            }
+            // Дополнительная проверка: убеждаемся, что стили действительно применены
+            setTimeout(() => {
+                const computedStyle = window.getComputedStyle(card);
+                if (computedStyle.display !== 'none') {
+                    console.warn(`⚠ Карточка "${cardTitle.substring(0, 30)}" не скрыта! display:`, computedStyle.display);
+                    card.style.setProperty('display', 'none', 'important');
+                }
+            }, 10);
+            if (industryValue && hideReason) {
+                console.log(`✗ Скрыта: "${cardTitle.substring(0, 40)}" - ${hideReason}`);
+            }
+        }
+    });
+
+    if (noResultsEl) {
+        if (visibleCount === 0) {
+            noResultsEl.style.display = 'block';
+            if (grid) grid.style.display = 'none';
+        } else {
+            noResultsEl.style.display = 'none';
+            if (grid) grid.style.display = 'grid';
+        }
+    }
+    
+    console.log('filterBusinesses: завершено, видимых карточек:', visibleCount);
 }
 
-if (filterPrice) {
-    filterPrice.addEventListener('change', filterBusinesses);
-}
-
-if (filterLocation) {
-    filterLocation.addEventListener('change', filterBusinesses);
-}
+// При загрузке: заполняем опции фильтров, вешаем кнопку «Применить», применяем фильтры
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded: инициализация фильтров');
+    populateFilterOptions();
+    filterBusinesses();
+    
+    // Прямой обработчик на кнопку «Применить» (основной способ)
+    const applyBtn = document.getElementById('filter-apply');
+    if (applyBtn) {
+        console.log('DOMContentLoaded: кнопка найдена, вешаем обработчик');
+        applyBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Кнопка «Применить» нажата');
+            filterBusinesses();
+        });
+    } else {
+        console.warn('DOMContentLoaded: кнопка filter-apply не найдена!');
+    }
+    
+    // Резервный обработчик через делегирование (на случай, если кнопка появится позже)
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        if (target && (target.id === 'filter-apply' || target.closest('#filter-apply'))) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Кнопка «Применить» нажата (через делегирование)');
+            filterBusinesses();
+        }
+    }, true); // Используем capture phase для более раннего перехвата
+});
 
 // Make logo clickable to scroll to top
 const logos = document.querySelectorAll('.logo, .footer-logo');

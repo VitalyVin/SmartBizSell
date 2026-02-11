@@ -576,6 +576,19 @@ section {
     color: var(--text-primary);
 }
 
+.filter-bar .filter-select,
+.filter-bar .filter-group-apply .btn {
+    min-height: 44px;
+    height: 44px;
+    box-sizing: border-box;
+}
+
+.filter-bar .filter-group-apply .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .filter-select {
     padding: 12px 16px;
     border: 1px solid var(--border-color);
@@ -2682,12 +2695,35 @@ section {
         grid-template-columns: 1fr;
     }
 
-    .filter-bar {
+    #buy-business .filter-bar {
         flex-direction: column;
+        gap: 12px;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        padding: 16px;
+        box-sizing: border-box;
     }
 
-    .filter-group {
-        min-width: 100%;
+    #buy-business .filter-group,
+    #buy-business .filter-group-apply {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #buy-business .filter-bar .filter-select,
+    #buy-business .filter-bar .filter-group-apply .btn {
+        width: 100%;
+        min-width: 0 !important;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #buy-business .filter-bar .filter-group-apply .btn {
+        white-space: normal;
+        justify-content: center;
     }
 
     .form-wrapper {
@@ -3318,6 +3354,16 @@ html {
     border: 2px solid rgba(0, 0, 0, 0.08) !important;
     overflow: hidden !important;
     position: relative !important;
+}
+
+/* Override force-display for filtered-out cards */
+#buy-business .businesses-grid .business-card.hidden {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
 }
 
 #buy-business .businesses-grid .business-card * {

@@ -31,11 +31,13 @@ try {
             pt.published_at,
             pt.card_title,
             pt.views,
+            pt.industry as pt_industry,
             sf.asset_name,
             sf.data_json,
             sf.company_type,
             sf.presence_regions,
             sf.company_description,
+            sf.products_services,
             sf.financial_results,
             sf.status as form_status
         FROM published_teasers pt
@@ -131,6 +133,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         'risks' => [],
         'location' => 'other',
         'industry' => 'services',
+        'segment_label' => '',
         'contact' => '',
         'html' => $teaser['moderated_html'] ?: '',
         'chips' => [],
@@ -301,6 +304,20 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         elseif (isset($formData['dcf_equity_value']) && $formData['dcf_equity_value'] > 0) {
             $cardData['price'] = (float)$formData['dcf_equity_value'];
         }
+        // Приоритет 3: deal_subject (может содержать стоимость/долю, пытаемся извлечь число)
+        // Пропускаем — deal_subject обычно содержит процент доли, а не цену
+    }
+    
+    // Дополнительный fallback: пытаемся извлечь цену из financial_results (seller_forms.financial_results)
+    if ($cardData['price'] == 0 && !empty($teaser['financial_results'])) {
+        $finResults = $teaser['financial_results'];
+        if (is_string($finResults)) {
+            $finResults = json_decode($finResults, true);
+        }
+        if (is_array($finResults) && isset($finResults['revenue']['2024_fact'])) {
+            // Если есть выручка, но нет цены — оставляем price = 0 (не выдумываем цену)
+            // Карточка будет показана без цены ("По запросу")
+        }
     }
     
     // Извлекаем финансовые данные из formData, если не нашли в HTML
@@ -338,48 +355,137 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         }
     }
     
-    // Определяем регион
-    if (!empty($teaser['presence_regions'])) {
-        $regions = strtolower($teaser['presence_regions']);
-        if (strpos($regions, 'москва') !== false) {
+    // === Определяем регион ===
+    // Приоритет: presence_regions из seller_forms (JOIN), затем из formData (data_json)
+    $regionsRaw = $teaser['presence_regions'] ?? null;
+    if (empty($regionsRaw) && is_array($formData) && isset($formData['presence_regions'])) {
+        $regionsRaw = is_array($formData['presence_regions'])
+            ? implode(', ', array_filter(array_map('trim', $formData['presence_regions'])))
+            : (string)$formData['presence_regions'];
+    }
+    // Дополнительно: проверяем production_sites_region из формы
+    if (empty($regionsRaw) && is_array($formData) && !empty($formData['production_sites_region'])) {
+        $regionsRaw = (string)$formData['production_sites_region'];
+    }
+    if (!empty($regionsRaw)) {
+        $regions = mb_strtolower($regionsRaw);
+        // Точное сопоставление с городами
+        if (strpos($regions, 'москва') !== false || strpos($regions, 'московск') !== false) {
             $cardData['location'] = 'moscow';
-        } elseif (strpos($regions, 'санкт-петербург') !== false || strpos($regions, 'спб') !== false) {
+        } elseif (strpos($regions, 'санкт-петербург') !== false || strpos($regions, 'спб') !== false || strpos($regions, 'петербург') !== false || strpos($regions, 'ленинград') !== false) {
             $cardData['location'] = 'spb';
-        } elseif (strpos($regions, 'екатеринбург') !== false || strpos($regions, 'екб') !== false) {
+        } elseif (strpos($regions, 'екатеринбург') !== false || strpos($regions, 'екб') !== false || strpos($regions, 'свердловск') !== false) {
             $cardData['location'] = 'ekb';
+        }
+        // «Вся РФ», «Россия» и другие общие обозначения → moscow (как наиболее вероятная основная локация)
+        // Если не удалось определить конкретный город, проверяем общие паттерны
+        if ($cardData['location'] === 'other') {
+            if (preg_match('/вся\s*(рф|россия)|^россия$/u', $regions)) {
+                $cardData['location'] = 'moscow';
+            }
         }
     }
     
-    // Определяем отрасль из чипов или описания
-    foreach ($cardData['chips'] as $chip) {
-        if (stripos($chip['label'], 'СЕГМЕНТ') !== false || stripos($chip['label'], 'Сегмент') !== false) {
-            $segment = strtolower($chip['value']);
-            if (strpos($segment, 'it') !== false || strpos($segment, 'разработка') !== false || strpos($segment, 'saas') !== false) {
-                $cardData['industry'] = 'it';
-            } elseif (strpos($segment, 'ресторан') !== false || strpos($segment, 'кафе') !== false) {
-                $cardData['industry'] = 'restaurant';
-            } elseif (strpos($segment, 'интернет-магазин') !== false || strpos($segment, 'e-commerce') !== false) {
-                $cardData['industry'] = 'ecommerce';
-            } elseif (strpos($segment, 'магазин') !== false || strpos($segment, 'торговля') !== false) {
-                $cardData['industry'] = 'retail';
+    // === Определяем отрасль ===
+    // Приоритет 1: Поле pt.industry, заданное модератором
+    if (!empty($teaser['pt_industry'])) {
+        $cardData['industry'] = $teaser['pt_industry'];
+    } else {
+        // Приоритет 2–5: автоматическое определение по ключевым словам
+        $industryKeywords = [
+            'it' => ['it', 'разработк', 'saas', 'софт', 'программ', 'сайт', 'приложен', 'цифров', 'платформ', 'робот', 'телематик', 'цод', 'дата-центр', 'data center', 'co-location'],
+            'restaurant' => ['ресторан', 'кафе', 'общепит', 'кофейн', 'кулинар', 'кондитер', 'выпечк', 'готовые блюда', 'пищев'],
+            'ecommerce' => ['интернет-магазин', 'e-commerce', 'ecommerce', 'онлайн-торговл', 'маркетплейс', 'онлайн-продаж'],
+            'retail' => ['магазин', 'торговля', 'розниц', 'ритейл', 'одежд', 'обувь'],
+            'manufacturing' => ['производств', 'производит', 'завод', 'фабрик', 'выпуск продукц', 'печать на ткан', 'пошив', 'трубопровод', 'изоляц', 'перевалк', 'порт', 'подгузник', 'консерв'],
+            'real_estate' => ['недвижимост', 'риелтор', 'риэлтор', 'коммерческая недвижимость'],
+            'services' => ['услуг', 'сервис', 'аренда', 'клининг', 'салон красот', 'спорт', 'фитнес', 'корт', 'химическ', 'очистк'],
+        ];
+        $matchIndustry = function ($text) use ($industryKeywords) {
+            $text = mb_strtolower($text);
+            foreach ($industryKeywords as $code => $keywords) {
+                foreach ($keywords as $kw) {
+                    if (mb_strpos($text, $kw) !== false) {
+                        return $code;
+                    }
+                }
             }
+            return null;
+        };
+        
+        // Приоритет 2: Чип «СЕГМЕНТ» из HTML тизера
+        foreach ($cardData['chips'] as $chip) {
+            if (stripos($chip['label'], 'СЕГМЕНТ') !== false || stripos($chip['label'], 'Сегмент') !== false) {
+                $matched = $matchIndustry($chip['value']);
+                if ($matched !== null) {
+                    $cardData['industry'] = $matched;
+                }
+                break;
+            }
+        }
+        
+        // Приоритет 3: company_description (из JOIN или formData)
+        if ($cardData['industry'] === 'services') {
+            $desc = !empty($teaser['company_description'])
+                ? $teaser['company_description']
+                : (is_array($formData) && !empty($formData['company_description']) ? $formData['company_description'] : '');
+            if ($desc !== '') {
+                $matched = $matchIndustry($desc);
+                if ($matched !== null) {
+                    $cardData['industry'] = $matched;
+                }
+            }
+        }
+        
+        // Приоритет 4: products_services (из JOIN или formData)
+        if ($cardData['industry'] === 'services') {
+            $ps = !empty($teaser['products_services'])
+                ? $teaser['products_services']
+                : (is_array($formData) && !empty($formData['products_services']) ? $formData['products_services'] : '');
+            if ($ps !== '') {
+                $matched = $matchIndustry($ps);
+                if ($matched !== null) {
+                    $cardData['industry'] = $matched;
+                }
+            }
+        }
+        
+        // Приоритет 5: описание из hero блока тизера
+        if ($cardData['industry'] === 'services' && !empty($cardData['full_description'])) {
+            $matched = $matchIndustry($cardData['full_description']);
+            if ($matched !== null) {
+                $cardData['industry'] = $matched;
+            }
+        }
+    }
+    
+    // Реальное название сегмента для фильтра: из чипа «Сегмент», иначе products_services, иначе подпись по коду отрасли
+    foreach ($cardData['chips'] as $chip) {
+        if (stripos($chip['label'] ?? '', 'СЕГМЕНТ') !== false || stripos($chip['label'] ?? '', 'Сегмент') !== false) {
+            $cardData['segment_label'] = trim($chip['value'] ?? '');
             break;
         }
     }
-    
-    // Если не определили отрасль, используем старую логику
-    if ($cardData['industry'] === 'services' && !empty($teaser['company_description'])) {
-        $desc = strtolower($teaser['company_description']);
-        if (strpos($desc, 'it') !== false || strpos($desc, 'сайт') !== false || strpos($desc, 'разработка') !== false) {
-            $cardData['industry'] = 'it';
-        } elseif (strpos($desc, 'ресторан') !== false || strpos($desc, 'кафе') !== false) {
-            $cardData['industry'] = 'restaurant';
-        } elseif (strpos($desc, 'интернет-магазин') !== false || strpos($desc, 'e-commerce') !== false) {
-            $cardData['industry'] = 'ecommerce';
-        } elseif (strpos($desc, 'магазин') !== false || strpos($desc, 'торговля') !== false) {
-            $cardData['industry'] = 'retail';
-        }
+    if ($cardData['segment_label'] === '' && is_array($formData) && !empty($formData['products_services'])) {
+        $ps = $formData['products_services'];
+        $cardData['segment_label'] = trim(is_string($ps) ? $ps : implode(', ', array_filter((array)$ps)));
     }
+    if ($cardData['segment_label'] === '' && !empty($teaser['products_services'])) {
+        $cardData['segment_label'] = trim($teaser['products_services']);
+    }
+    $industryLabelsPhp = [
+        'it' => 'IT и технологии', 'restaurant' => 'Рестораны и кафе', 'ecommerce' => 'E-commerce',
+        'retail' => 'Розничная торговля', 'services' => 'Услуги', 'manufacturing' => 'Производство', 'real_estate' => 'Недвижимость',
+    ];
+    if ($cardData['segment_label'] === '' && isset($industryLabelsPhp[$cardData['industry']])) {
+        $cardData['segment_label'] = $industryLabelsPhp[$cardData['industry']];
+    }
+    if ($cardData['segment_label'] === '') {
+        $cardData['segment_label'] = $cardData['industry'];
+    }
+    
+    // Гарантируем числовой тип цены (в млн ₽) для корректного data-price в рублях
+    $cardData['price'] = (float)$cardData['price'];
     
     return $cardData;
 }
@@ -998,41 +1104,29 @@ SVG;
                 <h2 class="section-title">Купить бизнес</h2>
                 <p class="section-subtitle">Изучайте сделки, подготовленные нашей M&amp;A-командой и подтверждённые аналитикой платформы</p>
             </div>
-            
+            <!-- Фильтры: опции генерируются на клиенте из data-* атрибутов карточек (script.js → populateFilterOptions) -->
             <div class="filter-bar">
                 <div class="filter-group">
                     <label for="filter-industry">Отрасль:</label>
                     <select id="filter-industry" class="filter-select">
                         <option value="">Все отрасли</option>
-                        <option value="retail">Розничная торговля</option>
-                        <option value="services">Услуги</option>
-                        <option value="manufacturing">Производство</option>
-                        <option value="it">IT и технологии</option>
-                        <option value="restaurant">Рестораны и кафе</option>
-                        <option value="ecommerce">E-commerce</option>
-                        <option value="real_estate">Недвижимость</option>
                     </select>
                 </div>
                 <div class="filter-group">
                     <label for="filter-price">Цена до:</label>
                     <select id="filter-price" class="filter-select">
                         <option value="">Любая цена</option>
-                        <option value="5000000">до 5 млн ₽</option>
-                        <option value="10000000">до 10 млн ₽</option>
-                        <option value="50000000">до 50 млн ₽</option>
-                        <option value="100000000">до 100 млн ₽</option>
-                        <option value="999999999">свыше 100 млн ₽</option>
                     </select>
                 </div>
                 <div class="filter-group">
                     <label for="filter-location">Город:</label>
                     <select id="filter-location" class="filter-select">
                         <option value="">Все города</option>
-                        <option value="moscow">Москва</option>
-                        <option value="spb">Санкт-Петербург</option>
-                        <option value="ekb">Екатеринбург</option>
-                        <option value="other">Другие города</option>
                     </select>
+                </div>
+                <div class="filter-group filter-group-apply">
+                    <label>&nbsp;</label>
+                    <button type="button" id="filter-apply" class="btn btn-primary">Применить</button>
                 </div>
             </div>
 
@@ -1042,6 +1136,7 @@ SVG;
                 <!-- Business Card 1 -->
                 <div class="business-card card-it"
                      data-industry="it"
+                     data-industry-label="IT и технологии"
                      data-price="15000000"
                      data-location="moscow"
                      data-id="1"
@@ -1104,6 +1199,7 @@ SVG;
                 <!-- Business Card 2 -->
                 <div class="business-card card-restaurant"
                      data-industry="restaurant"
+                     data-industry-label="Рестораны и кафе"
                      data-price="8000000"
                      data-location="moscow"
                      data-id="2"
@@ -1166,6 +1262,7 @@ SVG;
                 <!-- Business Card 3 -->
                 <div class="business-card card-ecommerce"
                      data-industry="ecommerce"
+                     data-industry-label="E-commerce"
                      data-price="12000000"
                      data-location="spb"
                      data-id="3"
@@ -1227,6 +1324,7 @@ SVG;
                 <!-- Business Card 4 -->
                 <div class="business-card card-services"
                      data-industry="real_estate"
+                     data-industry-label="Недвижимость"
                      data-price="3000000"
                      data-location="moscow"
                      data-id="4"
@@ -1288,6 +1386,7 @@ SVG;
                 <!-- Business Card 5 -->
                 <div class="business-card card-retail"
                      data-industry="retail"
+                     data-industry-label="Розничная торговля"
                      data-price="6000000"
                      data-location="ekb"
                      data-id="5"
@@ -1349,6 +1448,7 @@ SVG;
                 <!-- Business Card 6 -->
                 <div class="business-card card-beauty"
                      data-industry="services"
+                     data-industry-label="Услуги"
                      data-price="4500000"
                      data-location="moscow"
                      data-id="6"
@@ -1436,6 +1536,7 @@ SVG;
                         ?>
                         <div class="business-card card-<?php echo htmlspecialchars($card['industry'], ENT_QUOTES, 'UTF-8'); ?> business-card-enhanced"
                              data-industry="<?php echo htmlspecialchars($card['industry'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-industry-label="<?php echo htmlspecialchars($card['segment_label'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                              data-price="<?php echo $card['price'] * 1000000; ?>"
                              data-location="<?php echo htmlspecialchars($card['location'], ENT_QUOTES, 'UTF-8'); ?>"
                              data-id="<?php echo $card['id']; ?>"
