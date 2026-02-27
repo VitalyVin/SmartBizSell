@@ -683,7 +683,7 @@ function populateFilterOptions(attempt = 0) {
 
     cards.forEach(card => {
         const label = card.getAttribute('data-industry-label') || card.getAttribute('data-industry');
-        const loc = card.getAttribute('data-location');
+        const loc = card.getAttribute('data-location-label') || card.getAttribute('data-location');
         const price = parseInt(card.getAttribute('data-price'), 10);
 
         if (label) industries.add(label);
@@ -711,26 +711,23 @@ function populateFilterOptions(attempt = 0) {
         console.log('populateFilterOptions: добавлено сегментов:', sortedLabels.length, sortedLabels);
     }
 
-    // --- Город ---
+    // --- Город: реальные локации с карточек (data-location-label) ---
     if (filterLocation) {
         // Очищаем старые опции (кроме первой "Все города")
         while (filterLocation.children.length > 1) {
             filterLocation.removeChild(filterLocation.lastChild);
         }
-        
-        const sortedLocations = Array.from(locations).sort((a, b) => {
-            const ia = LOCATION_ORDER.indexOf(a);
-            const ib = LOCATION_ORDER.indexOf(b);
-            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-        });
-        
-        sortedLocations.forEach(code => {
+
+        const sortedLocations = Array.from(locations).sort((a, b) => a.localeCompare(b, 'ru'));
+
+        sortedLocations.forEach(label => {
             const opt = document.createElement('option');
-            opt.value = code;
-            opt.textContent = LOCATION_LABELS[code] || code;
+            opt.value = label;
+            opt.textContent = label;
+            opt.title = label;
             filterLocation.appendChild(opt);
         });
-        
+
         console.log('populateFilterOptions: добавлено городов:', sortedLocations.length, sortedLocations);
     }
 
@@ -798,6 +795,7 @@ function filterBusinesses() {
         const cardIndustryLabelRaw = card.getAttribute('data-industry-label') || card.getAttribute('data-industry');
         const cardPrice = parseInt(card.getAttribute('data-price'), 10);
         const cardLocation = card.getAttribute('data-location');
+        const cardLocationLabelRaw = card.getAttribute('data-location-label') || cardLocation;
         const cardTitle = card.getAttribute('data-title') || `Карточка ${index + 1}`;
 
         // Нормализуем строки для сравнения: trim и декодируем HTML-entities
@@ -809,6 +807,8 @@ function filterBusinesses() {
         };
         const cardIndustryLabel = normalizeString(cardIndustryLabelRaw).trim();
         const normalizedIndustryValue = normalizeString(industryValue).trim();
+        const cardLocationLabel = normalizeString(cardLocationLabelRaw).trim();
+        const normalizedLocationValue = normalizeString(locationValue).trim();
 
         let shouldShow = true;
         let hideReason = '';
@@ -821,20 +821,31 @@ function filterBusinesses() {
             }
         }
         
-        // Фильтр по цене
-        if (shouldShow && priceValue && !isNaN(cardPrice) && cardPrice > parseInt(priceValue, 10)) {
-            shouldShow = false;
-            hideReason = `цена превышает: ${cardPrice} > ${priceValue}`;
+        // Фильтр по цене.
+        // Обычные пункты работают как "цена до ...".
+        // Спец-пункт "свыше 1 млрд" обрабатывается отдельно.
+        if (shouldShow && priceValue) {
+            const selectedPrice = parseInt(priceValue, 10);
+            const over1bSentinel = 999999999999;
+            const over1bThreshold = 1000000000;
+
+            if (selectedPrice === over1bSentinel) {
+                // "Свыше 1 млрд ₽": показываем только активы строго дороже 1 млрд
+                if (isNaN(cardPrice) || cardPrice <= over1bThreshold) {
+                    shouldShow = false;
+                    hideReason = `цена не проходит фильтр "свыше 1 млрд": card=${cardPrice}`;
+                }
+            } else if (isNaN(cardPrice) || cardPrice <= 0 || cardPrice > selectedPrice) {
+                shouldShow = false;
+                hideReason = `цена не проходит фильтр: card=${cardPrice}, selected=${selectedPrice}`;
+            }
         }
         
         // Фильтр по городу
         if (shouldShow && locationValue) {
-            if (locationValue === 'other' && ['moscow', 'spb', 'ekb'].includes(cardLocation)) {
+            if (cardLocationLabel !== normalizedLocationValue) {
                 shouldShow = false;
-                hideReason = `город не "other": ${cardLocation}`;
-            } else if (locationValue !== 'other' && cardLocation !== locationValue) {
-                shouldShow = false;
-                hideReason = `город не совпадает: ${cardLocation} !== ${locationValue}`;
+                hideReason = `город не совпадает: "${cardLocationLabel}" !== "${normalizedLocationValue}"`;
             }
         }
 
@@ -1133,7 +1144,9 @@ async function openBusinessModal(card) {
     const icon = iconElement ? iconElement.textContent : '💼';
     const title = card.getAttribute('data-title');
     const locationElement = card.querySelector('.card-location');
-    const location = locationElement ? locationElement.textContent : card.getAttribute('data-location');
+    const location = locationElement
+        ? locationElement.textContent
+        : (card.getAttribute('data-location-label') || card.getAttribute('data-location'));
     const badge = card.querySelector('.card-badge');
     const teaserId = card.getAttribute('data-teaser-id');
     // Используем teaser-id как основной идентификатор, так как он уникален для каждой карточки

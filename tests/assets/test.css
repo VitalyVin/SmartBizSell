@@ -1,0 +1,376 @@
+/* Стили для тестового модуля */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+}
+
+.test-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.test-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 24px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.test-header h1 {
+    font-size: 28px;
+    font-weight: 600;
+}
+
+.test-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: white;
+    color: #667eea;
+}
+
+.btn-primary:hover {
+    background: #f0f0f0;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-run-class {
+    background: #10b981;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
+.btn-run-class:hover {
+    background: #059669;
+}
+
+.test-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 400px;
+    min-height: calc(100vh - 120px);
+}
+
+.test-sidebar {
+    background: #f8f9fa;
+    border-right: 1px solid #e5e7eb;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.test-sidebar h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    color: #374151;
+}
+
+.test-class-list {
+    list-style: none;
+}
+
+.test-class-list li {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.test-class-link {
+    color: #4b5563;
+    text-decoration: none;
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.test-class-link:hover {
+    background: #e5e7eb;
+    color: #1f2937;
+}
+
+.test-class-link.active {
+    background: #667eea;
+    color: white;
+}
+
+.test-main {
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.test-stats {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.stat-passed .stat-value {
+    color: #10b981;
+}
+
+.stat-failed .stat-value {
+    color: #ef4444;
+}
+
+.test-results {
+    min-height: 400px;
+}
+
+.test-placeholder {
+    color: #9ca3af;
+    text-align: center;
+    padding: 40px;
+    font-style: italic;
+}
+
+.test-item {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.test-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+}
+
+.test-item.passed {
+    border-left: 4px solid #10b981;
+}
+
+.test-item.failed {
+    border-left: 4px solid #ef4444;
+}
+
+.test-item.running {
+    border-left: 4px solid #f59e0b;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.test-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.test-item-name {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.test-item-status {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.test-item-status.passed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.test-item-status.failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.test-item-status.running {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.test-item-duration {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 4px;
+}
+
+.test-details {
+    background: #f8f9fa;
+    border-left: 1px solid #e5e7eb;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.test-details h3 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    color: #374151;
+}
+
+.test-details-content {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.test-detail-section {
+    margin-bottom: 16px;
+}
+
+.test-detail-section h4 {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.test-detail-section p {
+    color: #1f2937;
+    line-height: 1.6;
+}
+
+.assertion-item {
+    padding: 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.assertion-item.passed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.assertion-item.failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.error-item {
+    background: #fee2e2;
+    border-left: 3px solid #ef4444;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+}
+
+.error-item pre {
+    font-size: 12px;
+    color: #991b1b;
+    overflow-x: auto;
+    margin-top: 8px;
+}
+
+.warning-item {
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    color: #92400e;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 4px;
+    background: #e5e7eb;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.3s;
+}
+
+/* Адаптивность */
+@media (max-width: 1200px) {
+    .test-layout {
+        grid-template-columns: 240px 1fr 350px;
+    }
+}
+
+@media (max-width: 968px) {
+    .test-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .test-sidebar,
+    .test-details {
+        display: none;
+    }
+}

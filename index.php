@@ -132,6 +132,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         'advantages' => [],
         'risks' => [],
         'location' => 'other',
+        'location_label' => 'Другие города',
         'industry' => 'services',
         'segment_label' => '',
         'contact' => '',
@@ -368,6 +369,7 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         $regionsRaw = (string)$formData['production_sites_region'];
     }
     if (!empty($regionsRaw)) {
+        $cardData['location_label'] = trim($regionsRaw);
         $regions = mb_strtolower($regionsRaw);
         // Точное сопоставление с городами
         if (strpos($regions, 'москва') !== false || strpos($regions, 'московск') !== false) {
@@ -384,6 +386,15 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
                 $cardData['location'] = 'moscow';
             }
         }
+    }
+    if (empty($cardData['location_label'])) {
+        $locationLabelsPhp = [
+            'moscow' => 'Москва',
+            'spb' => 'Санкт-Петербург',
+            'ekb' => 'Екатеринбург',
+            'other' => 'Другие города',
+        ];
+        $cardData['location_label'] = $locationLabelsPhp[$cardData['location']] ?? 'Другие города';
     }
     
     // === Определяем отрасль ===
@@ -853,6 +864,14 @@ SVG;
     <meta name="ai:description" content="SmartBizSell - это M&A платформа, которая помогает продавать и покупать бизнес. Платформа использует искусственный интеллект для создания тизеров, финансовых моделей (DCF), term sheet и поиска инвесторов. Команда имеет опыт десятков закрытых сделок.">
     <meta name="ai:category" content="M&A платформа, продажа бизнеса, покупка бизнеса, инвестиции">
     <meta name="ai:services" content="Оценка бизнеса, подготовка тизеров, финансовое моделирование (DCF), создание term sheet, поиск инвесторов, M&A консалтинг">
+    
+    <!-- Favicon (абсолютные URL для корректной загрузки поисковыми роботами) -->
+    <link rel="icon" type="image/x-icon" href="<?php echo BASE_URL; ?>/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>/favicon.svg">
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo BASE_URL; ?>/favicon-96x96.png">
+    <link rel="apple-touch-icon" href="<?php echo BASE_URL; ?>/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>/site.webmanifest">
+    
     <link rel="stylesheet" href="/styles.css?v=<?php echo time(); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1139,6 +1158,7 @@ SVG;
                      data-industry-label="IT и технологии"
                      data-price="15000000"
                      data-location="moscow"
+                     data-location-label="Москва"
                      data-id="1"
                      data-title="IT-Стартап по разработке SaaS"
                      data-revenue="12000000"
@@ -1202,6 +1222,7 @@ SVG;
                      data-industry-label="Рестораны и кафе"
                      data-price="8000000"
                      data-location="moscow"
+                     data-location-label="Москва"
                      data-id="2"
                      data-title="Сеть кофеен в центре Москвы"
                      data-revenue="25000000"
@@ -1265,6 +1286,7 @@ SVG;
                      data-industry-label="E-commerce"
                      data-price="12000000"
                      data-location="spb"
+                     data-location-label="Санкт-Петербург"
                      data-id="3"
                      data-title="Интернет-магазин детских товаров"
                      data-revenue="18000000"
@@ -1327,6 +1349,7 @@ SVG;
                      data-industry-label="Недвижимость"
                      data-price="3000000"
                      data-location="moscow"
+                     data-location-label="Москва"
                      data-id="4"
                      data-title="Агентство недвижимости"
                      data-revenue="8000000"
@@ -1389,6 +1412,7 @@ SVG;
                      data-industry-label="Розничная торговля"
                      data-price="6000000"
                      data-location="ekb"
+                     data-location-label="Екатеринбург"
                      data-id="5"
                      data-title="Сеть магазинов одежды"
                      data-revenue="20000000"
@@ -1451,6 +1475,7 @@ SVG;
                      data-industry-label="Услуги"
                      data-price="4500000"
                      data-location="moscow"
+                     data-location-label="Москва"
                      data-id="6"
                      data-title="Салон красоты премиум-класса"
                      data-revenue="15000000"
@@ -1522,7 +1547,9 @@ SVG;
                             'ekb' => 'Екатеринбург',
                             'other' => 'Другие города'
                         ];
-                        $locationLabel = $locationLabels[$card['location']] ?? 'Другие города';
+                        $locationLabel = !empty($card['location_label'])
+                            ? $card['location_label']
+                            : ($locationLabels[$card['location']] ?? 'Другие города');
                         $industryIcons = [
                             'it' => '💻',
                             'restaurant' => '🍽️',
@@ -1539,6 +1566,7 @@ SVG;
                              data-industry-label="<?php echo htmlspecialchars($card['segment_label'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                              data-price="<?php echo $card['price'] * 1000000; ?>"
                              data-location="<?php echo htmlspecialchars($card['location'], ENT_QUOTES, 'UTF-8'); ?>"
+                             data-location-label="<?php echo htmlspecialchars($card['location_label'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                              data-id="<?php echo $card['id']; ?>"
                              data-teaser-id="<?php echo $teaser['id']; ?>"
                              data-seller-form-id="<?php echo $teaser['seller_form_id']; ?>"
