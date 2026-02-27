@@ -26,8 +26,12 @@ $totalPosts = 0;
 $categories = [];
 $selectedCategory = isset($_GET['category']) ? trim($_GET['category']) : '';
 $searchQuery = isset($_GET['search']) ? trim($_GET['search']) : '';
+$normalizedSearchQuery = preg_replace('/\s+/u', ' ', $searchQuery);
+if ($normalizedSearchQuery !== null) {
+    $searchQuery = trim($normalizedSearchQuery);
+}
 $currentPage = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-$postsPerPage = 10;
+$postsPerPage = 15;
 $offset = ($currentPage - 1) * $postsPerPage;
 
 if ($blogTableExists) {
@@ -46,8 +50,11 @@ if ($blogTableExists) {
         }
         
         if (!empty($searchQuery)) {
-            $whereConditions[] = "(title LIKE :search OR excerpt LIKE :search OR content LIKE :search)";
-            $params['search'] = '%' . $searchQuery . '%';
+            $whereConditions[] = "(title LIKE :search_title OR excerpt LIKE :search_excerpt OR content LIKE :search_content)";
+            $searchValue = '%' . $searchQuery . '%';
+            $params['search_title'] = $searchValue;
+            $params['search_excerpt'] = $searchValue;
+            $params['search_content'] = $searchValue;
         }
         
         $whereClause = implode(' AND ', $whereConditions);
@@ -85,6 +92,32 @@ if ($blogTableExists) {
 }
 
 $totalPages = $blogTableExists && $totalPosts > 0 ? ceil($totalPosts / $postsPerPage) : 1;
+
+/**
+ * Строит URL блога с сохранением активных фильтров.
+ */
+function buildBlogUrl(array $overrides = []): string {
+    global $selectedCategory, $searchQuery;
+
+    $params = [];
+    if ($selectedCategory !== '') {
+        $params['category'] = $selectedCategory;
+    }
+    if ($searchQuery !== '') {
+        $params['search'] = $searchQuery;
+    }
+
+    foreach ($overrides as $key => $value) {
+        if ($value === null || $value === '') {
+            unset($params[$key]);
+            continue;
+        }
+        $params[$key] = $value;
+    }
+
+    $queryString = http_build_query($params);
+    return '/blog' . ($queryString !== '' ? '?' . $queryString : '');
+}
 
 /**
  * Генерирует SVG-иллюстрацию для категории блога
@@ -266,7 +299,14 @@ $pageDescription = "Полезные статьи о продаже и поку�
             min-width: 250px;
             position: relative;
         }
+        .blog-search-form {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
         .blog-search input {
+            flex: 1;
             width: 100%;
             padding: 14px 20px 14px 48px;
             border: 2px solid rgba(102, 126, 234, 0.2);
@@ -292,6 +332,39 @@ $pageDescription = "Полезные статьи о продаже и поку�
             height: 20px;
             color: #667EEA;
             pointer-events: none;
+        }
+        .blog-search-submit,
+        .blog-search-reset {
+            border-radius: 10px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+        .blog-search-submit {
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            border-color: transparent;
+            color: white;
+        }
+        .blog-search-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .blog-search-reset {
+            padding: 12px 14px;
+            background: white;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .blog-search-reset:hover {
+            border-color: #667EEA;
+            color: #667EEA;
         }
         .blog-category-filter {
             display: flex;
@@ -595,6 +668,14 @@ $pageDescription = "Полезные статьи о продаже и поку�
             .blog-search {
                 width: 100%;
             }
+            .blog-search-form {
+                flex-wrap: wrap;
+            }
+            .blog-search-submit,
+            .blog-search-reset {
+                flex: 1;
+                text-align: center;
+            }
             .blog-category-filter {
                 width: 100%;
             }
@@ -724,19 +805,23 @@ $pageDescription = "Полезные статьи о продаже и поку�
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.35-4.35"></path>
                 </svg>
-                <form method="GET" action="/blog" style="display: inline;">
+                <form method="GET" action="/blog" class="blog-search-form">
                     <?php if (!empty($selectedCategory)): ?>
                         <input type="hidden" name="category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                     <?php endif; ?>
                     <input type="text" name="search" placeholder="Поиск статей..." value="<?php echo htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
+                    <button type="submit" class="blog-search-submit">Найти</button>
+                    <?php if (!empty($searchQuery) || !empty($selectedCategory)): ?>
+                        <a href="/blog" class="blog-search-reset">Сбросить</a>
+                    <?php endif; ?>
                 </form>
             </div>
             <div class="blog-category-filter">
-                <a href="/blog" class="category-btn <?php echo empty($selectedCategory) ? 'active' : ''; ?>">
+                <a href="<?php echo buildBlogUrl(['category' => null, 'page' => null]); ?>" class="category-btn <?php echo empty($selectedCategory) ? 'active' : ''; ?>">
                     Все статьи
                 </a>
                 <?php foreach ($categories as $cat): ?>
-                    <a href="/blog?category=<?php echo urlencode($cat); ?><?php echo !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : ''; ?>" 
+                    <a href="<?php echo buildBlogUrl(['category' => $cat, 'page' => null]); ?>" 
                        class="category-btn <?php echo $selectedCategory === $cat ? 'active' : ''; ?>">
                         <?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?>
                     </a>
@@ -744,9 +829,12 @@ $pageDescription = "Полезные статьи о продаже и поку�
             </div>
         </div>
 
-        <?php if (!empty($posts)): ?>
+        <?php if (!empty($posts) || !empty($searchQuery) || !empty($selectedCategory)): ?>
             <div class="blog-results-count">
                 Найдено статей: <strong><?php echo number_format($totalPosts, 0, '.', ' '); ?></strong>
+                <?php if (!empty($searchQuery)): ?>
+                    по запросу "<?php echo htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8'); ?>"
+                <?php endif; ?>
                 <?php if (!empty($selectedCategory)): ?>
                     в категории "<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>"
                 <?php endif; ?>
@@ -755,9 +843,15 @@ $pageDescription = "Полезные статьи о продаже и поку�
 
         <?php if (empty($posts)): ?>
             <div class="empty-blog">
-                <h2>Статьи скоро появятся</h2>
-                <p>Мы готовим интересные материалы о продаже и покупке бизнеса, M&A сделках и инвестициях.</p>
-                <p><a href="/" style="color: #667EEA; text-decoration: none; font-weight: 600;">← Вернуться на главную</a></p>
+                <?php if (!empty($searchQuery) || !empty($selectedCategory)): ?>
+                    <h2>По вашему запросу ничего не найдено</h2>
+                    <p>Попробуйте изменить формулировку запроса или сбросьте фильтры категорий.</p>
+                    <p><a href="/blog" style="color: #667EEA; text-decoration: none; font-weight: 600;">Сбросить фильтры</a></p>
+                <?php else: ?>
+                    <h2>Статьи скоро появятся</h2>
+                    <p>Мы готовим интересные материалы о продаже и покупке бизнеса, M&A сделках и инвестициях.</p>
+                    <p><a href="/" style="color: #667EEA; text-decoration: none; font-weight: 600;">← Вернуться на главную</a></p>
+                <?php endif; ?>
             </div>
         <?php else: ?>
             <div class="blog-grid">
@@ -818,14 +912,14 @@ $pageDescription = "Полезные статьи о продаже и поку�
             <?php if ($totalPages > 1): ?>
                 <div class="blog-pagination">
                     <?php if ($currentPage > 1): ?>
-                        <a href="/blog?page=<?php echo $currentPage - 1; ?>" class="pagination-link">← Назад</a>
+                        <a href="<?php echo buildBlogUrl(['page' => $currentPage - 1]); ?>" class="pagination-link">← Назад</a>
                     <?php else: ?>
                         <span class="pagination-link disabled">← Назад</span>
                     <?php endif; ?>
                     
                     <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                         <?php if ($i == 1 || $i == $totalPages || ($i >= $currentPage - 2 && $i <= $currentPage + 2)): ?>
-                            <a href="/blog?page=<?php echo $i; ?>" class="pagination-link <?php echo $i == $currentPage ? 'active' : ''; ?>">
+                            <a href="<?php echo buildBlogUrl(['page' => $i]); ?>" class="pagination-link <?php echo $i == $currentPage ? 'active' : ''; ?>">
                                 <?php echo $i; ?>
                             </a>
                         <?php elseif ($i == $currentPage - 3 || $i == $currentPage + 3): ?>
@@ -834,7 +928,7 @@ $pageDescription = "Полезные статьи о продаже и поку�
                     <?php endfor; ?>
                     
                     <?php if ($currentPage < $totalPages): ?>
-                        <a href="/blog?page=<?php echo $currentPage + 1; ?>" class="pagination-link">Вперед →</a>
+                        <a href="<?php echo buildBlogUrl(['page' => $currentPage + 1]); ?>" class="pagination-link">Вперед →</a>
                     <?php else: ?>
                         <span class="pagination-link disabled">Вперед →</span>
                     <?php endif; ?>
