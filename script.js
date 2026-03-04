@@ -1662,10 +1662,6 @@ function showSellerContactsModal(seller) {
     if (contactsContent) {
         let html = '';
         
-        if (seller.asset_name) {
-            html += `<p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 14px;">Актив: <strong>${escapeHtml(seller.asset_name)}</strong></p>`;
-        }
-        
         if (seller.full_name) {
             html += `<p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 14px;">Продавец: <strong>${escapeHtml(seller.full_name)}</strong></p>`;
         }
