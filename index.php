@@ -951,6 +951,9 @@ SVG;
                     <a href="/estimate.php" class="btn btn-estimate">
                         <span>Оценить бизнес</span>
                     </a>
+                    <a href="/sale-readiness.php" class="btn btn-readiness">
+                        <span>Готовность к продаже</span>
+                    </a>
                 </div>
                 <div class="hero-stats">
                     <div class="stat-item" data-stat="500">

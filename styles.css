@@ -353,6 +353,19 @@ body {
     background: #ea580c; /* чуть темнее при наведении */
 }
 
+.btn-readiness {
+    background: #0ea5a4;
+    color: #ffffff;
+    box-shadow: var(--shadow-md);
+    border: none;
+}
+
+.btn-readiness:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    background: #0f766e;
+}
+
 .btn-large {
     padding: 16px 32px;
     font-size: 18px;
