@@ -467,7 +467,8 @@ function callTogetherAI(string $prompt, string $apiKey): string
                 'content' => $prompt
             ]
         ],
-        'temperature' => 0.3,
+        'temperature' => TOGETHER_TEMPERATURE,
+        'top_p' => TOGETHER_TOP_P,
         'max_tokens' => 50,
     ];
     
@@ -479,7 +480,8 @@ function callTogetherAI(string $prompt, string $apiKey): string
         'Content-Type: application/json',
         'Authorization: Bearer ' . $apiKey,
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_TIMEOUT, min(30, TOGETHER_TIMEOUT_COMPLETIONS));
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, TOGETHER_CONNECT_TIMEOUT);
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

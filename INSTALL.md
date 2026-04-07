@@ -217,7 +217,7 @@ define('MODERATOR_EMAIL', 'moderator@smartbizsell.ru'); // Email модерат�
 
 // API ключ для Together.ai (для генерации тизеров и Term Sheet)
 define('TOGETHER_API_KEY', 'ваш_api_ключ'); // Получите на https://together.ai
-define('TOGETHER_MODEL', 'Qwen/Qwen2.5-72B-Instruct-Turbo'); // Модель ИИ
+define('TOGETHER_MODEL', 'meta-llama/Llama-3.3-70B-Instruct-Turbo'); // Модель ИИ
 ```
 
 **Важно:** 

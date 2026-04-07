@@ -72,17 +72,21 @@ define('SMTP_FROM_NAME', 'SmartBizSell');
 // Настройки восстановления пароля
 define('PASSWORD_RESET_TOKEN_LIFETIME', 3600); // 1 час в секундах
 
-// Настройки AI (together.ai + Qwen)
+// Настройки AI (together.ai)
 // Можно переопределить через переменные окружения TOGETHER_API_KEY и TOGETHER_MODEL
 define('TOGETHER_API_KEY', getenv('TOGETHER_API_KEY') ?: 'c0bf29d89744dd1e091c9eca2b1cfeda9d7af4dacedadcf82872b4698d8365ba');
-define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'Qwen/Qwen3-Next-80B-A3B-Instruct');
+define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'meta-llama/Llama-3.3-70B-Instruct-Turbo');
 
 // Параметры для Together.ai
 // Можно переопределить через переменные окружения
-define('TOGETHER_MAX_TOKENS_NORMAL', (int)(getenv('TOGETHER_MAX_TOKENS_NORMAL') ?: 2500)); // Увеличено для полных тизеров без обрезки
-define('TOGETHER_MAX_TOKENS_LONG', (int)(getenv('TOGETHER_MAX_TOKENS_LONG') ?: 8000));
-define('TOGETHER_TEMPERATURE', (float)(getenv('TOGETHER_TEMPERATURE') ?: 0.15)); // Чуть ниже для стабильности текста
-define('TOGETHER_TOP_P', (float)(getenv('TOGETHER_TOP_P') ?: 0.9));
+define('TOGETHER_MAX_TOKENS_NORMAL', (int)(getenv('TOGETHER_MAX_TOKENS_NORMAL') ?: 1800)); // Снижаем для ускорения и меньшего риска таймаутов
+define('TOGETHER_MAX_TOKENS_LONG', (int)(getenv('TOGETHER_MAX_TOKENS_LONG') ?: 4500)); // Достаточно для длинных блоков, но стабильнее 8000
+define('TOGETHER_TEMPERATURE', (float)(getenv('TOGETHER_TEMPERATURE') ?: 0.10)); // Более детерминированные ответы
+define('TOGETHER_TOP_P', (float)(getenv('TOGETHER_TOP_P') ?: 0.80)); // Уже выборка токенов = меньше "шума" и ошибок формата
+define('TOGETHER_TIMEOUT_COMPLETIONS', (int)(getenv('TOGETHER_TIMEOUT_COMPLETIONS') ?: 45)); // Баланс: быстрый фейл при зависании
+define('TOGETHER_TIMEOUT_CHAT', (int)(getenv('TOGETHER_TIMEOUT_CHAT') ?: 70)); // Для более длинных chat-запросов
+define('TOGETHER_CONNECT_TIMEOUT', (int)(getenv('TOGETHER_CONNECT_TIMEOUT') ?: 5));
+define('TOGETHER_MAX_RETRIES', (int)(getenv('TOGETHER_MAX_RETRIES') ?: 3)); // Ограничиваем ретраи для сокращения общей задержки
 
 // Настройки Alibaba Cloud Qwen 3 Max
 // Можно переопределить через переменные окружения
@@ -1334,7 +1338,8 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
     $lastError = null;
     
     // Retry логика с экспоненциальной задержкой
-    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+    $effectiveRetries = max(1, min($maxRetries, TOGETHER_MAX_RETRIES));
+    for ($attempt = 1; $attempt <= $effectiveRetries; $attempt++) {
         try {
             $ch = curl_init('https://api.together.ai/v1/completions');
             if ($ch === false) {
@@ -1349,8 +1354,8 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
                     'Authorization: Bearer ' . $apiKey,
                 ],
                 CURLOPT_POSTFIELDS => $body,
-                CURLOPT_TIMEOUT => 60, // Уменьшено для более быстрого отказа при проблемах
-                CURLOPT_CONNECTTIMEOUT => 5, // Уменьшено для более быстрого соединения
+                CURLOPT_TIMEOUT => TOGETHER_TIMEOUT_COMPLETIONS,
+                CURLOPT_CONNECTTIMEOUT => TOGETHER_CONNECT_TIMEOUT,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
             ]);
@@ -1366,7 +1371,7 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
                 $lastError = 'Сетевая ошибка: ' . ($curlError ?: 'Неизвестная ошибка cURL (код: ' . $curlErrno . ')');
                 error_log("Together API call attempt $attempt failed: $lastError");
                 
-                if ($attempt >= $maxRetries) {
+                if ($attempt >= $effectiveRetries) {
                     throw new RuntimeException($lastError);
                 }
                 
@@ -1381,7 +1386,7 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
                 $lastError = "HTTP $status: " . substr($response, 0, 200);
                 error_log("Together API call attempt $attempt failed with HTTP $status: $lastError");
                 
-                if ($attempt >= $maxRetries) {
+                if ($attempt >= $effectiveRetries) {
                     throw new RuntimeException('Сервер API временно недоступен. Попробуйте позже.');
                 }
                 
@@ -1722,7 +1727,8 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
 
     $lastError = null;
     
-    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+    $effectiveRetries = max(1, min($maxRetries, TOGETHER_MAX_RETRIES));
+    for ($attempt = 1; $attempt <= $effectiveRetries; $attempt++) {
         try {
             $ch = curl_init('https://api.together.ai/v1/chat/completions');
             if ($ch === false) {
@@ -1737,8 +1743,8 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
                     'Authorization: Bearer ' . $apiKey,
                 ],
                 CURLOPT_POSTFIELDS => $body,
-                CURLOPT_TIMEOUT => 90, // Уменьшено с 120 для Term Sheet
-                CURLOPT_CONNECTTIMEOUT => 5, // Уменьшено с 10
+                CURLOPT_TIMEOUT => TOGETHER_TIMEOUT_CHAT,
+                CURLOPT_CONNECTTIMEOUT => TOGETHER_CONNECT_TIMEOUT,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
             ]);
@@ -1753,7 +1759,7 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
                 $lastError = 'Сетевая ошибка: ' . ($curlError ?: 'Неизвестная ошибка cURL (код: ' . $curlErrno . ')');
                 error_log("Together Chat API call attempt $attempt failed: $lastError");
                 
-                if ($attempt >= $maxRetries) {
+                if ($attempt >= $effectiveRetries) {
                     throw new RuntimeException($lastError);
                 }
                 
@@ -1766,7 +1772,7 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
                 $lastError = "HTTP $status: " . substr($response, 0, 200);
                 error_log("Together Chat API call attempt $attempt failed with HTTP $status: $lastError");
                 
-                if ($attempt >= $maxRetries) {
+                if ($attempt >= $effectiveRetries) {
                     throw new RuntimeException('Сервер API временно недоступен. Попробуйте позже.');
                 }
                 
