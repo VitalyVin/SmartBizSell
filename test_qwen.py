@@ -13,7 +13,7 @@ print("Тестирование Qwen через together.ai...")
 print("=" * 50)
 
 # Используем рабочую модель
-model = "Qwen/Qwen2.5-72B-Instruct-Turbo"
+model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 
 try:
     print(f"\nИспользуемая модель: {model}")

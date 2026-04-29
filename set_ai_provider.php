@@ -46,7 +46,7 @@ if (setAIProvider($provider)) {
         'success' => true,
         'message' => 'Провайдер успешно установлен',
         'provider' => $provider,
-        'provider_name' => $provider === 'alibaba' ? 'Alibaba Cloud Qwen 3 Max' : 'Together.ai'
+        'provider_name' => $provider === 'alibaba' ? 'Alibaba Cloud qwen3-max' : 'Together.ai'
     ]);
 } else {
     http_response_code(500);

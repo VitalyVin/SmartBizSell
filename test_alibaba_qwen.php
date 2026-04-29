@@ -1,6 +1,6 @@
 <?php
 /**
- * Тестовый скрипт для проверки работы Alibaba Cloud Qwen 3 Max API
+ * Тестовый скрипт для проверки работы Alibaba Cloud qwen3-max API
  * 
  * Использование:
  * php test_alibaba_qwen.php
@@ -13,16 +13,16 @@ $isCli = php_sapi_name() === 'cli';
 
 if (!$isCli) {
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Тест Alibaba Cloud Qwen 3 Max</title>';
+    echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Тест Alibaba Cloud qwen3-max</title>';
     echo '<style>body{font-family:monospace;padding:20px;background:#f5f5f5;}pre{background:#fff;padding:15px;border-radius:5px;overflow:auto;}</style></head><body>';
-    echo '<h1>Тест Alibaba Cloud Qwen 3 Max API</h1><pre>';
+    echo '<h1>Тест Alibaba Cloud qwen3-max API</h1><pre>';
 }
 
 // API ключ Alibaba Cloud
 $apiKey = 'sk-bfcf015974d0414281c1d9904e5e1f12';
 
 // Модель (пробуем разные варианты названия)
-$model = 'qwen3-max'; // Сначала пробуем qwen3-max, потом qwen-max
+$model = 'qwen3-max';
 
 // Base URL для Alibaba Cloud Qwen API (OpenAI-совместимый)
 $baseUrl = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
@@ -39,7 +39,7 @@ $endpoints = [
 // Тестовый промпт
 $testPrompt = 'Напиши краткое описание компании для инвестора. Компания занимается разработкой SaaS-решений.';
 
-echo "=== Тест Alibaba Cloud Qwen 3 Max API ===\n\n";
+echo "=== Тест Alibaba Cloud qwen3-max API ===\n\n";
 echo "API Key: " . substr($apiKey, 0, 10) . "...\n";
 echo "Model: $model\n\n";
 

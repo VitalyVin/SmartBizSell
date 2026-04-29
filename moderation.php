@@ -482,7 +482,7 @@ $statusColors = [
                 <label for="ai-provider" style="font-size: 14px; color: var(--text-secondary); font-weight: 500; white-space: nowrap;">AI Провайдер:</label>
                 <select id="ai-provider" style="padding: 10px 16px; border: 2px solid rgba(0, 0, 0, 0.1); border-radius: 8px; font-size: 14px; background: white; cursor: pointer; min-width: 220px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                     <option value="together">Together.ai</option>
-                    <option value="alibaba">Alibaba Cloud Qwen 3 Max</option>
+                    <option value="alibaba">Alibaba Cloud qwen3-max</option>
                 </select>
                 <span id="provider-status" style="font-size: 12px; color: var(--text-secondary); padding: 6px 12px; background: rgba(0, 0, 0, 0.05); border-radius: 6px; white-space: nowrap;"></span>
             </div>
@@ -1158,7 +1158,7 @@ $statusColors = [
             function updateProviderStatus(provider) {
                 const providerNames = {
                     'together': 'Together.ai',
-                    'alibaba': 'Alibaba Cloud Qwen 3 Max'
+                    'alibaba': 'Alibaba Cloud qwen3-max'
                 };
                 providerStatus.textContent = providerNames[provider] || provider;
                 providerStatus.style.color = 'var(--text-secondary)';

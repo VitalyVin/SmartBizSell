@@ -28,10 +28,13 @@ define('DASHBOARD_URL', BASE_URL . '/dashboard.php');
 // Настройки почты (для уведомлений)
 define('ADMIN_EMAIL', 'admin@smartbizsell.ru'); // Замените на ваш email
 
-// Настройки AI (together.ai + Qwen)
+// Настройки AI (together.ai + Alibaba Cloud)
 // Можно переопределить через переменные окружения TOGETHER_API_KEY и TOGETHER_MODEL
 define('TOGETHER_API_KEY', getenv('TOGETHER_API_KEY') ?: 'your_together_ai_key');
-define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'Qwen/Qwen2.5-72B-Instruct-Turbo');
+define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'meta-llama/Llama-3.3-70B-Instruct-Turbo');
+// Можно переопределить через переменные окружения ALIBABA_API_KEY и ALIBABA_MODEL
+define('ALIBABA_API_KEY', getenv('ALIBABA_API_KEY') ?: 'your_alibaba_api_key');
+define('ALIBABA_MODEL', getenv('ALIBABA_MODEL') ?: 'qwen3-max');
 
 /**
  * Подключение к базе данных
