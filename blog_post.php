@@ -246,6 +246,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
     <meta property="og:url" content="<?php echo BASE_URL; ?>/blog/<?php echo htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:title" content="<?php echo htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     <meta property="article:published_time" content="<?php echo date('c', strtotime($post['published_at'])); ?>">
     <meta property="article:modified_time" content="<?php echo date('c', strtotime($post['updated_at'])); ?>">
     <?php if (!empty($post['category'])): ?>
@@ -256,6 +257,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="<?php echo htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     
     <link rel="stylesheet" href="styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1266,12 +1268,35 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
             "url": "<?php echo BASE_URL; ?>",
             "logo": {
                 "@type": "ImageObject",
-                "url": "<?php echo BASE_URL; ?>/logo.png"
+                "url": "<?php echo BASE_URL; ?>/logo.svg"
             }
         },
         "mainEntityOfPage": {
             "@type": "WebPage",
             "@id": "<?php echo BASE_URL; ?>/blog/<?php echo htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8'); ?>"
+        }
+        ,"breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Главная",
+                    "item": "<?php echo BASE_URL; ?>/"
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": "Блог",
+                    "item": "<?php echo BASE_URL; ?>/blog"
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": <?php echo json_encode($post['title'], JSON_UNESCAPED_UNICODE); ?>,
+                    "item": "<?php echo BASE_URL; ?>/blog/<?php echo htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8'); ?>"
+                }
+            ]
         }
         <?php if (!empty($post['category'])): ?>
         ,"articleSection": <?php echo json_encode($post['category'], JSON_UNESCAPED_UNICODE); ?>

@@ -216,6 +216,16 @@ function estimateReadingTime(?string $content): int {
 // Мета-теги для SEO
 $pageTitle = "Блог SmartBizSell - Статьи о продаже и покупке бизнеса, M&A, инвестициях";
 $pageDescription = "Полезные статьи о продаже и покупке бизнеса, M&A сделках, оценке бизнеса, финансовом моделировании, поиске инвесторов и других аспектах сделок слияний и поглощений.";
+
+// Для SEO: индексируем только основной список (/blog), а пагинацию/фильтры делаем noindex,
+// чтобы не размножать дубликаты страниц по параметрам.
+$robotsMeta = 'index, follow';
+if ($currentPage > 1 || $selectedCategory !== '' || $searchQuery !== '') {
+    $robotsMeta = 'noindex, follow';
+}
+
+$prevHref = $currentPage > 1 ? (BASE_URL . buildBlogUrl(['page' => $currentPage - 1])) : '';
+$nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $currentPage + 1])) : '';
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -225,14 +235,28 @@ $pageDescription = "Полезные статьи о продаже и поку�
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
     <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="keywords" content="блог о продаже бизнеса, статьи M&A, как продать бизнес, как купить бизнес, оценка бизнеса, инвестиции">
-    <meta name="robots" content="index, follow">
+    <meta name="robots" content="<?php echo htmlspecialchars($robotsMeta, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="canonical" href="<?php echo BASE_URL; ?>/blog">
+
+    <?php if (!empty($prevHref)): ?>
+        <link rel="prev" href="<?php echo htmlspecialchars($prevHref, ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
+    <?php if (!empty($nextHref)): ?>
+        <link rel="next" href="<?php echo htmlspecialchars($nextHref, ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
     
     <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="<?php echo BASE_URL; ?>/blog">
     <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     
     <link rel="stylesheet" href="styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">

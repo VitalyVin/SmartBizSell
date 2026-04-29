@@ -315,6 +315,52 @@ $pageDescription = "Помогаем продать бизнес быстро и
         </div>
     </div>
 
+    <!-- FAQ (для сниппетов и понимания контента поисковиками/LLM) -->
+    <section class="service-faq" style="max-width: 1200px; margin: 0 auto; padding: 0 20px 60px;">
+        <h2 style="font-size: 32px; font-weight: 800; margin: 0 0 20px; color: var(--text-primary);">FAQ по продаже бизнеса</h2>
+        <div style="background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); padding: 20px;">
+            <details style="margin-bottom: 14px;">
+                <summary style="cursor: pointer; font-weight: 700; font-size: 18px;">Что входит в подготовку бизнеса к продаже?</summary>
+                <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.7; color: var(--text-secondary);">
+                    Мы структурируем данные бизнеса, помогаем подготовить финансовую информацию и документы, а затем готовим материалы для презентации: оценку и профессиональный тизер.
+                    После этого тизер проходит модерацию и публикуется для поиска покупателей и инвесторов.
+                </p>
+            </details>
+            <details style="margin-bottom: 0;">
+                <summary style="cursor: pointer; font-weight: 700; font-size: 18px;">Как создаются тизеры с ИИ и что делает модерация?</summary>
+                <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.7; color: var(--text-secondary);">
+                    ИИ на основе анкеты формирует структурированное описание бизнеса и ключевые финансовые тезисы, чтобы тизер соответствовал стандартам инвестбанкинга.
+                    Затем команда выполняет модерацию и при необходимости делает правки, чтобы материалы были корректными и пригодными для публикации.
+                </p>
+            </details>
+        </div>
+    </section>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Что входит в подготовку бизнеса к продаже?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Мы структурируем данные бизнеса, помогаем подготовить финансовую информацию и документы, а затем готовим материалы для презентации: оценку и профессиональный тизер. После этого тизер проходит модерацию и публикуется для поиска покупателей и инвесторов."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Как создаются тизеры с ИИ и что делает модерация?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ИИ на основе анкеты формирует структурированное описание бизнеса и ключевые финансовые тезисы, затем команда выполняет модерацию и при необходимости делает правки, чтобы материалы были корректными и пригодными для публикации."
+          }
+        }
+      ]
+    }
+    </script>
+
     <!-- Структурированные данные -->
     <script type="application/ld+json">
     {

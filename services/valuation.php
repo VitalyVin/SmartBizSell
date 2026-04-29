@@ -296,6 +296,52 @@ $pageDescription = "Профессиональная оценка стоимос
         </div>
     </div>
 
+    <!-- FAQ (для сниппетов и понимания контента поисковиками/LLM) -->
+    <section class="service-faq" style="max-width: 1200px; margin: 0 auto; padding: 0 20px 60px;">
+        <h2 style="font-size: 32px; font-weight: 800; margin: 0 0 20px; color: var(--text-primary);">FAQ по оценке бизнеса</h2>
+        <div style="background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); padding: 20px;">
+            <details style="margin-bottom: 14px;">
+                <summary style="cursor: pointer; font-weight: 700; font-size: 18px;">Какие данные нужны для расчета DCF и мультипликаторов?</summary>
+                <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.7; color: var(--text-secondary);">
+                    Для DCF мы опираемся на финансовые вводные из анкеты: выручку, структуру расходов, CAPEX/амортизацию, оборотный капитал и прочие параметры модели.
+                    Для мультипликаторов платформа определяет сектор бизнеса и применяет отраслевой подход к расчету справедливой стоимости.
+                </p>
+            </details>
+            <details style="margin-bottom: 0;">
+                <summary style="cursor: pointer; font-weight: 700; font-size: 18px;">Почему результат — диапазон, а не точная цена?</summary>
+                <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.7; color: var(--text-secondary);">
+                    Оценка строится на допущениях (прогнозы, темпы роста, WACC) и на выборе сопоставимых компаний.
+                    Поэтому мы показываем ориентировочный диапазон, который удобно использовать в переговорах и дальнейшей проверке допущений.
+                </p>
+            </details>
+        </div>
+    </section>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Какие данные нужны для расчета DCF и мультипликаторов?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Для DCF мы опираемся на финансовые вводные из анкеты: выручку, структуру расходов, CAPEX/амортизацию, оборотный капитал и прочие параметры модели. Для мультипликаторов платформа определяет сектор бизнеса и применяет отраслевой подход к расчету справедливой стоимости."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Почему результат — диапазон, а не точная цена?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Оценка строится на допущениях (прогнозы, темпы роста, WACC) и на выборе сопоставимых компаний, поэтому мы показываем ориентировочный диапазон."
+          }
+        }
+      ]
+    }
+    </script>
+
     <!-- Структурированные данные -->
     <script type="application/ld+json">
     {
