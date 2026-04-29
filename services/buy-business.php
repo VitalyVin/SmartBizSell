@@ -11,6 +11,8 @@
 
 require_once '../config.php';
 
+$assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
+
 $pageTitle = "Покупка бизнеса - Каталог готовых бизнесов, поиск и оценка | SmartBizSell";
 $pageDescription = "Найдите готовый бизнес для покупки в нашем каталоге. Детальные тизеры с финансовыми моделями, фильтрация по отраслям и цене. Помощь в выборе и оценке бизнеса для покупки.";
 ?>
@@ -31,7 +33,7 @@ $pageDescription = "Найдите готовый бизнес для покуп
     <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     
-    <link rel="stylesheet" href="../styles.css?v=<?php echo time(); ?>">
+    <link rel="stylesheet" href="../styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -314,7 +316,7 @@ $pageDescription = "Найдите готовый бизнес для покуп
     }
     </script>
 
-    <script src="../script.js?v=<?php echo time(); ?>"></script>
+    <script src="../script.js?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 </body>
 </html>
 

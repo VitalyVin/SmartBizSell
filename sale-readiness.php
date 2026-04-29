@@ -5,6 +5,8 @@
  */
 require_once 'config.php';
 
+$assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
+
 $pageTitle = 'Оцените готовность бизнеса к продаже за 2 минуты | SmartBizSell';
 $pageDescription = 'Пройдите экспресс-анкету и получите персональные рекомендации по подготовке бизнеса к продаже.';
 $canonicalUrl = BASE_URL . '/sale-readiness.php';
@@ -18,7 +20,16 @@ $canonicalUrl = BASE_URL . '/sale-readiness.php';
     <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
-    <link rel="stylesheet" href="/styles.css?v=<?php echo time(); ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
+    <link rel="stylesheet" href="/styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <?php include __DIR__ . '/yandex_metrika.php'; ?>
 
     <style>

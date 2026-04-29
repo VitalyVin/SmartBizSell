@@ -5,6 +5,8 @@
  */
 require_once 'config.php';
 
+$assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
+
 $pageTitle = 'Оценка компании за 2 минуты | SmartBizSell';
 $pageDescription = 'Узнайте ориентировочную стоимость компании. Введите минимум данных — получите диапазон оценки по методу DCF и мультипликаторов. Без регистрации.';
 $canonicalUrl = BASE_URL . '/estimate.php';
@@ -18,7 +20,16 @@ $canonicalUrl = BASE_URL . '/estimate.php';
     <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
-    <link rel="stylesheet" href="/styles.css?v=<?php echo time(); ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
+    <link rel="stylesheet" href="/styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">

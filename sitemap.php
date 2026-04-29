@@ -24,6 +24,8 @@ $priorities = [
     'services' => 0.9,
     'about' => 0.6,
     'faq' => 0.7,
+    'estimate' => 0.8,
+    'sale-readiness' => 0.8,
     'ai-knowledge-base' => 0.5,
 ];
 
@@ -35,6 +37,8 @@ $changefreq = [
     'services' => 'monthly',
     'about' => 'monthly',
     'faq' => 'monthly',
+    'estimate' => 'weekly',
+    'sale-readiness' => 'weekly',
     'ai-knowledge-base' => 'weekly',
 ];
 
@@ -100,6 +104,23 @@ echo "    <loc>{$baseUrl}/ai-knowledge-base</loc>\n";
 echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
 echo "    <changefreq>{$changefreq['ai-knowledge-base']}</changefreq>\n";
 echo "    <priority>{$priorities['ai-knowledge-base']}</priority>\n";
+echo "  </url>\n";
+
+// Лендинги для привлечения трафика (SEO/лиды)
+$estimateLastmod = date('Y-m-d', filemtime(__DIR__ . '/estimate.php') ?: time());
+echo "  <url>\n";
+echo "    <loc>{$baseUrl}/estimate.php</loc>\n";
+echo "    <lastmod>{$estimateLastmod}</lastmod>\n";
+echo "    <changefreq>{$changefreq['estimate']}</changefreq>\n";
+echo "    <priority>{$priorities['estimate']}</priority>\n";
+echo "  </url>\n";
+
+$saleReadinessLastmod = date('Y-m-d', filemtime(__DIR__ . '/sale-readiness.php') ?: time());
+echo "  <url>\n";
+echo "    <loc>{$baseUrl}/sale-readiness.php</loc>\n";
+echo "    <lastmod>{$saleReadinessLastmod}</lastmod>\n";
+echo "    <changefreq>{$changefreq['sale-readiness']}</changefreq>\n";
+echo "    <priority>{$priorities['sale-readiness']}</priority>\n";
 echo "  </url>\n";
 
 // Статьи блога из базы данных
