@@ -7,7 +7,7 @@ require_once 'config.php';
 
 $pageTitle = 'Оценка компании за 2 минуты | SmartBizSell';
 $pageDescription = 'Узнайте ориентировочную стоимость компании. Введите минимум данных — получите диапазон оценки по методу DCF и мультипликаторов. Без регистрации.';
-$canonicalUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '') . strtok($_SERVER['REQUEST_URI'] ?? '/estimate.php', '?');
+$canonicalUrl = BASE_URL . '/estimate.php';
 ?>
 <!DOCTYPE html>
 <html lang="ru">

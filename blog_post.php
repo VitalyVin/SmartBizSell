@@ -81,8 +81,9 @@ if ($blogTableExists) {
 }
 
 if (!$post) {
-    header('HTTP/1.0 404 Not Found');
-    header('Location: /blog');
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Not Found';
     exit;
 }
 
@@ -206,6 +207,9 @@ function generateTableOfContents(string $content): array {
         }
         
         $id = 'heading-' . ($index + 1);
+        if (!($heading instanceof DOMElement)) {
+            continue;
+        }
         $heading->setAttribute('id', $id);
         
         $level = (int)substr($heading->nodeName, 1);

@@ -286,7 +286,7 @@ $pageDescription = "SmartBizSell - это команда M&A-профессио�
             "@type": "Organization",
             "name": "SmartBizSell",
             "url": "<?php echo BASE_URL; ?>",
-            "logo": "<?php echo BASE_URL; ?>/logo.png",
+            "logo": "<?php echo BASE_URL; ?>/logo.svg",
             "description": "<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>",
             "address": {
                 "@type": "PostalAddress",

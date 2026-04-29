@@ -849,7 +849,7 @@ SVG;
     <meta property="og:url" content="<?php echo BASE_URL; ?>/">
     <meta property="og:title" content="SmartBizSell.ru - Экспертная M&A платформа с ИИ">
     <meta property="og:description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект для продажи и покупки бизнеса. Оценка, тизеры, поиск инвесторов.">
-    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.jpg">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     <meta property="og:locale" content="ru_RU">
     <meta property="og:site_name" content="SmartBizSell.ru">
     
@@ -858,19 +858,17 @@ SVG;
     <meta name="twitter:url" content="<?php echo BASE_URL; ?>/">
     <meta name="twitter:title" content="SmartBizSell.ru - Экспертная M&A платформа с ИИ">
     <meta name="twitter:description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект для продажи и покупки бизнеса.">
-    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.jpg">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     
     <!-- AI-специфичные мета-теги -->
     <meta name="ai:description" content="SmartBizSell - это M&A платформа, которая помогает продавать и покупать бизнес. Платформа использует искусственный интеллект для создания тизеров, финансовых моделей (DCF), term sheet и поиска инвесторов. Команда имеет опыт десятков закрытых сделок.">
     <meta name="ai:category" content="M&A платформа, продажа бизнеса, покупка бизнеса, инвестиции">
     <meta name="ai:services" content="Оценка бизнеса, подготовка тизеров, финансовое моделирование (DCF), создание term sheet, поиск инвесторов, M&A консалтинг">
     
-    <!-- Favicon (абсолютные URL для корректной загрузки поисковыми роботами) -->
-    <link rel="icon" type="image/x-icon" href="<?php echo BASE_URL; ?>/favicon.ico">
+    <!-- Favicon / manifest (существующие в репозитории) -->
     <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>/favicon.svg">
-    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo BASE_URL; ?>/favicon-96x96.png">
-    <link rel="apple-touch-icon" href="<?php echo BASE_URL; ?>/apple-touch-icon.png">
-    <link rel="manifest" href="<?php echo BASE_URL; ?>/site.webmanifest">
+    <link rel="apple-touch-icon" href="<?php echo BASE_URL; ?>/favicon.svg">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>/favicon/site.webmanifest">
     
     <link rel="stylesheet" href="/styles.css?v=<?php echo time(); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1881,7 +1879,7 @@ SVG;
                 "@id": "<?php echo BASE_URL; ?>/#organization",
                 "name": "SmartBizSell",
                 "url": "<?php echo BASE_URL; ?>",
-                "logo": "<?php echo BASE_URL; ?>/logo.png",
+                "logo": "<?php echo BASE_URL; ?>/logo.svg",
                 "description": "Экспертная M&A платформа с искусственным интеллектом для продажи и покупки бизнеса",
                 "contactPoint": {
                     "@type": "ContactPoint",
@@ -1900,14 +1898,6 @@ SVG;
                 "description": "Экспертная M&A платформа с ИИ для продажи и покупки бизнеса",
                 "publisher": {
                     "@id": "<?php echo BASE_URL; ?>/#organization"
-                },
-                "potentialAction": {
-                    "@type": "SearchAction",
-                    "target": {
-                        "@type": "EntryPoint",
-                        "urlTemplate": "<?php echo BASE_URL; ?>/buy-business?q={search_term_string}"
-                    },
-                    "query-input": "required name=search_term_string"
                 }
             },
             {

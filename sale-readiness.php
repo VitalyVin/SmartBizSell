@@ -7,7 +7,7 @@ require_once 'config.php';
 
 $pageTitle = 'Оцените готовность бизнеса к продаже за 2 минуты | SmartBizSell';
 $pageDescription = 'Пройдите экспресс-анкету и получите персональные рекомендации по подготовке бизнеса к продаже.';
-$canonicalUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '') . strtok($_SERVER['REQUEST_URI'] ?? '/sale-readiness.php', '?');
+$canonicalUrl = BASE_URL . '/sale-readiness.php';
 ?>
 <!DOCTYPE html>
 <html lang="ru">

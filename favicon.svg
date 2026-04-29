@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="SmartBizSell">
+  <defs>
+    <linearGradient id="sbs-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667EEA" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#764BA2" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#F093FB" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="48" height="48" rx="14" fill="#ffffff" stroke="url(#sbs-grad)" stroke-width="4"/>
+  <path d="M20 37 L26 31 L30 35 L39 26 L44 31" fill="none" stroke="url(#sbs-grad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M44 26 L44 36 L34 36" fill="none" stroke="url(#sbs-grad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
