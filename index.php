@@ -951,8 +951,11 @@ SVG;
                     <a href="/estimate.php" class="btn btn-estimate">
                         <span>Оценить бизнес</span>
                     </a>
-                    <a href="/sale-readiness.php" class="btn btn-readiness">
-                        <span>Готовность к продаже</span>
+                    <a href="/sale-readiness.php" class="btn btn-estimate btn-ready-check" style="background:#0ea5a4;">
+                        <span>Проверить готовность к продаже</span>
+                    </a>
+                    <a href="/investor-match.php" class="btn btn-investor-match btn-ready-check" style="display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%); color:#fff; text-decoration:none; padding:14px 24px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+                        <span>Подобрать инвестора</span>
                     </a>
                 </div>
                 <div class="hero-stats">

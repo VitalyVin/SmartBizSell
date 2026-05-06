@@ -366,6 +366,27 @@ body {
     background: #0f766e;
 }
 
+.btn-ready-check {
+    min-height: 52px;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.btn-investor-match {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: #ffffff;
+    box-shadow: var(--shadow-md);
+    border: none;
+}
+
+.btn-investor-match:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+}
+
 .btn-large {
     padding: 16px 32px;
     font-size: 18px;

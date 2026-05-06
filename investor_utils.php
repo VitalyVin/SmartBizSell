@@ -28,18 +28,25 @@
  * @param array $investors Массив инвесторов для отображения
  * @return string HTML-код секции с инвесторами
  */
-function renderInvestorSection(array $investors): string
+function renderInvestorSection(array $investors, int $targetCount = 10, array $options = []): string
 {
-    $cards = array_map('renderInvestorCard', $investors);
+    $targetCount = max(1, $targetCount);
+    $sectionClass = trim((string)($options['section_class'] ?? ''));
+    $sectionClassHtml = $sectionClass !== '' ? ' ' . escapeHtml($sectionClass) : '';
+
+    $cards = array_map(
+        static fn (array $investor): string => renderInvestorCard($investor, $options),
+        $investors
+    );
     $headline = '<div class="investor-section__intro">'
         . '<div>'
         . '<h3>Возможные инвесторы</h3>'
         . '<p>Комбинация релевантных контактов из базы SmartBizSell и свежих рекомендаций AI.</p>'
         . '</div>'
-        . '<span class="investor-section__count">' . count($investors) . ' из 10</span>'
+        . '<span class="investor-section__count">' . count($investors) . ' из ' . $targetCount . '</span>'
         . '</div>';
 
-    return '<section class="investor-section">' . $headline . '<div class="investor-grid">' . implode('', $cards) . '</div></section>';
+    return '<section class="investor-section' . $sectionClassHtml . '">' . $headline . '<div class="investor-grid">' . implode('', $cards) . '</div></section>';
 }
 
 /**
@@ -61,7 +68,7 @@ function renderInvestorSection(array $investors): string
  *   - source: источник ('catalog' или 'ai')
  * @return string HTML-код карточки инвестора
  */
-function renderInvestorCard(array $investor): string
+function renderInvestorCard(array $investor, array $options = []): string
 {
     // Экранируем все данные для защиты от XSS
     $name = escapeHtml($investor['name'] ?? 'Инвестор');
@@ -79,8 +86,12 @@ function renderInvestorCard(array $investor): string
     // Формируем HTML для причины релевантности (если указана)
     $reasonHtml = $reason !== '' ? '<p class="investor-card__reason">' . $reason . '</p>' : '';
 
-    // Кнопка для отправки тизера инвестору
-    $button = '<button type="button" class="btn btn-investor-send" data-investor="' . $name . '">Отправить тизер</button>';
+    $showSendButton = $options['show_send_button'] ?? true;
+    $actionsHtml = '';
+    if ($showSendButton) {
+        $button = '<button type="button" class="btn btn-investor-send" data-investor="' . $name . '">Отправить тизер</button>';
+        $actionsHtml = '<div class="investor-card__actions">' . $button . '</div>';
+    }
 
     return <<<HTML
 <div class="investor-card" data-source="{$source}">
@@ -93,9 +104,7 @@ function renderInvestorCard(array $investor): string
     <p class="investor-card__focus">{$focus}</p>
     {$checkHtml}
     {$reasonHtml}
-    <div class="investor-card__actions">
-        {$button}
-    </div>
+    {$actionsHtml}
 </div>
 HTML;
 }
@@ -115,10 +124,14 @@ HTML;
  * @param string $apiKey API-ключ для Together.ai (для AI-рекомендаций)
  * @return array Массив инвесторов (до 10 элементов) с полями: name, focus, check, reason, source
  */
-function buildInvestorPool(array $payload, string $apiKey): array
+function buildInvestorPool(array $payload, string $apiKey, array $options = []): array
 {
+    $catalogLimit = max(1, (int)($options['catalog_limit'] ?? 6));
+    $aiLimit = max(0, min((int)($options['ai_limit'] ?? 4), 5));
+    $totalLimit = max(1, (int)($options['total_limit'] ?? 10));
+    $catalogPath = (string)($options['catalog_path'] ?? (__DIR__ . '/rag_investors.xlsx'));
+
     // Загружаем каталог инвесторов из Excel-файла
-    $catalogPath = __DIR__ . '/rag_investors.xlsx';
     $catalog = loadRagInvestors($catalogPath);
     if (empty($catalog)) {
         return [];
@@ -128,11 +141,13 @@ function buildInvestorPool(array $payload, string $apiKey): array
     // Ранжирование основано на совпадении ключевых слов из анкеты с профилем инвестора
     $ranked = rankInvestorsByRelevance($catalog, $payload);
     
-    // Выбираем топ-6 инвесторов из каталога
-    $selected = array_slice($ranked, 0, 6);
+    // Выбираем топ инвесторов из каталога
+    $selected = array_slice($ranked, 0, $catalogLimit);
     
     // Запрашиваем AI-рекомендации (новых инвесторов, которых нет в каталоге)
-    $aiSuggestions = requestAiInvestorSuggestions($payload, $catalog, $apiKey, 4);
+    $aiSuggestions = $aiLimit > 0
+        ? requestAiInvestorSuggestions($payload, $catalog, $apiKey, $aiLimit)
+        : [];
 
     // Объединяем рекомендации из каталога и AI
     $combined = array_merge($selected, $aiSuggestions);
@@ -148,8 +163,8 @@ function buildInvestorPool(array $payload, string $apiKey): array
         $seen[$name] = true;
         unset($row['score']);  // Удаляем служебное поле score
         $unique[] = $row;
-        if (count($unique) >= 10) {
-            break;  // Ограничиваем пул 10 инвесторами
+        if (count($unique) >= $totalLimit) {
+            break;  // Ограничиваем пул нужным количеством инвесторов
         }
     }
 
@@ -463,9 +478,11 @@ function buildAssetSummaryForInvestors(array $payload): string
     $industry = trim((string)($payload['products_services'] ?? ''));
     $regions = trim((string)($payload['presence_regions'] ?? ''));
     
-    // Извлекаем выручку за 2024 год (если доступна)
+    // Извлекаем выручку за последний отчетный период (приоритет: 2025, затем 2024)
     $revenue = '';
-    if (!empty($payload['financial']['revenue']['2024_fact'])) {
+    if (!empty($payload['financial']['revenue']['2025_fact'])) {
+        $revenue = (string)$payload['financial']['revenue']['2025_fact'];
+    } elseif (!empty($payload['financial']['revenue']['2024_fact'])) {
         $revenue = (string)$payload['financial']['revenue']['2024_fact'];
     }
 
