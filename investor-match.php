@@ -441,7 +441,7 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
         <form id="investor-match-form" class="investor-match-form">
             <div class="investor-match-field">
                 <label for="inn">1. ИНН (или ОГРН) юридического лица</label>
-                <input id="inn" name="inn" type="text" required placeholder="Например: 7701234567">
+                <input id="inn" name="inn" type="text" required inputmode="numeric" pattern="\d{10}|\d{12}" maxlength="12" placeholder="10 или 12 цифр, например: 7701234567">
                 <p class="investor-match-help">Если бизнес на нескольких юрлицах, укажите основное операционное.</p>
             </div>
 
@@ -570,6 +570,13 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
 
         function collectCheckboxValues(name) {
             return Array.from(document.querySelectorAll('input[name="' + name + '"]:checked')).map((el) => el.value);
+        }
+
+        const innInput = document.getElementById('inn');
+        if (innInput) {
+            innInput.addEventListener('input', function () {
+                innInput.value = innInput.value.replace(/\D/g, '').slice(0, 12);
+            });
         }
 
         function calculateFillProgress() {

@@ -140,8 +140,12 @@ function normalizeStringArray($value): array
 
 function validateInvestorMatchForm(array $form): ?string
 {
-    if ($form['inn'] === '' || mb_strlen($form['inn']) < 8) {
-        return 'Укажите ИНН или ОГРН компании.';
+    if ($form['inn'] === '') {
+        return 'Укажите ИНН компании.';
+    }
+
+    if (!preg_match('/^\d{10}(\d{2})?$/', $form['inn'])) {
+        return 'ИНН должен содержать 10 или 12 цифр.';
     }
     if (empty($form['deal_subject'])) {
         return 'Выберите предмет сделки.';
