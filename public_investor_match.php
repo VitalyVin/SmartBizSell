@@ -4,7 +4,47 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/investor_utils.php';
 
+// Гарантируем, что клиент всегда получит JSON, даже если в PHP-логике
+// возникнет ошибка/warning/exception. Иначе фронт ловит HTML-страницу
+// с ошибкой и показывает невнятное "The string did not match the expected pattern".
+@ini_set('display_errors', '0');
+@ini_set('log_errors', '1');
+error_reporting(E_ALL);
 header('Content-Type: application/json; charset=utf-8');
+
+// Логируем PHP-предупреждения, но НЕ превращаем их в исключения —
+// иначе существующие безобидные notice/warning поломают ответ.
+// Фатальные ошибки ловятся отдельно через register_shutdown_function.
+set_error_handler(function (int $severity, string $message, string $file, int $line) {
+    if (!(error_reporting() & $severity)) {
+        return false;
+    }
+    error_log('public_investor_match php-error [' . $severity . ']: '
+        . $message . ' in ' . $file . ':' . $line);
+    return true; // подавляем стандартный вывод, чтобы не ломать JSON
+});
+
+// Фатальные ошибки (parse, out of memory и т.д.) не ловятся set_error_handler —
+// для них есть shutdown-функция: подменяем тело ответа на JSON.
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error === null) {
+        return;
+    }
+    $fatalTypes = E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR;
+    if (($error['type'] & $fatalTypes) === 0) {
+        return;
+    }
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    error_log('public_investor_match fatal: ' . $error['message'] . ' in ' . $error['file'] . ':' . $error['line']);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Внутренняя ошибка сервера. Попробуйте позже.'
+    ], JSON_UNESCAPED_UNICODE);
+});
 
 if (!function_exists('escapeHtml')) {
     function escapeHtml(string $value): string
@@ -13,69 +53,93 @@ if (!function_exists('escapeHtml')) {
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Метод не поддерживается.'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+try {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['success' => false, 'message' => 'Метод не поддерживается.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
-initSession();
-if (!allowPublicInvestorRequest()) {
-    http_response_code(429);
+    initSession();
+    if (!allowPublicInvestorRequest()) {
+        http_response_code(429);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Слишком много запросов. Повторите попытку через минуту.'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $input = getJsonInput();
+    $form = normalizeInvestorMatchForm($input);
+    $validationError = validateInvestorMatchForm($form);
+    if ($validationError !== null) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'message' => $validationError], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $apiKey = defined('TOGETHER_API_KEY') ? TOGETHER_API_KEY : '';
+    $summary = generateShortBusinessSummary($form);
+
+    $payload = buildInvestorPayload($form, $summary);
+    $catalog = loadRagInvestors(__DIR__ . '/rag_investors.xlsx');
+    if (empty($catalog)) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Каталог инвесторов временно недоступен.'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $ranked = rankInvestorsByRelevance($catalog, $payload);
+    // Fallback: если жёсткая фильтрация по чеку оставила мало кандидатов,
+    // пересобираем без неё, чтобы AI всегда было из чего выбирать
+    if (count($ranked) < 5) {
+        $ranked = rankInvestorsByRelevance($catalog, $payload, ['apply_check_filter' => false]);
+    }
+    $investors = selectTopInvestorsWithAi($ranked, $payload, $apiKey, 5);
+    if (empty($investors)) {
+        http_response_code(404);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Не удалось подобрать инвесторов. Попробуйте уточнить описание бизнеса.'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $html = renderInvestorSection($investors, 5, [
+        'show_send_button' => false,
+        'section_class' => 'investor-section--public',
+    ]);
+
+    // Отправку письма выносим в защищённый блок, чтобы её сбой
+    // не валил основной ответ клиенту.
+    try {
+        sendInvestorMatchSubmission($form, $summary, $investors);
+    } catch (Throwable $mailError) {
+        error_log('sendInvestorMatchSubmission failed: ' . $mailError->getMessage());
+    }
+
+    echo json_encode([
+        'success' => true,
+        'summary' => $summary,
+        'investors' => $investors,
+        'html' => $html,
+    ], JSON_UNESCAPED_UNICODE);
+} catch (Throwable $e) {
+    error_log('public_investor_match exception: ' . $e->getMessage()
+        . ' in ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
     echo json_encode([
         'success' => false,
-        'message' => 'Слишком много запросов. Повторите попытку через минуту.'
+        'message' => 'Произошла ошибка при обработке заявки. Попробуйте ещё раз.',
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
-
-$input = getJsonInput();
-$form = normalizeInvestorMatchForm($input);
-$validationError = validateInvestorMatchForm($form);
-if ($validationError !== null) {
-    http_response_code(422);
-    echo json_encode(['success' => false, 'message' => $validationError], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$apiKey = defined('TOGETHER_API_KEY') ? TOGETHER_API_KEY : '';
-$summary = generateShortBusinessSummary($form);
-
-$payload = buildInvestorPayload($form, $summary);
-$catalog = loadRagInvestors(__DIR__ . '/rag_investors.xlsx');
-if (empty($catalog)) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Каталог инвесторов временно недоступен.'
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$ranked = rankInvestorsByRelevance($catalog, $payload);
-$investors = selectTopInvestorsWithAi($ranked, $payload, $apiKey, 5);
-if (empty($investors)) {
-    http_response_code(404);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Не удалось подобрать инвесторов. Попробуйте уточнить описание бизнеса.'
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$html = renderInvestorSection($investors, 5, [
-    'show_send_button' => false,
-    'section_class' => 'investor-section--public',
-]);
-
-sendInvestorMatchSubmission($form, $summary, $investors);
-
-echo json_encode([
-    'success' => true,
-    'summary' => $summary,
-    'investors' => $investors,
-    'html' => $html,
-], JSON_UNESCAPED_UNICODE);
 
 function allowPublicInvestorRequest(): bool
 {
@@ -267,6 +331,16 @@ function selectInvestorNamesByAi(array $payload, array $candidatePool, string $a
     $excerpt = buildInvestorCatalogExcerpt($candidatePool, 40);
     $limit = max(1, min($limit, 5));
 
+    // Контекст по масштабу сделки: либо выручка, либо признак стартапа
+    $revenueMln = extractRevenueFromPayload($payload);
+    if ($revenueMln !== null) {
+        $scaleHint = 'Выручка компании ≈ ' . formatMillionsRub($revenueMln)
+            . '. Выбирай инвесторов, чей целевой чек сопоставим с этим масштабом сделки.';
+    } else {
+        $scaleHint = 'Выручка не указана — вероятно стартап или ранняя стадия. '
+            . 'Отдавай приоритет инвесторам с минимальным целевым чеком (от единиц или десятков млн руб).';
+    }
+
     $prompt = <<<PROMPT
 Ты подбираешь инвесторов из ГОТОВОГО списка кандидатов.
 На основе короткого описания компании выбери до {$limit} наиболее подходящих инвесторов ИСКЛЮЧИТЕЛЬНО из списка ниже.
@@ -275,12 +349,15 @@ function selectInvestorNamesByAi(array $payload, array $candidatePool, string $a
 Короткое описание компании:
 {$assetSummary}
 
-Список кандидатов:
+Масштаб сделки:
+{$scaleHint}
+
+Список кандидатов (поле «Чек» — целевой размер сделки инвестора):
 {$excerpt}
 
 Верни JSON-массив формата:
 [
-  {"name":"Точное название из списка","reason":"Короткое обоснование релевантности"},
+  {"name":"Точное название из списка","reason":"Короткое обоснование релевантности с учётом отрасли и масштаба чека"},
   {"name":"...","reason":"..."}
 ]
 PROMPT;

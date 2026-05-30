@@ -3776,6 +3776,32 @@ if (!defined('DCF_API_MODE') || !DCF_API_MODE) {
             font-size: 14px;
             color: var(--text-secondary);
         }
+        .investor-card__email {
+            margin: 0;
+            font-size: 14px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .investor-card__email::before {
+            content: '✉';
+            color: var(--primary-color);
+            font-size: 16px;
+        }
+        .investor-card__email a {
+            color: var(--primary-color);
+            font-weight: 600;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .investor-card__email a:hover {
+            text-decoration: underline;
+        }
+        .investor-card__email--placeholder {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
         .investor-card__actions {
             margin-top: auto;
         }

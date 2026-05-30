@@ -64,6 +64,7 @@ function renderInvestorSection(array $investors, int $targetCount = 10, array $o
  *   - name: название инвестора
  *   - focus: область интересов
  *   - check: целевой чек (диапазон инвестиций)
+ *   - email: email для отправки тизера (может быть пустым)
  *   - reason: причина релевантности
  *   - source: источник ('catalog' или 'ai')
  * @return string HTML-код карточки инвестора
@@ -75,6 +76,7 @@ function renderInvestorCard(array $investor, array $options = []): string
     $focus = escapeHtml($investor['focus'] ?? 'Область интересов уточняется');
     $check = escapeHtml($investor['check'] ?? '');
     $reason = escapeHtml($investor['reason'] ?? '');
+    $emailRaw = trim((string)($investor['email'] ?? ''));
     $source = $investor['source'] ?? 'catalog';
     
     // Добавляем бейдж для AI-рекомендаций
@@ -85,6 +87,20 @@ function renderInvestorCard(array $investor, array $options = []): string
     
     // Формируем HTML для причины релевантности (если указана)
     $reasonHtml = $reason !== '' ? '<p class="investor-card__reason">' . $reason . '</p>' : '';
+
+    // Email для отправки тизера: валидный → mailto-ссылка, плейсхолдеры — как текст
+    $emailHtml = '';
+    if ($emailRaw !== '') {
+        $isValidEmail = (bool)filter_var($emailRaw, FILTER_VALIDATE_EMAIL);
+        if ($isValidEmail) {
+            $emailEsc = escapeHtml($emailRaw);
+            $emailHtml = '<p class="investor-card__email">Email для тизера: '
+                . '<a href="mailto:' . $emailEsc . '">' . $emailEsc . '</a></p>';
+        } else {
+            $emailHtml = '<p class="investor-card__email investor-card__email--placeholder">'
+                . 'Email для тизера: ' . escapeHtml($emailRaw) . '</p>';
+        }
+    }
 
     $showSendButton = $options['show_send_button'] ?? true;
     $actionsHtml = '';
@@ -104,6 +120,7 @@ function renderInvestorCard(array $investor, array $options = []): string
     <p class="investor-card__focus">{$focus}</p>
     {$checkHtml}
     {$reasonHtml}
+    {$emailHtml}
     {$actionsHtml}
 </div>
 HTML;
@@ -138,9 +155,15 @@ function buildInvestorPool(array $payload, string $apiKey, array $options = []):
     }
 
     // Ранжируем инвесторов из каталога по релевантности
-    // Ранжирование основано на совпадении ключевых слов из анкеты с профилем инвестора
+    // Ранжирование основано на совпадении ключевых слов и масштабе сделки
     $ranked = rankInvestorsByRelevance($catalog, $payload);
-    
+
+    // Fallback: если жёсткий фильтр по чеку оставил слишком мало кандидатов,
+    // пересобираем ранжирование без фильтра (бонусы при этом сохраняются)
+    if (count($ranked) < $catalogLimit) {
+        $ranked = rankInvestorsByRelevance($catalog, $payload, ['apply_check_filter' => false]);
+    }
+
     // Выбираем топ инвесторов из каталога
     $selected = array_slice($ranked, 0, $catalogLimit);
     
@@ -188,11 +211,17 @@ function buildInvestorPool(array $payload, string $apiKey, array $options = []):
  * @param array $payload Данные анкеты продавца
  * @return array Отсортированный массив инвесторов с полем 'score' (балл релевантности)
  */
-function rankInvestorsByRelevance(array $investors, array $payload): array
+function rankInvestorsByRelevance(array $investors, array $payload, array $options = []): array
 {
+    // Включён ли жёсткий фильтр по диапазону чека (по умолчанию — да)
+    $applyCheckFilter = (bool)($options['apply_check_filter'] ?? true);
+
     // Извлекаем ключевые слова из анкеты для поиска совпадений
     $keywords = buildAssetKeywords($payload);
     $results = [];
+
+    // Распарсенная выручка компании в млн руб (null, если не указана/не распознана)
+    $revenueMln = extractRevenueFromPayload($payload);
 
     foreach ($investors as $item) {
         $name = trim($item['name'] ?? '');
@@ -232,13 +261,56 @@ function rankInvestorsByRelevance(array $investors, array $payload): array
             $score += 2;  // +2 балла за совпадение отрасли
         }
 
+        // Логика по целевому чеку
+        $checkRange = $check !== '' ? parseInvestorCheckRange($check) : null;
+        $checkMatch = false;
+        $isStartupPick = false;
+
+        if ($checkRange !== null) {
+            if ($revenueMln !== null) {
+                // Допуск: считаем выручку подходящей, если она ∈ [min*0.8 … max*1.2]
+                $minBound = ($checkRange['min'] ?? 0.0) * 0.8;
+                $maxBound = $checkRange['max'] !== null ? $checkRange['max'] * 1.2 : INF;
+
+                if ($revenueMln >= $minBound && $revenueMln <= $maxBound) {
+                    $score += 5;          // Бонус за попадание в масштаб
+                    $checkMatch = true;
+                } elseif ($applyCheckFilter) {
+                    // Жёсткий фильтр: явное несоответствие масштаба — пропускаем инвестора
+                    continue;
+                } else {
+                    // Fallback-режим: только небольшой штраф
+                    $score -= 1;
+                }
+            } else {
+                // Выручка не указана → бонус инвесторам с маленьким минимальным чеком
+                $minCheck = $checkRange['min'] ?? $checkRange['max'] ?? null;
+                if ($minCheck !== null && $minCheck > 0) {
+                    $bonus = max(0.0, 4.0 - log10($minCheck));
+                    if ($bonus > 0) {
+                        $score += $bonus;
+                        $isStartupPick = $bonus >= 2.0;
+                    }
+                }
+            }
+        }
+
+        // Email берётся из каталога (может быть пустым или плейсхолдером вроде "(нет публичного)")
+        $email = trim((string)($item['email'] ?? ''));
+
         // Сохраняем результат с баллом релевантности
         $results[] = [
             'source' => 'catalog',
             'name' => $name,
             'focus' => $focus,
             'check' => $check,
-            'reason' => formatInvestorReason($focus, $check, $matched, $payload),
+            'email' => $email,
+            'reason' => formatInvestorReason($focus, $check, $matched, $payload, [
+                'check_match' => $checkMatch,
+                'check_range' => $checkRange,
+                'is_startup_pick' => $isStartupPick,
+                'revenue_mln' => $revenueMln,
+            ]),
             'score' => $score,
         ];
     }
@@ -339,6 +411,16 @@ function requestAiInvestorSuggestions(array $payload, array $catalog, string $ap
     // Список всех названий инвесторов из каталога (для исключения дубликатов)
     $namesList = implode(', ', array_map(static fn ($row) => $row['name'] ?? '', $catalog));
 
+    // Контекст по масштабу сделки: либо выручка, либо признак стартапа
+    $revenueMln = extractRevenueFromPayload($payload);
+    if ($revenueMln !== null) {
+        $scaleHint = 'Выручка компании ≈ ' . formatMillionsRub($revenueMln)
+            . '. Предлагай инвесторов, чей типичный чек сопоставим с этим масштабом.';
+    } else {
+        $scaleHint = 'Выручка не указана — компания вероятно стартап / ранняя стадия. '
+            . 'Отдавай приоритет инвесторам, готовым на маленькие входные чеки.';
+    }
+
     $prompt = <<<PROMPT
 Ты — инвестиционный банкир SmartBizSell. На основании анкеты продавца и каталога инвесторов предложи до {$limit} новых стратегических покупателей, КОТОРЫХ НЕТ в каталоге. Ориентируйся на отрасль, масштаб и стратегию компании.
 
@@ -351,9 +433,13 @@ function requestAiInvestorSuggestions(array $payload, array $catalog, string $ap
 Профиль компании:
 {$assetSummary}
 
+Масштаб сделки:
+{$scaleHint}
+
 Требования:
 - предлагай только реальных инвесторов (корпорации, фонды, private equity) с понятной мотивацией;
 - каждая рекомендация должна содержать название, фокус интересов и короткую причину релевантности;
+- учитывай масштаб сделки: для крупной выручки — корпорации и крупные PE; для стартапов — VC и бизнес-ангелы с маленькими чеками;
 - не придумывай инвесторов из каталога и не используй абстрактные формулировки вроде «частный инвестор».
 
 Ответ в формате JSON-массива:
@@ -405,11 +491,13 @@ PROMPT;
         }
         
         // Добавляем рекомендацию с пометкой source='ai'
+        // Email для AI-инвесторов отсутствует — карточка отобразит блок без email
         $suggestions[] = [
             'source' => 'ai',
             'name' => $name,
             'focus' => $focus !== '' ? $focus : 'Сферы уточняются',
             'check' => '',
+            'email' => '',
             'reason' => $reason !== '' ? $reason : 'AI-рекомендация на основе профиля компании.',
         ];
         
@@ -516,28 +604,48 @@ function buildAssetSummaryForInvestors(array $payload): string
  * @param array $payload Данные анкеты продавца
  * @return string Отформатированная причина релевантности
  */
-function formatInvestorReason(string $focus, string $check, array $keywords, array $payload): string
-{
-    // Если есть совпадающие ключевые слова, используем их
+function formatInvestorReason(
+    string $focus,
+    string $check,
+    array $keywords,
+    array $payload,
+    array $context = []
+): string {
+    $parts = [];
+
+    // Базовая часть — по совпадению ключевых слов или фокусу
     if (!empty($keywords)) {
-        $keywords = array_unique(array_map(static fn ($word) => mb_strtolower($word), $keywords));
-        // Берем первые 3 ключевых слова и форматируем с заглавной буквы
-        $phrases = array_map(static fn ($word) => mb_convert_case($word, MB_CASE_TITLE, 'UTF-8'), array_slice($keywords, 0, 3));
-        return 'Совпадает с фокусом: ' . implode(', ', $phrases) . '.';
+        $unique = array_unique(array_map(static fn ($word) => mb_strtolower($word), $keywords));
+        $phrases = array_map(
+            static fn ($word) => mb_convert_case($word, MB_CASE_TITLE, 'UTF-8'),
+            array_slice($unique, 0, 3)
+        );
+        $parts[] = 'Совпадает с фокусом: ' . implode(', ', $phrases) . '.';
+    } elseif ($focus !== '' && $check !== '') {
+        $parts[] = "Интересуется сегментом «{$focus}», диапазон сделок {$check}.";
+    } elseif ($focus !== '') {
+        $parts[] = "Работает в сегментах: {$focus}.";
+    } else {
+        $parts[] = 'Инвестор из каталога SmartBizSell с подходящим профилем сделок.';
     }
-    
-    // Если есть и область интересов, и целевой чек
-    if ($focus !== '' && $check !== '') {
-        return "Интересуется сегментом «{$focus}», диапазон сделок {$check}.";
+
+    // Контекстные пояснения по целевому чеку
+    $checkMatch = (bool)($context['check_match'] ?? false);
+    $isStartupPick = (bool)($context['is_startup_pick'] ?? false);
+    $revenueMln = $context['revenue_mln'] ?? null;
+
+    if ($checkMatch && $check !== '') {
+        if ($revenueMln !== null) {
+            $parts[] = "Целевой чек {$check} соответствует масштабу компании (выручка ≈ "
+                . formatMillionsRub((float)$revenueMln) . ').';
+        } else {
+            $parts[] = "Целевой чек {$check} соответствует масштабу компании.";
+        }
+    } elseif ($isStartupPick) {
+        $parts[] = 'Маленький входной чек — подходит для стартапов и ранних стадий.';
     }
-    
-    // Если есть только область интересов
-    if ($focus !== '') {
-        return "Работает в сегментах: {$focus}.";
-    }
-    
-    // Общая формулировка по умолчанию
-    return 'Инвестор из каталога SmartBizSell с подходящим профилем сделок.';
+
+    return implode(' ', $parts);
 }
 
 /**
@@ -558,6 +666,7 @@ function formatInvestorReason(string $focus, string $check, array $keywords, arr
  *   - name: название инвестора
  *   - focus: область интересов
  *   - check: целевой чек (диапазон инвестиций)
+ *   - email: email для отправки тизера (может быть пустым)
  */
 function loadRagInvestors(string $path): array
 {
@@ -615,7 +724,7 @@ function loadRagInvestors(string $path): array
             continue;  // Пропускаем заголовок (первая строка)
         }
         
-        $record = ['name' => '', 'focus' => '', 'check' => ''];
+        $record = ['name' => '', 'focus' => '', 'check' => '', 'email' => ''];
         
         // Обрабатываем каждую ячейку в строке
         foreach ($rowNode->childNodes as $child) {
@@ -657,6 +766,8 @@ function loadRagInvestors(string $path): array
                 $record['focus'] = $value;     // Колонка B: область интересов
             } elseif ($column === 'C') {
                 $record['check'] = $value;     // Колонка C: целевой чек
+            } elseif ($column === 'D') {
+                $record['email'] = $value;     // Колонка D: email для отправки тизера
             }
         }
         
@@ -678,6 +789,205 @@ function loadRagInvestors(string $path): array
  * @param DOMElement $si Элемент <si> (shared string item) из Excel XML
  * @return string Извлеченный текст
  */
+/**
+ * Парсит строку выручки в числовое значение в млн руб.
+ *
+ * Поддерживает форматы:
+ *  - "180 млн ₽", "180 млн руб", "180000000", "180", "1,5 млрд",
+ *  - диапазон "100-200 млн" (берётся среднее значение),
+ *  - "1.2 млрд".
+ *
+ * @param string|null $raw Сырая строка выручки из анкеты
+ * @return float|null Значение в млн руб или null, если распарсить не удалось
+ */
+function parseRevenueToMillions(?string $raw): ?float
+{
+    if ($raw === null) {
+        return null;
+    }
+
+    $value = trim($raw);
+    if ($value === '') {
+        return null;
+    }
+
+    // Нормализация: запятая как десятичный разделитель, удаляем пробелы внутри чисел
+    $value = mb_strtolower($value);
+    $value = str_replace(["\u{00A0}", "\u{202F}"], ' ', $value);
+
+    // Поддержка диапазонов "100-200 млн" — берём среднее
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)?/u', $value, $rangeMatch)) {
+        $a = parseNumberWithUnit($rangeMatch[1], $rangeMatch[3] ?? '');
+        $b = parseNumberWithUnit($rangeMatch[2], $rangeMatch[3] ?? '');
+        if ($a !== null && $b !== null) {
+            return ($a + $b) / 2.0;
+        }
+    }
+
+    // Одиночное число с единицей: "180 млн", "1,5 млрд", "500 тыс"
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)?/u', $value, $match)) {
+        return parseNumberWithUnit($match[1], $match[2] ?? '');
+    }
+
+    return null;
+}
+
+/**
+ * Парсит диапазон целевого чека инвестора в млн руб.
+ *
+ * Поддерживает форматы:
+ *  - "200 млн – 3 млрд руб" → [200, 3000]
+ *  - "от 100 млн" → [100, null]
+ *  - "до 50 млн" → [0, 50]
+ *  - "100 млн руб" → [100, 100]
+ *  - "P/E 7,3" или иные нечисловые → null (нейтрально)
+ *
+ * @param string $check Сырая строка целевого чека инвестора
+ * @return array|null ['min' => float|null, 'max' => float|null] или null
+ */
+function parseInvestorCheckRange(string $check): ?array
+{
+    $value = mb_strtolower(trim($check));
+    if ($value === '') {
+        return null;
+    }
+
+    $value = str_replace(["\u{00A0}", "\u{202F}"], ' ', $value);
+
+    // Игнорируем нечисловые мультипликаторы (P/E, EV/EBITDA и т.п.)
+    if (preg_match('/\b(p\s*\/\s*e|ev\s*\/|p\s*\/|кратн)/u', $value)) {
+        return null;
+    }
+
+    // "до 50 млн"
+    if (preg_match('/(?:^|\s)до\s+(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)?/u', $value, $m)) {
+        $max = parseNumberWithUnit($m[1], $m[2] ?? '');
+        if ($max !== null) {
+            return ['min' => 0.0, 'max' => $max];
+        }
+    }
+
+    // "от 100 млн"
+    if (preg_match('/(?:^|\s)от\s+(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)?/u', $value, $m)) {
+        $min = parseNumberWithUnit($m[1], $m[2] ?? '');
+        if ($min !== null) {
+            return ['min' => $min, 'max' => null];
+        }
+    }
+
+    // Диапазон "200 млн – 3 млрд"
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)?\s*[-–—]\s*(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)?/u', $value, $m)) {
+        // Если единицы указаны только у одной стороны — используем её для обеих.
+        // Optional-группы PHP при mismatched могут отсутствовать в массиве — поэтому ?? ''.
+        $rawA = $m[2] ?? '';
+        $rawB = $m[4] ?? '';
+        $unitA = $rawA !== '' ? $rawA : $rawB;
+        $unitB = $rawB !== '' ? $rawB : $rawA;
+        $min = parseNumberWithUnit($m[1] ?? '', $unitA);
+        $max = parseNumberWithUnit($m[3] ?? '', $unitB);
+        if ($min !== null && $max !== null) {
+            return ['min' => min($min, $max), 'max' => max($min, $max)];
+        }
+    }
+
+    // Одиночное число: "100 млн руб"
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*(тыс|млн|млрд|тысяч|миллион|миллиард)/u', $value, $m)) {
+        $val = parseNumberWithUnit($m[1] ?? '', $m[2] ?? '');
+        if ($val !== null) {
+            return ['min' => $val, 'max' => $val];
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Преобразует число + единицу измерения в значение в млн руб.
+ *
+ * @param string $number Число (с запятой или точкой)
+ * @param string $unit Единица: тыс/млн/млрд/без единицы
+ * @return float|null Значение в млн руб
+ */
+function parseNumberWithUnit(string $number, string $unit): ?float
+{
+    $clean = str_replace([',', ' '], ['.', ''], trim($number));
+    if (!is_numeric($clean)) {
+        return null;
+    }
+    $value = (float)$clean;
+    $unit = mb_strtolower(trim($unit));
+
+    if ($unit === 'млрд' || $unit === 'миллиард') {
+        return $value * 1000.0;
+    }
+    if ($unit === 'тыс' || $unit === 'тысяч') {
+        return $value / 1000.0;
+    }
+    if ($unit === 'млн' || $unit === 'миллион') {
+        return $value;
+    }
+
+    // Без единицы — эвристика по величине:
+    // > 1 000 000 — рубли → переводим в млн;
+    // 1 000 … 1 000 000 — тыс. руб → в млн;
+    // < 1 000 — уже млн.
+    if ($value >= 1000000) {
+        return $value / 1000000.0;
+    }
+    if ($value >= 1000) {
+        return $value / 1000.0;
+    }
+    return $value;
+}
+
+/**
+ * Извлекает выручку компании из payload анкеты и переводит в млн руб.
+ *
+ * Приоритет периодов: 2025_fact → 2024_fact.
+ *
+ * @param array $payload Payload анкеты продавца
+ * @return float|null Выручка в млн руб или null
+ */
+function extractRevenueFromPayload(array $payload): ?float
+{
+    $candidates = [
+        $payload['financial']['revenue']['2025_fact'] ?? null,
+        $payload['financial']['revenue']['2024_fact'] ?? null,
+        $payload['revenue'] ?? null,
+    ];
+
+    foreach ($candidates as $raw) {
+        if ($raw === null || $raw === '') {
+            continue;
+        }
+        $parsed = parseRevenueToMillions((string)$raw);
+        if ($parsed !== null && $parsed > 0) {
+            return $parsed;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Форматирует число (млн руб) в человекочитаемую строку.
+ *
+ * @param float $millions Значение в млн руб
+ * @return string Например "350 млн руб" или "1,5 млрд руб"
+ */
+function formatMillionsRub(float $millions): string
+{
+    if ($millions >= 1000) {
+        $bln = $millions / 1000.0;
+        $rounded = round($bln, $bln >= 10 ? 0 : 1);
+        $str = rtrim(rtrim(number_format($rounded, 1, ',', ' '), '0'), ',');
+        return $str . ' млрд руб';
+    }
+    $rounded = round($millions, $millions >= 100 ? 0 : 1);
+    $str = rtrim(rtrim(number_format($rounded, 1, ',', ' '), '0'), ',');
+    return $str . ' млн руб';
+}
+
 function getSharedStringDomText(DOMElement $si): string
 {
     $text = '';

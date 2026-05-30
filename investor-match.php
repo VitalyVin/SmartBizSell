@@ -331,7 +331,8 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
 
         .investor-section--public .investor-card__focus,
         .investor-section--public .investor-card__check,
-        .investor-section--public .investor-card__reason {
+        .investor-section--public .investor-card__reason,
+        .investor-section--public .investor-card__email {
             margin: 10px 0 0;
             color: #374151;
             line-height: 1.52;
@@ -340,6 +341,36 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
         .investor-section--public .investor-card__focus {
             font-weight: 600;
             color: #1f2937;
+        }
+
+        .investor-section--public .investor-card__email {
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            word-break: break-all;
+        }
+
+        .investor-section--public .investor-card__email::before {
+            content: '✉';
+            color: #047857;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .investor-section--public .investor-card__email a {
+            color: #047857;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .investor-section--public .investor-card__email a:hover {
+            text-decoration: underline;
+        }
+
+        .investor-section--public .investor-card__email--placeholder {
+            color: #6b7280;
+            font-style: italic;
         }
 
         .investor-match-final-note {
@@ -438,10 +469,10 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
     </section>
 
     <section class="investor-match-form-wrap">
-        <form id="investor-match-form" class="investor-match-form">
+        <form id="investor-match-form" class="investor-match-form" novalidate>
             <div class="investor-match-field">
                 <label for="inn">1. ИНН (или ОГРН) юридического лица</label>
-                <input id="inn" name="inn" type="text" required inputmode="numeric" pattern="\d{10}|\d{12}" maxlength="12" placeholder="10 или 12 цифр, например: 7701234567">
+                <input id="inn" name="inn" type="text" required inputmode="numeric" maxlength="12" placeholder="10 или 12 цифр, например: 7701234567">
                 <p class="investor-match-help">Если бизнес на нескольких юрлицах, укажите основное операционное.</p>
             </div>
 
@@ -615,12 +646,16 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
         form.addEventListener('change', updateFillProgress);
         updateFillProgress();
 
+        function showFormError(message) {
+            errorEl.textContent = message;
+            submitProgress.classList.remove('active');
+            setSubmitProgress(0, '');
+        }
+
         form.addEventListener('submit', async function (event) {
             event.preventDefault();
             errorEl.textContent = '';
             resultEl.classList.remove('active');
-            submitProgress.classList.add('active');
-            setSubmitProgress(8, 'Проверяем данные анкеты...');
 
             const payload = {
                 inn: document.getElementById('inn').value.trim(),
@@ -631,6 +666,35 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
                 region: document.getElementById('region').value.trim(),
                 revenue: document.getElementById('revenue').value.trim()
             };
+
+            // Дружелюбная валидация на клиенте — не полагаемся на браузерное
+            // сообщение HTML5 (Safari возвращает "The string did not match the expected pattern").
+            if (payload.inn === '') {
+                showFormError('Укажите ИНН или ОГРН вашей компании.');
+                document.getElementById('inn').focus();
+                return;
+            }
+            if (!/^\d{10}$|^\d{12}$/.test(payload.inn)) {
+                showFormError('ИНН должен содержать ровно 10 или 12 цифр.');
+                document.getElementById('inn').focus();
+                return;
+            }
+            if (payload.deal_subject.length === 0) {
+                showFormError('Выберите хотя бы один вариант предмета сделки.');
+                return;
+            }
+            if (payload.assets.length === 0) {
+                showFormError('Выберите хотя бы один передаваемый актив.');
+                return;
+            }
+            if (payload.offer === '') {
+                showFormError('Опишите коротко суть предложения для инвестора.');
+                document.getElementById('offer').focus();
+                return;
+            }
+
+            submitProgress.classList.add('active');
+            setSubmitProgress(8, 'Проверяем данные анкеты...');
 
             submitBtn.disabled = true;
             submitBtn.textContent = 'Подбираем...';
@@ -644,7 +708,15 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
                 });
                 setSubmitProgress(68, 'Ищем подходящих инвесторов...');
 
-                const data = await response.json();
+                const rawText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch (parseError) {
+                    // Сервер вернул HTML/нестандартный ответ — покажем понятную ошибку
+                    // вместо сырого "The string did not match the expected pattern".
+                    throw new Error('Сервер вернул некорректный ответ. Попробуйте ещё раз позже.');
+                }
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || 'Не удалось обработать анкету.');
                 }
