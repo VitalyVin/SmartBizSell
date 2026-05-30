@@ -374,24 +374,57 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
         }
 
         .investor-match-final-note {
-            margin-top: 8px;
-            border: 1px solid #d1fae5;
-            background: #ecfdf5;
-            border-radius: 12px;
-            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 14px 0 20px;
+            border: 1px solid #a7f3d0;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border-radius: 14px;
+            padding: 16px 18px;
             color: #065f46;
             line-height: 1.55;
+            box-shadow: 0 4px 14px rgba(4, 120, 87, 0.08);
+        }
+
+        .investor-match-final-note p {
+            margin: 0;
+            color: #065f46;
+        }
+
+        .investor-match-final-note strong {
+            color: #064e3b;
+        }
+
+        .investor-match-final-note a {
+            font-weight: 700;
+            color: #047857;
+        }
+
+        .investor-match-final-note__cta {
+            align-self: flex-start;
+            margin-top: 4px;
+            padding: 12px 22px;
+            background: #047857;
+            color: #ffffff !important;
+            font-weight: 700;
+            font-size: 15px;
+            border-radius: 10px;
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 6px 16px rgba(4, 120, 87, 0.25);
+        }
+
+        .investor-match-final-note__cta:hover {
+            background: #065f46;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(4, 120, 87, 0.32);
         }
 
         .investor-match-error {
             margin-top: 10px;
             color: #dc2626;
             font-size: 14px;
-        }
-
-        .investor-match-final-note a {
-            font-weight: 700;
-            color: #047857;
         }
 
         @media (max-width: 768px) {
@@ -405,6 +438,11 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
 
             .investor-section--public .investor-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .investor-match-final-note__cta {
+                align-self: stretch;
+                text-align: center;
             }
         }
     </style>
@@ -566,11 +604,12 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
             <div class="investor-result-kicker">Top-5</div>
             <h2>ТОП-5 потенциальных инвесторов</h2>
             <p class="investor-top-note">Подбор выполнен по краткому профилю бизнеса и релевантности к каталогу инвесторов SmartBizSell.</p>
+            <div class="investor-match-final-note">
+                <p><strong>Чтобы инвестор всерьёз рассмотрел сделку</strong>, ему нужно отправить подготовленный инвестиционный тизер — короткую презентацию компании с финансовыми показателями, бизнес-моделью и условиями сделки. Без тизера большинство инвесторов не открывают входящие заявки.</p>
+                <p>Сформировать такой тизер можно автоматически в личном кабинете SmartBizSell сразу после заполнения расширенной анкеты продавца — без дизайнеров и аналитиков.</p>
+                <a class="investor-match-final-note__cta" href="/register.php">Зарегистрироваться и создать тизер</a>
+            </div>
             <div id="investor-cards"></div>
-        </div>
-        <div class="investor-match-final-note">
-            Для более качественного подбора зарегистрируйтесь и заполните расширенную анкету продавца в личном кабинете SmartBizSell.
-            <a href="/register.php">Зарегистрироваться</a>
         </div>
     </section>
 </div>
