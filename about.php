@@ -273,7 +273,8 @@ $pageDescription = "SmartBizSell - это команда M&A-профессио�
 
         <div class="about-section">
             <h2>Контакты</h2>
-            <p><strong>Email:</strong> <?php echo ADMIN_EMAIL; ?></p>
+            <p><strong>Email:</strong> <a href="mailto:info@smartbizsell.ru">info@smartbizsell.ru</a></p>
+            <p><strong>Телефон:</strong> <a href="tel:+79299373802">+7 (929) 937-38-02</a></p>
             <p><strong>Сайт:</strong> <a href="<?php echo BASE_URL; ?>"><?php echo BASE_URL; ?></a></p>
             <p><strong>Локация:</strong> Москва, Россия</p>
         </div>
@@ -298,7 +299,9 @@ $pageDescription = "SmartBizSell - это команда M&A-профессио�
             "contactPoint": {
                 "@type": "ContactPoint",
                 "contactType": "Customer Service",
-                "email": "<?php echo ADMIN_EMAIL; ?>"
+                "email": "info@smartbizsell.ru",
+                "telephone": "+7-929-937-38-02",
+                "availableLanguage": "Russian"
             },
             "foundingDate": "2024",
             "numberOfEmployees": {
