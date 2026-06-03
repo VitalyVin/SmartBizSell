@@ -486,6 +486,9 @@ $statusColors = [
                 </select>
                 <span id="provider-status" style="font-size: 12px; color: var(--text-secondary); padding: 6px 12px; background: rgba(0, 0, 0, 0.05); border-radius: 6px; white-space: nowrap;"></span>
             </div>
+            <p style="margin: 12px 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+                Применяется ко всем сервисам с ИИ, включая публичный подбор инвесторов, тизеры и Term Sheet.
+            </p>
         </div>
 
         <!-- Статистика -->

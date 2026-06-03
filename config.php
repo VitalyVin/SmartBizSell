@@ -980,39 +980,112 @@ function sanitizeFileName(string $filename): string
 }
 
 /**
+ * Читает глобальный AI-провайдер из site_settings (выбор модератора для всего сайта).
+ *
+ * @return string 'together' или 'alibaba'
+ */
+function getSiteAIProvider(): string
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare(
+            "SELECT setting_value FROM site_settings WHERE setting_key = 'ai_provider' LIMIT 1"
+        );
+        $stmt->execute();
+        $row = $stmt->fetch();
+        $value = trim((string)($row['setting_value'] ?? ''));
+        if (in_array($value, ['together', 'alibaba'], true)) {
+            return $cached = $value;
+        }
+    } catch (Throwable $e) {
+        error_log('getSiteAIProvider: ' . $e->getMessage());
+    }
+
+    return $cached = DEFAULT_AI_PROVIDER;
+}
+
+/**
+ * Сохраняет глобальный AI-провайдер в site_settings.
+ *
+ * @param string $provider 'together' или 'alibaba'
+ * @return bool true при успехе
+ */
+function setSiteAIProvider(string $provider): bool
+{
+    if (!in_array($provider, ['together', 'alibaba'], true)) {
+        return false;
+    }
+
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare(
+            "INSERT INTO site_settings (setting_key, setting_value)
+             VALUES ('ai_provider', ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+        );
+        $stmt->execute([$provider]);
+        return true;
+    } catch (Throwable $e) {
+        error_log('setSiteAIProvider: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Возвращает API-ключ для указанного или текущего провайдера.
+ *
+ * @param string|null $provider 'together' | 'alibaba' | null (текущий)
+ * @return string API-ключ или пустая строка, если не настроен
+ */
+function resolveAIApiKey(?string $provider = null): string
+{
+    $provider = $provider ?? getCurrentAIProvider();
+    if ($provider === 'alibaba') {
+        return defined('ALIBABA_API_KEY') ? (string)ALIBABA_API_KEY : '';
+    }
+    return defined('TOGETHER_API_KEY') ? (string)TOGETHER_API_KEY : '';
+}
+
+/**
  * Получает текущий выбранный провайдер AI
- * 
- * Проверяет сессию, затем константу DEFAULT_AI_PROVIDER
- * 
+ *
+ * Приоритет: сессия → site_settings (последний выбор модератора) → DEFAULT_AI_PROVIDER
+ *
  * @return string 'together' или 'alibaba'
  */
 function getCurrentAIProvider(): string
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
-        if (isset($_SESSION['ai_provider']) && in_array($_SESSION['ai_provider'], ['together', 'alibaba'])) {
+        if (isset($_SESSION['ai_provider']) && in_array($_SESSION['ai_provider'], ['together', 'alibaba'], true)) {
             return $_SESSION['ai_provider'];
         }
     }
-    return DEFAULT_AI_PROVIDER;
+    return getSiteAIProvider();
 }
 
 /**
- * Устанавливает провайдера AI в сессию
- * 
+ * Устанавливает провайдера AI в сессию и глобально в site_settings.
+ *
  * @param string $provider 'together' или 'alibaba'
  * @return bool true если успешно установлено
  */
 function setAIProvider(string $provider): bool
 {
-    if (!in_array($provider, ['together', 'alibaba'])) {
+    if (!in_array($provider, ['together', 'alibaba'], true)) {
         return false;
     }
-    
+
     if (session_status() !== PHP_SESSION_ACTIVE) {
         initSession();
     }
-    
+
     $_SESSION['ai_provider'] = $provider;
+    setSiteAIProvider($provider);
     return true;
 }
 

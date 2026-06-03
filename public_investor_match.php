@@ -79,7 +79,19 @@ try {
         exit;
     }
 
-    $apiKey = defined('TOGETHER_API_KEY') ? TOGETHER_API_KEY : '';
+    $provider = getCurrentAIProvider();
+    $apiKey = resolveAIApiKey($provider);
+    if ($apiKey === '') {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => $provider === 'alibaba'
+                ? 'API-ключ Alibaba Cloud не настроен.'
+                : 'API-ключ together.ai не настроен.',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $summary = generateShortBusinessSummary($form);
 
     $payload = buildInvestorPayload($form, $summary);
@@ -323,7 +335,7 @@ function selectTopInvestorsWithAi(array $ranked, array $payload, string $apiKey,
 
 function selectInvestorNamesByAi(array $payload, array $candidatePool, string $apiKey, int $limit): array
 {
-    if ($apiKey === '') {
+    if (resolveAIApiKey() === '') {
         return [];
     }
 
@@ -362,7 +374,12 @@ function selectInvestorNamesByAi(array $payload, array $candidatePool, string $a
 ]
 PROMPT;
 
-    $raw = callTogetherCompletionsPublic($prompt, $apiKey);
+    try {
+        $raw = callAICompletions($prompt, null);
+    } catch (Throwable $e) {
+        error_log('selectInvestorNamesByAi: ' . $e->getMessage());
+        return [];
+    }
     if ($raw === '') {
         return [];
     }
@@ -405,43 +422,6 @@ function extractJsonArray(string $raw): ?array
 
     $candidate = json_decode($matches[0], true);
     return is_array($candidate) ? $candidate : null;
-}
-
-function callTogetherCompletionsPublic(string $prompt, string $apiKey): string
-{
-    $payload = [
-        'model' => defined('TOGETHER_MODEL') ? TOGETHER_MODEL : 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-        'prompt' => $prompt,
-        'max_tokens' => 900,
-        'temperature' => 0.2,
-        'top_p' => 0.8,
-    ];
-
-    $ch = curl_init('https://api.together.xyz/v1/completions');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . $apiKey,
-            'Content-Type: application/json',
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_TIMEOUT => defined('TOGETHER_TIMEOUT_COMPLETIONS') ? TOGETHER_TIMEOUT_COMPLETIONS : 45,
-        CURLOPT_CONNECTTIMEOUT => defined('TOGETHER_CONNECT_TIMEOUT') ? TOGETHER_CONNECT_TIMEOUT : 5,
-    ]);
-
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($response === false || $error !== '' || $status >= 400) {
-        return '';
-    }
-
-    $decoded = json_decode((string)$response, true);
-    $text = trim((string)($decoded['choices'][0]['text'] ?? ''));
-    return $text;
 }
 
 function sendInvestorMatchSubmission(array $form, string $summary, array $investors): void

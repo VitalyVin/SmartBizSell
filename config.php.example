@@ -35,6 +35,10 @@ define('TOGETHER_MODEL', getenv('TOGETHER_MODEL') ?: 'meta-llama/Llama-3.3-70B-I
 // Можно переопределить через переменные окружения ALIBABA_API_KEY и ALIBABA_MODEL
 define('ALIBABA_API_KEY', getenv('ALIBABA_API_KEY') ?: 'your_alibaba_api_key');
 define('ALIBABA_MODEL', getenv('ALIBABA_MODEL') ?: 'qwen3-max');
+// Провайдер по умолчанию, если нет записи в site_settings и сессии
+define('DEFAULT_AI_PROVIDER', getenv('AI_PROVIDER') ?: 'together');
+// Выбор модератора в moderation.php сохраняется в site_settings (таблица — db/migration_site_settings.sql)
+// и влияет на публичный подбор инвесторов, тизеры, term sheet и др.
 
 /**
  * Подключение к базе данных
