@@ -1,14 +1,29 @@
 <?php
 require_once __DIR__ . '/config.php';
 $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
+
+$pageTitle = 'Подбор инвестора за 3 минуты | SmartBizSell';
+$pageDescription = 'Заполните короткую анкету о бизнесе и получите ТОП-5 потенциальных инвесторов из каталога SmartBizSell с кратким AI-описанием компании. Без регистрации.';
+$canonicalUrl = BASE_URL . '/investor-match.php';
 ?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Подбор инвестора | SmartBizSell</title>
-    <meta name="description" content="Заполните короткую анкету и получите список потенциальных инвесторов для вашего бизнеса.">
+    <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
+    <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
+    <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     <link rel="stylesheet" href="/styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <?php include __DIR__ . '/yandex_metrika.php'; ?>
     <style>
@@ -516,6 +531,7 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
 
             <fieldset class="investor-match-field">
                 <label>2. Предмет сделки (можно выбрать несколько)</label>
+                <p class="investor-match-help">Помогает подобрать инвесторов с опытом в сделках нужного типа: полное поглощение, миноритарная доля или покупка имущественного комплекса.</p>
                 <div class="investor-match-options">
                     <label class="investor-match-option">
                         <input type="checkbox" name="deal_subject[]" value="100% долей/акций юрлица">
@@ -534,6 +550,7 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
 
             <fieldset class="investor-match-field">
                 <label>3. Материальные активы (можно выбрать несколько)</label>
+                <p class="investor-match-help">Инвесторы оценивают материальную базу: недвижимость, оборудование и арендные обязательства влияют на профиль и структуру сделки.</p>
                 <div class="investor-match-options">
                     <label class="investor-match-option">
                         <input type="checkbox" name="assets[]" value="Земля/производственные помещения в собственности">
@@ -561,21 +578,25 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-30';
             <div class="investor-match-field">
                 <label for="offer">4. Какой продукт или услугу продает бизнес?</label>
                 <textarea id="offer" name="offer" required placeholder="Опишите в 1-3 предложениях, что продаете, кому и чем отличаетесь"></textarea>
+                <p class="investor-match-help">Чем конкретнее описание, тем точнее подбор. Укажите целевых клиентов, формат продаж и отличия от конкурентов.</p>
             </div>
 
             <div class="investor-match-field">
-                <label for="website">Ссылка на сайт (если есть)</label>
+                <label for="website">5. Ссылка на сайт (если есть)</label>
                 <input id="website" name="website" type="text" placeholder="https://example.ru">
+                <p class="investor-match-help">Сайт помогает AI точнее определить отрасль и масштаб бизнеса. Поле необязательное.</p>
             </div>
 
             <div class="investor-match-field">
-                <label for="region">Регион присутствия</label>
+                <label for="region">6. Регион присутствия</label>
                 <input id="region" name="region" type="text" placeholder="Например: Москва и МО">
+                <p class="investor-match-help">Укажите города или регионы, где компания реально работает и получает выручку.</p>
             </div>
 
             <div class="investor-match-field">
-                <label for="revenue">Выручка за последний фактический период</label>
+                <label for="revenue">7. Выручка за последний фактический период</label>
                 <input id="revenue" name="revenue" type="text" placeholder="Например: 180 млн ₽">
+                <p class="investor-match-help">Ориентировочная выручка за последний завершённый год — для сопоставления с целевым чеком инвесторов.</p>
             </div>
 
             <div class="investor-match-actions">

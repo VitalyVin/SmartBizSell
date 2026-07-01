@@ -90,6 +90,7 @@ header('X-Robots-Tag: index, follow');
             <li><strong>Создание тизеров:</strong> Автоматическая генерация профессиональных инвестиционных презентаций с использованием ИИ на основе данных анкеты продавца</li>
             <li><strong>Создание Term Sheet:</strong> Генерация документов с ключевыми условиями сделки для ускорения переговоров с инвесторами</li>
             <li><strong>Поиск инвесторов:</strong> Подбор подходящих инвесторов на основе профиля бизнеса с использованием RAG (Retrieval-Augmented Generation) технологии</li>
+            <li><strong>Публичный подбор инвестора:</strong> Короткая анкета на /investor-match.php — AI формирует описание бизнеса и предлагает ТОП-5 инвесторов из каталога без регистрации</li>
             <li><strong>M&A консалтинг:</strong> Консультации по структуре сделок, переговорам, due diligence</li>
         </ul>
     </div>
@@ -226,6 +227,7 @@ header('X-Robots-Tag: index, follow');
             <li>/ai-knowledge-base — эта страница</li>
             <li>/estimate.php — ориентировочная оценка за 2 минуты</li>
             <li>/sale-readiness.php — анкета готовности бизнеса</li>
+            <li>/investor-match.php — публичный подбор инвестора (ТОП-5 из каталога)</li>
             <li>/services/valuation — методы оценки (DCF и мультипликаторы)</li>
             <li>/services/sell-business — продажа бизнеса</li>
             <li>/services/buy-business — покупка бизнеса</li>
