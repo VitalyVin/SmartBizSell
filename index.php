@@ -291,8 +291,10 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
         $descNode = $xpath->query("//div[contains(@class, 'teaser-hero__content')]//p[contains(@class, 'teaser-hero__description')]")->item(0);
         if ($descNode) {
             $description = trim($descNode->textContent);
-            $cardData['description'] = mb_substr($description, 0, 150) . (mb_strlen($description) > 150 ? '...' : '');
             $cardData['full_description'] = $description;
+            $cardData['description'] = mb_strlen($description) > 150
+                ? mb_substr($description, 0, 150) . '...'
+                : $description;
         }
     }
     
@@ -339,11 +341,40 @@ function extractTeaserCardData(array $teaser, ?array $formData): array
     // Извлекаем описание из formData, если не нашли в HTML
     if (empty($cardData['description']) && is_array($formData)) {
         if (isset($formData['teaser_snapshot']['hero_description'])) {
-            $cardData['description'] = mb_substr($formData['teaser_snapshot']['hero_description'], 0, 150) . '...';
-            $cardData['full_description'] = $formData['teaser_snapshot']['hero_description'];
+            $heroDesc = trim((string)$formData['teaser_snapshot']['hero_description']);
+            if ($heroDesc !== '') {
+                $cardData['full_description'] = $heroDesc;
+                $cardData['description'] = mb_strlen($heroDesc) > 150
+                    ? mb_substr($heroDesc, 0, 150) . '...'
+                    : $heroDesc;
+            }
         } elseif (!empty($teaser['company_description'])) {
-            $cardData['description'] = mb_substr($teaser['company_description'], 0, 150) . '...';
-            $cardData['full_description'] = $teaser['company_description'];
+            $companyDesc = trim((string)$teaser['company_description']);
+            $cardData['full_description'] = $companyDesc;
+            $cardData['description'] = mb_strlen($companyDesc) > 150
+                ? mb_substr($companyDesc, 0, 150) . '...'
+                : $companyDesc;
+        }
+    }
+
+    // Fallback: продукты/услуги или описание стартапа, если hero-описание отсутствует
+    if (empty($cardData['description'])) {
+        $fallbackSource = '';
+        if (!empty($teaser['products_services'])) {
+            $fallbackSource = trim((string)$teaser['products_services']);
+        } elseif (is_array($formData)) {
+            if (!empty($formData['products_services'])) {
+                $ps = $formData['products_services'];
+                $fallbackSource = trim(is_string($ps) ? $ps : implode(', ', array_filter((array)$ps)));
+            } elseif (!empty($formData['startup_product_description'])) {
+                $fallbackSource = trim((string)$formData['startup_product_description']);
+            }
+        }
+        if ($fallbackSource !== '') {
+            $cardData['full_description'] = $fallbackSource;
+            $cardData['description'] = mb_strlen($fallbackSource) > 150
+                ? mb_substr($fallbackSource, 0, 150) . '...'
+                : $fallbackSource;
         }
     }
     

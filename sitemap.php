@@ -26,6 +26,7 @@ $priorities = [
     'faq' => 0.7,
     'estimate' => 0.8,
     'sale-readiness' => 0.8,
+    'investor-match' => 0.8,
     'ai-knowledge-base' => 0.5,
 ];
 
@@ -39,6 +40,7 @@ $changefreq = [
     'faq' => 'monthly',
     'estimate' => 'weekly',
     'sale-readiness' => 'weekly',
+    'investor-match' => 'weekly',
     'ai-knowledge-base' => 'weekly',
 ];
 
@@ -121,6 +123,14 @@ echo "    <loc>{$baseUrl}/sale-readiness.php</loc>\n";
 echo "    <lastmod>{$saleReadinessLastmod}</lastmod>\n";
 echo "    <changefreq>{$changefreq['sale-readiness']}</changefreq>\n";
 echo "    <priority>{$priorities['sale-readiness']}</priority>\n";
+echo "  </url>\n";
+
+$investorMatchLastmod = date('Y-m-d', filemtime(__DIR__ . '/investor-match.php') ?: time());
+echo "  <url>\n";
+echo "    <loc>{$baseUrl}/investor-match.php</loc>\n";
+echo "    <lastmod>{$investorMatchLastmod}</lastmod>\n";
+echo "    <changefreq>{$changefreq['investor-match']}</changefreq>\n";
+echo "    <priority>{$priorities['investor-match']}</priority>\n";
 echo "  </url>\n";
 
 // Статьи блога из базы данных
