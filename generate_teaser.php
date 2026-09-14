@@ -956,8 +956,16 @@ if (empty($apiKey)) {
         $userMessage = 'Не удалось создать тизер. Попробуйте позже.';
         if (strpos($errorMessage, 'JSON') !== false || strpos($errorMessage, 'parse') !== false) {
             $userMessage = 'Ошибка при обработке ответа от AI. Попробуйте снова.';
-        } elseif (strpos($errorMessage, 'API') !== false) {
+        } elseif (strpos($errorMessage, 'API') !== false || strpos($errorMessage, 'Не удалось получить ответ') !== false) {
             $userMessage = 'Ошибка при обращении к AI. Проверьте настройки API.';
+            if (
+                stripos($errorMessage, 'api key') !== false
+                || stripos($errorMessage, 'authentication') !== false
+                || stripos($errorMessage, 'HTTP 401') !== false
+                || stripos($errorMessage, 'HTTP 403') !== false
+            ) {
+                $userMessage .= ' Убедитесь, что ключ Together.ai или Alibaba Cloud в config.php действуен и выбран корректный провайдер в модерации.';
+            }
         } elseif (strpos($errorMessage, 'pattern') !== false) {
             $userMessage = 'Ошибка при обработке данных. Попробуйте снова.';
         } elseif (strpos($errorMessage, 'function') !== false && strpos($errorMessage, 'not found') !== false) {
