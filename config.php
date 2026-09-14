@@ -1359,11 +1359,13 @@ function callAlibabaCloudCompletions(string $prompt, string $apiKey, int $maxRet
             }
             
         } catch (RuntimeException $e) {
-            // Если это последняя попытка, пробрасываем исключение
+            $lastError = $e->getMessage();
+            error_log("Alibaba API call attempt $attempt exception: " . $lastError);
             if ($attempt >= $maxRetries) {
                 throw $e;
             }
-            // Иначе продолжаем retry
+            $delay = pow(2, $attempt - 1);
+            sleep($delay);
         }
     }
     
@@ -1395,126 +1397,14 @@ function callTogetherCompletions(string $prompt, string $apiKey, int $maxRetries
         error_log('Warning: Prompt is very long (' . strlen($prompt) . ' chars), truncating to 50000');
         $prompt = mb_substr($prompt, 0, 50000, 'UTF-8');
     }
-    
-    $body = json_encode([
-        'model' => TOGETHER_MODEL,
-        'prompt' => $prompt,
-        'max_tokens' => TOGETHER_MAX_TOKENS_NORMAL,
-        'temperature' => TOGETHER_TEMPERATURE,
-        'top_p' => TOGETHER_TOP_P,
-    ], JSON_UNESCAPED_UNICODE);
-    
-    if ($body === false) {
-        throw new RuntimeException('Не удалось закодировать промпт в JSON: ' . json_last_error_msg());
-    }
 
-    $lastError = null;
-    
-    // Retry логика с экспоненциальной задержкой
-    $effectiveRetries = max(1, min($maxRetries, TOGETHER_MAX_RETRIES));
-    for ($attempt = 1; $attempt <= $effectiveRetries; $attempt++) {
-        try {
-            $ch = curl_init('https://api.together.ai/v1/completions');
-            if ($ch === false) {
-                throw new RuntimeException('Не удалось инициализировать cURL');
-            }
-            
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Authorization: Bearer ' . $apiKey,
-                ],
-                CURLOPT_POSTFIELDS => $body,
-                CURLOPT_TIMEOUT => TOGETHER_TIMEOUT_COMPLETIONS,
-                CURLOPT_CONNECTTIMEOUT => TOGETHER_CONNECT_TIMEOUT,
-                CURLOPT_SSL_VERIFYPEER => true,
-                CURLOPT_SSL_VERIFYHOST => 2,
-            ]);
-
-            $response = curl_exec($ch);
-            $curlError = curl_error($ch);
-            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlErrno = curl_errno($ch);
-            curl_close($ch);
-
-            // Обработка сетевых ошибок (retry)
-            if ($response === false || $curlErrno !== 0) {
-                $lastError = 'Сетевая ошибка: ' . ($curlError ?: 'Неизвестная ошибка cURL (код: ' . $curlErrno . ')');
-                error_log("Together API call attempt $attempt failed: $lastError");
-                
-                if ($attempt >= $effectiveRetries) {
-                    throw new RuntimeException($lastError);
-                }
-                
-                $delay = pow(2, $attempt - 1);
-                error_log("Retrying in $delay seconds...");
-                sleep($delay);
-                continue;
-            }
-
-            // Обработка HTTP ошибок
-            if ($status >= 500) {
-                $lastError = "HTTP $status: " . substr($response, 0, 200);
-                error_log("Together API call attempt $attempt failed with HTTP $status: $lastError");
-                
-                if ($attempt >= $effectiveRetries) {
-                    throw new RuntimeException('Сервер API временно недоступен. Попробуйте позже.');
-                }
-                
-                $delay = pow(2, $attempt - 1);
-                sleep($delay);
-                continue;
-            }
-            
-            if ($status >= 400 && $status < 500) {
-                $decoded = json_decode($response, true);
-                $errorMsg = 'Ошибка API';
-                if (isset($decoded['error']['message'])) {
-                    $errorMsg = $decoded['error']['message'];
-                } elseif (isset($decoded['error'])) {
-                    $errorMsg = is_string($decoded['error']) ? $decoded['error'] : json_encode($decoded['error']);
-                }
-                throw new RuntimeException("Ошибка API Together.ai (HTTP $status): $errorMsg");
-            }
-
-            // Успешный ответ
-            $decoded = json_decode($response, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new RuntimeException('Не удалось декодировать JSON ответ: ' . json_last_error_msg());
-            }
-
-            // Извлекаем текст ответа
-            if (isset($decoded['choices'][0]['text'])) {
-                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
-                $usedModelInfo = [
-                    'provider' => 'together',
-                    'model' => TOGETHER_MODEL,
-                    'fallback_used' => false
-                ];
-                return trim($decoded['choices'][0]['text']);
-            } elseif (isset($decoded['output']['choices'][0]['text'])) {
-                // Заполняем информацию о модели (параметр передается по ссылке, можно присваивать даже если был null)
-                $usedModelInfo = [
-                    'provider' => 'together',
-                    'model' => TOGETHER_MODEL,
-                    'fallback_used' => false
-                ];
-                return trim($decoded['output']['choices'][0]['text']);
-            } else {
-                error_log('Unexpected response structure: ' . json_encode($decoded));
-                throw new RuntimeException('Неожиданная структура ответа API');
-            }
-            
-        } catch (RuntimeException $e) {
-            if ($attempt >= $maxRetries) {
-                throw $e;
-            }
-        }
-    }
-    
-    throw new RuntimeException($lastError ?: 'Не удалось получить ответ от API');
+    // Современные модели Together.ai стабильнее работают через chat/completions
+    return callTogetherChatCompletions(
+        [['role' => 'user', 'content' => $prompt]],
+        $apiKey,
+        $maxRetries,
+        $usedModelInfo
+    );
 }
 
 /**
@@ -1758,9 +1648,13 @@ function callAlibabaCloudChatCompletions(array $messages, string $apiKey, int $m
             }
             
         } catch (RuntimeException $e) {
+            $lastError = $e->getMessage();
+            error_log("Alibaba Chat API call attempt $attempt exception: " . $lastError);
             if ($attempt >= $maxRetries) {
                 throw $e;
             }
+            $delay = pow(2, $attempt - 1);
+            sleep($delay);
         }
     }
     
@@ -1884,9 +1778,13 @@ function callTogetherChatCompletions(array $messages, string $apiKey, int $maxRe
             }
             
         } catch (RuntimeException $e) {
-            if ($attempt >= $maxRetries) {
+            $lastError = $e->getMessage();
+            error_log("Together Chat API call attempt $attempt exception: " . $lastError);
+            if ($attempt >= $effectiveRetries) {
                 throw $e;
             }
+            $delay = pow(2, $attempt - 1);
+            sleep($delay);
         }
     }
     
