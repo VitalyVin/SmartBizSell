@@ -110,7 +110,7 @@ function buildBlogUrl(array $overrides = []): string {
     }
 
     foreach ($overrides as $key => $value) {
-        if ($value === null || $value === '') {
+        if ($value === null || $value === '' || ($key === 'page' && (int)$value <= 1)) {
             unset($params[$key]);
             continue;
         }
@@ -217,12 +217,30 @@ function estimateReadingTime(?string $content): int {
 $pageTitle = "Блог SmartBizSell - Статьи о продаже и покупке бизнеса, M&A, инвестициях";
 $pageDescription = "Полезные статьи о продаже и покупке бизнеса, M&A сделках, оценке бизнеса, финансовом моделировании, поиске инвесторов и других аспектах сделок слияний и поглощений.";
 
-// Для SEO: индексируем только основной список (/blog), а пагинацию/фильтры делаем noindex,
-// чтобы не размножать дубликаты страниц по параметрам.
-$robotsMeta = 'index, follow';
-if ($currentPage > 1 || $selectedCategory !== '' || $searchQuery !== '') {
-    $robotsMeta = 'noindex, follow';
+if ($selectedCategory !== '') {
+    $pageTitle = $selectedCategory . ' — статьи блога SmartBizSell';
+    $pageDescription = 'Подборка статей SmartBizSell по теме «' . $selectedCategory . '»: продажа и покупка бизнеса, оценка, M&A и инвестиции.';
 }
+if ($currentPage > 1) {
+    $pageTitle .= ' — страница ' . $currentPage;
+    $pageDescription .= ' Страница ' . $currentPage . '.';
+}
+
+// Поиск — бесконечные комбинации запросов, их не индексируем.
+// Рубрики и страницы пагинации — отдельные посадочные URL: index + свой canonical.
+// Иначе Google видит noindex на десятках рубрик и со временем перестаёт обходить ссылки с них.
+$isSearchResults = $searchQuery !== '';
+if ($isSearchResults) {
+    $robotsMeta = 'noindex, follow';
+    $canonicalPath = buildBlogUrl([
+        'search' => null,
+        'page' => $currentPage > 1 ? $currentPage : null,
+    ]);
+} else {
+    $robotsMeta = 'index, follow';
+    $canonicalPath = buildBlogUrl($currentPage > 1 ? ['page' => $currentPage] : []);
+}
+$canonicalUrl = BASE_URL . $canonicalPath;
 
 $prevHref = $currentPage > 1 ? (BASE_URL . buildBlogUrl(['page' => $currentPage - 1])) : '';
 $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $currentPage + 1])) : '';
@@ -236,7 +254,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="keywords" content="блог о продаже бизнеса, статьи M&A, как продать бизнес, как купить бизнес, оценка бизнеса, инвестиции">
     <meta name="robots" content="<?php echo htmlspecialchars($robotsMeta, ENT_QUOTES, 'UTF-8'); ?>">
-    <link rel="canonical" href="<?php echo BASE_URL; ?>/blog">
+    <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
 
     <?php if (!empty($prevHref)): ?>
         <link rel="prev" href="<?php echo htmlspecialchars($prevHref, ENT_QUOTES, 'UTF-8'); ?>">
@@ -247,7 +265,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="<?php echo BASE_URL; ?>/blog">
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
