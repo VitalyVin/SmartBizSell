@@ -10,6 +10,9 @@
 
 require_once 'config.php';
 
+// Фрагмент для модального окна, не самостоятельная посадочная страница.
+header('X-Robots-Tag: noindex, nofollow');
+
 $teaserId = isset($_GET['teaser_id']) ? (int)$_GET['teaser_id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
 
 if ($teaserId <= 0) {

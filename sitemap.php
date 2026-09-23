@@ -147,6 +147,44 @@ try {
             echo "    <priority>{$priorities['blog_post']}</priority>\n";
             echo "  </url>\n";
         }
+
+        // Рубрики и страницы пагинации блога (без поисковых URL)
+        $blogPostsPerPage = 15;
+        $publishedWhere = "status = 'published' AND published_at IS NOT NULL AND published_at <= NOW()";
+        $totalPublished = (int)$pdo->query("SELECT COUNT(*) FROM blog_posts WHERE {$publishedWhere}")->fetchColumn();
+        $blogListPages = $totalPublished > 0 ? (int)ceil($totalPublished / $blogPostsPerPage) : 1;
+        for ($page = 2; $page <= $blogListPages; $page++) {
+            $loc = htmlspecialchars($baseUrl . '/blog?page=' . $page, ENT_QUOTES, 'UTF-8');
+            echo "  <url>\n";
+            echo "    <loc>{$loc}</loc>\n";
+            echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
+            echo "    <changefreq>{$changefreq['blog']}</changefreq>\n";
+            echo "    <priority>0.5</priority>\n";
+            echo "  </url>\n";
+        }
+
+        $categoryStmt = $pdo->query("
+            SELECT category, COUNT(*) AS cnt
+            FROM blog_posts
+            WHERE {$publishedWhere} AND category IS NOT NULL AND category != ''
+            GROUP BY category
+        ");
+        foreach ($categoryStmt->fetchAll(PDO::FETCH_ASSOC) as $categoryRow) {
+            $categoryPages = max(1, (int)ceil(((int)$categoryRow['cnt']) / $blogPostsPerPage));
+            for ($page = 1; $page <= $categoryPages; $page++) {
+                $params = ['category' => $categoryRow['category']];
+                if ($page > 1) {
+                    $params['page'] = $page;
+                }
+                $loc = htmlspecialchars($baseUrl . '/blog?' . http_build_query($params), ENT_QUOTES, 'UTF-8');
+                echo "  <url>\n";
+                echo "    <loc>{$loc}</loc>\n";
+                echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
+                echo "    <changefreq>{$changefreq['blog']}</changefreq>\n";
+                echo "    <priority>0.6</priority>\n";
+                echo "  </url>\n";
+            }
+        }
     }
 } catch (PDOException $e) {
     // Таблица блога еще не создана, пропускаем
