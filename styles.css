@@ -419,6 +419,206 @@ body {
     font-weight: 500;
 }
 
+.hero {
+    min-height: auto;
+    align-items: flex-start;
+}
+
+.hero-layout {
+    text-align: left;
+    max-width: 1120px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+    gap: 48px;
+    align-items: center;
+}
+
+.hero-kicker {
+    display: inline-flex;
+    margin-bottom: 16px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(102, 126, 234, 0.12);
+    color: #4338ca;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.hero-layout .hero-title {
+    font-size: clamp(36px, 5vw, 58px);
+}
+
+.hero-layout .hero-subtitle {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 640px;
+}
+
+.hero-layout .hero-buttons {
+    justify-content: flex-start;
+    margin-bottom: 12px;
+}
+
+.hero-note {
+    margin: 0 0 28px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.offer-results {
+    list-style: none;
+    display: grid;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+}
+
+.offer-results li {
+    display: grid;
+    gap: 2px;
+}
+
+.offer-results strong {
+    font-size: 16px;
+}
+
+.offer-results span {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.teaser-preview {
+    display: grid;
+    gap: 16px;
+}
+
+.teaser-preview__sheet,
+.teaser-preview__investors {
+    background: #fff;
+    border: 1px solid rgba(102, 126, 234, 0.18);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    padding: 22px;
+}
+
+.teaser-preview__label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6366f1;
+    margin-bottom: 8px;
+}
+
+.teaser-preview h2 {
+    font-size: 22px;
+    line-height: 1.25;
+    margin-bottom: 6px;
+}
+
+.teaser-preview__company {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.teaser-preview__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.teaser-preview__metrics div {
+    background: #f5f7ff;
+    border-radius: 12px;
+    padding: 10px;
+}
+
+.teaser-preview__metrics span,
+.teaser-preview__investors li span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.teaser-preview__metrics strong {
+    font-size: 14px;
+}
+
+.teaser-preview ul,
+.teaser-preview ol {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.teaser-preview__investors ol {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 12px;
+}
+
+.teaser-preview__investors li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.teaser-preview__investors p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.trust-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.trust-row li {
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.section-cta {
+    text-align: center;
+    margin-top: 28px;
+}
+
+.features-grid--path {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.path-link {
+    display: inline-block;
+    margin-top: 16px;
+    color: #4f46e5;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.path-link:hover {
+    text-decoration: underline;
+}
+
+.seller-form-cta {
+    background: linear-gradient(180deg, #f8faff 0%, #eef2ff 100%);
+}
+
 /* Section Styles */
 section {
     padding: 100px 0;
@@ -452,6 +652,10 @@ section {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 24px;
+}
+
+.features-grid.features-grid--path {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .feature-card {
@@ -2701,6 +2905,17 @@ section {
 
     .hero {
         padding: 100px 0 60px;
+    }
+
+    .hero-layout,
+    .features-grid--path,
+    .teaser-preview__metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .teaser-preview__investors li {
+        flex-direction: column;
+        gap: 2px;
     }
 
     .hero-buttons {
