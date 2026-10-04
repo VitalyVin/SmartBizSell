@@ -17,7 +17,8 @@
 
 require_once 'config.php';
 
-$assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
+$assetVersion = getenv('ASSET_VERSION') ?: '2026-10-04-mobile';
+$documentsUrl = isLoggedIn() ? '/dashboard.php' : '/register.php';
 
 // Загружаем опубликованные тизеры для отображения на главной странице
 $publishedTeasers = [];
@@ -839,8 +840,8 @@ SVG;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartBizSell.ru - Экспертная M&A платформа с ИИ | Продажа и покупка бизнеса</title>
-    <meta name="description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект, чтобы сделать продажу и покупку бизнеса прозрачной, быстрой и эффективной. Оценка бизнеса, подготовка тизеров, поиск инвесторов.">
+    <title>Бесплатные документы для инвестора | SmartBizSell</title>
+    <meta name="description" content="Бесплатно соберём тизер, диапазон оценки и список инвесторов для вашего бизнеса. Без оплаты на старте.">
     <meta name="keywords" content="продажа бизнеса, покупка бизнеса, M&A сделки, оценка бизнеса, слияния и поглощения, инвестиции в бизнес, купить бизнес, продать бизнес, тизер бизнеса, term sheet, DCF модель, мультипликаторы оценки">
     <meta name="author" content="SmartBizSell">
     <meta name="robots" content="index, follow">
@@ -849,8 +850,8 @@ SVG;
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="<?php echo BASE_URL; ?>/">
-    <meta property="og:title" content="SmartBizSell.ru - Экспертная M&A платформа с ИИ">
-    <meta property="og:description" content="Команда M&A-практиков SmartBizSell объединяет опыт десятков сделок и искусственный интеллект для продажи и покупки бизнеса. Оценка, тизеры, поиск инвесторов.">
+    <meta property="og:title" content="Бесплатные документы для инвестора | SmartBizSell">
+    <meta property="og:description" content="Тизер, диапазон оценки и список инвесторов — бесплатно на старте.">
     <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     <meta property="og:locale" content="ru_RU">
     <meta property="og:site_name" content="SmartBizSell.ru">
@@ -896,13 +897,9 @@ SVG;
                     <li><a href="#how-it-works">Как это работает</a></li>
                     <li><a href="#buy-business">Купить бизнес</a></li>
                     <li><a href="/blog">Блог</a></li>
-                    <?php if (isLoggedIn()): ?>
-                        <li><a href="/dashboard.php">Продать бизнес</a></li>
-                        <?php if (isModerator()): ?>
-                            <li><a href="/moderation.php">Модерация</a></li>
-                        <?php endif; ?>
-                    <?php else: ?>
-                        <li><a href="/login.php">Продать бизнес</a></li>
+                    <li><a href="<?php echo $documentsUrl; ?>">Получить документы</a></li>
+                    <?php if (isLoggedIn() && isModerator()): ?>
+                        <li><a href="/moderation.php">Модерация</a></li>
                     <?php endif; ?>
                     <li><a href="#contact">Контакты</a></li>
                     <?php if (isLoggedIn()): ?>
@@ -910,7 +907,7 @@ SVG;
                         <li><a href="/logout.php">Выйти</a></li>
                     <?php else: ?>
                         <li><a href="/login.php">Войти</a></li>
-                        <li><a href="/register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Регистрация</a></li>
+                        <li><a class="nav-cta" href="/register.php">Начать бесплатно</a></li>
                     <?php endif; ?>
                 </ul>
                 <button class="nav-toggle" aria-label="Toggle menu">
@@ -930,194 +927,137 @@ SVG;
             <div class="gradient-orb orb-3"></div>
         </div>
         <div class="container">
-            <div class="hero-content">
-                <h1 class="hero-title">
-                    <span class="gradient-text">Экспертная M&amp;A платформа</span>
-                    <br>для продажи и покупки бизнеса с поддержкой <span class="gradient-text">ИИ</span>
-                </h1>
-                <p class="hero-subtitle">
-                    Мы — команда M&amp;A-профессионалов с десятками закрытых сделок. Платформа SmartBizSell объединяет наш опыт, современные технологии и искусственный интеллект, чтобы проводить сделки быстрее, прозрачнее и экономичнее.
-                </p>
-                <div class="hero-buttons">
-                    <a href="<?php echo isLoggedIn() ? '/dashboard.php' : '/login.php'; ?>" class="btn btn-primary">
-                        <span>Продать бизнес</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </a>
-                    <a href="#how-it-works" class="btn btn-secondary">
-                        <span>Узнать больше</span>
-                    </a>
-                    <a href="/estimate.php" class="btn btn-estimate">
-                        <span>Оценить бизнес</span>
-                    </a>
-                    <a href="/sale-readiness.php" class="btn btn-estimate btn-ready-check" style="background:#0ea5a4;">
-                        <span>Проверить готовность к продаже</span>
-                    </a>
-                    <a href="/investor-match.php" class="btn btn-investor-match btn-ready-check" style="display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%); color:#fff; text-decoration:none; padding:14px 24px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.08);">
-                        <span>Подобрать инвестора</span>
-                    </a>
+            <div class="hero-content hero-layout">
+                <div class="hero-copy">
+                    <p class="hero-kicker">Бесплатно на старте · за один вечер</p>
+                    <h1 class="hero-title">
+                        Соберём документы для инвестора<br>
+                        <span class="gradient-text">и покажем, кому их отправить</span>
+                    </h1>
+                    <p class="hero-subtitle">
+                        Тизер, диапазон оценки и короткий список инвесторов. Без оплаты и без консультантов на первом шаге.
+                    </p>
+                    <div class="hero-buttons">
+                        <a href="<?php echo $documentsUrl; ?>" class="btn btn-primary btn-large">
+                            <span>Получить документы бесплатно</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                        <a href="#buy-business" class="btn btn-secondary">
+                            <span>Смотреть бизнесы</span>
+                        </a>
+                    </div>
+                    <p class="hero-note">Регистрация занимает минуту. Сначала короткие вопросы о компании, затем пакет документов.</p>
+                    <ul class="offer-results">
+                        <li>
+                            <strong>Тизер</strong>
+                            <span>короткая презентация, которую инвестор реально открывает</span>
+                        </li>
+                        <li>
+                            <strong>Оценка</strong>
+                            <span>диапазон стоимости, а не одна цифра «с потолка»</span>
+                        </li>
+                        <li>
+                            <strong>5 инвесторов</strong>
+                            <span>кому этот профиль бизнеса подходит по чеку и отрасли</span>
+                        </li>
+                    </ul>
                 </div>
-                <div class="hero-stats">
-                    <div class="stat-item" data-stat="500">
-                        <div class="stat-number">500+</div>
-                        <div class="stat-label">Проверенных инвесторов</div>
+                <aside class="teaser-preview" aria-label="Пример пакета документов">
+                    <div class="teaser-preview__sheet">
+                        <div class="teaser-preview__label">Пример того, что вы получите</div>
+                        <h2>Инвестиционный тизер</h2>
+                        <p class="teaser-preview__company">Производство комплектующих · ЦФО</p>
+                        <div class="teaser-preview__metrics">
+                            <div><span>Выручка</span><strong>180 млн ₽</strong></div>
+                            <div><span>Оценка</span><strong>240–310 млн</strong></div>
+                            <div><span>Сделка</span><strong>100% долей</strong></div>
+                        </div>
+                        <ul>
+                            <li>Что продаётся и чем бизнес отличается</li>
+                            <li>Финансовый профиль за последний год</li>
+                            <li>Условия, которые готовы обсуждать</li>
+                        </ul>
                     </div>
-                    <div class="stat-item" data-stat="150">
-                        <div class="stat-number">150+</div>
-                        <div class="stat-label">Закрытых M&amp;A-сделок</div>
+                    <div class="teaser-preview__investors">
+                        <div class="teaser-preview__label">Куда это можно отправить</div>
+                        <ol>
+                            <li><strong>Фонд промышленного роста</strong><span>чек 150–400 млн</span></li>
+                            <li><strong>Стратег из смежной отрасли</strong><span>покупка мощности</span></li>
+                            <li><strong>Family office</strong><span>чек от 100 млн</span></li>
+                        </ol>
+                        <p>Ещё два контакта — в полном списке после анкеты.</p>
                     </div>
-                    <div class="stat-item" data-stat="3">
-                        <div class="stat-number">3 часа</div>
-                        <div class="stat-label">На модерацию тизера</div>
-                    </div>
-                </div>
+                </aside>
             </div>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section id="features" class="features">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">Преимущества SmartBizSell</h2>
-                <p class="section-subtitle">Экспертиза команды M&amp;A, усиленная искусственным интеллектом и современными технологиями</p>
-            </div>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="5" y="16" width="4" height="11" rx="2" fill="#6366F1"/>
-                            <rect x="14" y="9" width="4" height="18" rx="2" fill="#8B5CF6"/>
-                            <rect x="23" y="4" width="4" height="23" rx="2" fill="#A5B4FC"/>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">ИИ-Генерация тизеров</h3>
-                    <p class="feature-description">
-                        Используем проверенные нами подходы к тизерам и подключаем ИИ для точной аналитики, чтобы каждый инвестор сразу видел ценность бизнеса.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M6 22L13 15L18 21L26 10" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-                            <circle cx="13" cy="15" r="2" fill="#22D3EE"/>
-                            <circle cx="18" cy="21" r="2" fill="#22D3EE"/>
-                            <circle cx="26" cy="10" r="2" fill="#22D3EE"/>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">Автоматические финансовые модели</h3>
-                    <p class="feature-description">
-                        Формируем финансовые модели по стандартам сделок M&amp;A и ускоряем расчёты с помощью нейросетей — быстро, прозрачно и с учётом ключевых метрик.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M16 6L18.4721 12.5279L25 15L18.4721 17.4721L16 24L13.5279 17.4721L7 15L13.5279 12.5279L16 6Z" fill="url(#gradStar1)"/>
-                            <defs>
-                                <linearGradient id="gradStar1" x1="7" y1="6" x2="25" y2="24" gradientUnits="userSpaceOnUse">
-                                    <stop stop-color="#FDE047"/>
-                                    <stop offset="1" stop-color="#F97316"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">Ускорение процессов</h3>
-                    <p class="feature-description">
-                        Цифровые пайплайны заменяют ручные задачи: готовим материалы, структурируем данные и запускаем показы в разы быстрее традиционных процессов.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="10" cy="10" r="4" stroke="#F97316" stroke-width="2"/>
-                            <circle cx="22" cy="10" r="4" stroke="#FACC15" stroke-width="2"/>
-                            <circle cx="16" cy="22" r="4" stroke="#FB923C" stroke-width="2"/>
-                            <path d="M12 12L15 19M20 12L17 19" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">Умный подбор покупателей</h3>
-                    <p class="feature-description">
-                        Соединяем данные о прошлых сделках, нашу экспертную оценку и алгоритмы рекомендаций, чтобы вывести к вам релевантных инвесторов без лишнего шума.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="16" cy="16" r="11" stroke="#10B981" stroke-width="2" opacity="0.6"/>
-                            <path d="M16 7V16L23 19" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M10 21C12 23 14 24 16 24C20 24 23 21 23 17" stroke="#34D399" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">Безопасность данных</h3>
-                    <p class="feature-description">
-                        Следуем лучшим практикам комплаенса и используем корпоративный уровень защиты, чтобы вся информация о сделке оставалась конфиденциальной.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M14 4H8C7.46957 4 6.96086 4.21071 6.58579 4.58579C6.21071 4.96086 6 5.46957 6 6V26C6 26.5304 6.21071 27.0391 6.58579 27.4142C6.96086 27.7893 7.46957 28 8 28H24C24.5304 28 25.0391 27.7893 25.4142 27.4142C25.7893 27.0391 26 26.5304 26 26V12L18 4H14Z" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M18 4V12H26" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M20 18H12" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M20 22H12" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M14 10H12" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <h3 class="feature-title">Создание Term Sheet</h3>
-                    <p class="feature-description">
-                        Автоматически формируем инвестиционный меморандум с ключевыми условиями сделки. Term Sheet помогает закрепить параметры сделки и ускорить переговоры с инвесторами.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- How It Works Section -->
+    <!-- How it works -->
     <section id="how-it-works" class="how-it-works">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Как проходит сделка с нами</h2>
-                <p class="section-subtitle">Совмещаем экспертное сопровождение и автоматизацию, чтобы вы видели каждый шаг и результат в цифрах</p>
+                <h2 class="section-title">Три шага до пакета для инвестора</h2>
+                <p class="section-subtitle">Сначала короткий рассказ о компании. Документы и список инвесторов появляются до длинной финансовой анкеты.</p>
             </div>
             <div class="steps">
                 <div class="step-item">
                     <div class="step-number">01</div>
                     <div class="step-content">
-                        <h3 class="step-title">Заполните анкету</h3>
-                        <p class="step-description">
-                            Делитесь ключевыми данными о компании. Мы убрали лишние вопросы и сразу подсказываем, какие цифры важны для успешной сделки.
-                        </p>
+                        <h3 class="step-title">Коротко о бизнесе</h3>
+                        <p class="step-description">Что продаёте, кому, в каком регионе и какая выручка. Этого достаточно, чтобы собрать первый пакет, а не анкету на двадцать страниц.</p>
                     </div>
                 </div>
                 <div class="step-item">
                     <div class="step-number">02</div>
                     <div class="step-content">
-                        <h3 class="step-title">Создайте тизер в личном кабинете</h3>
-                        <p class="step-description">
-                            После заполнения анкеты вы сами запускаете создание тизера в личном кабинете. ИИ анализирует данные и генерирует профессиональный тизер, DCF модель и оценку за несколько минут.
-                        </p>
+                        <h3 class="step-title">Документы бесплатно</h3>
+                        <p class="step-description">Тизер и диапазон оценки. Команда смотрит материалы перед тем, как их увидит инвестор. Оплата на этом шаге не нужна.</p>
                     </div>
                 </div>
                 <div class="step-item">
                     <div class="step-number">03</div>
                     <div class="step-content">
-                        <h3 class="step-title">Отправьте тизер на модерацию</h3>
-                        <p class="step-description">
-                            Вы отправляете созданный тизер на модерацию. Наша команда M&amp;A-консультантов проверяет материалы за несколько часов, при необходимости корректирует и публикует тизер. Term Sheet можно создать в любой момент для закрепления ключевых условий сделки.
-                        </p>
+                        <h3 class="step-title">Кому это отправить</h3>
+                        <p class="step-description">Пять инвесторов из каталога, которым близок профиль и размер сделки. Дальше можно дописать финансы и выйти на них с готовым тизером.</p>
                     </div>
                 </div>
-                <div class="step-item">
-                    <div class="step-number">04</div>
-                    <div class="step-content">
-                        <h3 class="step-title">Выход на рынок</h3>
-                        <p class="step-description">
-                            Размещаем предложение на платформе, подключаем нашу сеть покупателей и управляем коммуникациями. Вы видите статус каждого лида и экономику сделки.
-                        </p>
-                    </div>
-                </div>
+            </div>
+            <ul class="trust-row">
+                <li>Бесплатно на старте</li>
+                <li>Конфиденциально до публикации</li>
+                <li>Материалы смотрит команда M&amp;A</li>
+            </ul>
+            <div class="section-cta">
+                <a class="btn btn-primary btn-large" href="<?php echo $documentsUrl; ?>">Получить документы бесплатно</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tools continue the same path -->
+    <section id="documents-path" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Можно начать с одного вопроса</h2>
+                <p class="section-subtitle">Оценка, готовность и подбор инвестора не заменяют пакет документов. Они помогают его собрать и ведут в ту же анкету.</p>
+            </div>
+            <div class="features-grid features-grid--path">
+                <article class="feature-card">
+                    <h3 class="feature-title">Сколько может стоить</h3>
+                    <p class="feature-description">Ориентир по выручке и марже за пару минут. Цифру потом можно вложить в тизер, а не оставлять в калькуляторе.</p>
+                    <a class="path-link" href="/estimate.php">Прикинуть оценку</a>
+                </article>
+                <article class="feature-card">
+                    <h3 class="feature-title">Готов ли бизнес к продаже</h3>
+                    <p class="feature-description">Короткий разбор отчётности, активов и зависимости от владельца. Показывает, что усилить до разговора с инвестором.</p>
+                    <a class="path-link" href="/sale-readiness.php">Проверить готовность</a>
+                </article>
+                <article class="feature-card">
+                    <h3 class="feature-title">Кто может купить</h3>
+                    <p class="feature-description">Пять инвесторов по отрасли и чеку. Чтобы они открыли письмо, к списку нужен тизер — его собираем на следующем шаге.</p>
+                    <a class="path-link" href="/investor-match.php">Подобрать инвестора</a>
+                </article>
             </div>
         </div>
     </section>
@@ -1126,8 +1066,8 @@ SVG;
     <section id="buy-business" class="buy-business-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Купить бизнес</h2>
-                <p class="section-subtitle">Изучайте сделки, подготовленные нашей M&amp;A-командой и подтверждённые аналитикой платформы</p>
+                <h2 class="section-title">Для инвесторов</h2>
+                <p class="section-subtitle">Сделки с тизером и финансовой картиной. Если вы продаёте бизнес, начните с документов выше — каталог для тех, кто ищет актив.</p>
             </div>
             <!-- Фильтры: опции генерируются на клиенте из data-* атрибутов карточек (script.js → populateFilterOptions) -->
             <div class="filter-bar">
@@ -1791,14 +1731,14 @@ SVG;
 
 
     <!-- Seller Form Section -->
-    <section class="seller-form-cta">
+    <section id="get-documents" class="seller-form-cta">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Продажа бизнеса через SmartBizSell</h2>
-                <p class="section-subtitle">Анкета доступна только в личном кабинете. После заполнения вы получите автоматический DCF-анализ и сможете вернуться к данным в любой момент.</p>
+                <h2 class="section-title">Начните с документов, не с переписки</h2>
+                <p class="section-subtitle">Регистрация открывает анкету. По ней собираются тизер, оценка и список инвесторов. Длинные финансовые таблицы можно заполнить после того, как увидите первый результат.</p>
             </div>
-            <div style="text-align:center; margin-top: 32px;">
-                <a class="btn btn-primary" href="<?php echo isLoggedIn() ? '/dashboard.php' : '/login.php'; ?>">Перейти в личный кабинет</a>
+            <div class="section-cta">
+                <a class="btn btn-primary btn-large" href="<?php echo $documentsUrl; ?>">Получить документы бесплатно</a>
             </div>
         </div>
     </section>
@@ -1850,7 +1790,7 @@ SVG;
                         <h4>Навигация</h4>
                     <a href="#how-it-works">Как это работает</a>
                     <a href="#buy-business">Купить бизнес</a>
-                    <a href="#seller-form">Продать бизнес</a>
+                    <a href="#get-documents">Получить документы</a>
                     <a href="#contact">Контакты</a>
                     </div>
                     <div class="footer-links-column">
