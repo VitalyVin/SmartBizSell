@@ -17,7 +17,7 @@
 
 require_once 'config.php';
 
-$assetVersion = getenv('ASSET_VERSION') ?: '2026-10-04';
+$assetVersion = getenv('ASSET_VERSION') ?: '2026-10-04-mobile';
 $documentsUrl = isLoggedIn() ? '/dashboard.php' : '/register.php';
 
 // Загружаем опубликованные тизеры для отображения на главной странице
@@ -907,7 +907,7 @@ SVG;
                         <li><a href="/logout.php">Выйти</a></li>
                     <?php else: ?>
                         <li><a href="/login.php">Войти</a></li>
-                        <li><a href="/register.php" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; padding: 8px 16px; border-radius: 8px;">Начать бесплатно</a></li>
+                        <li><a class="nav-cta" href="/register.php">Начать бесплатно</a></li>
                     <?php endif; ?>
                 </ul>
                 <button class="nav-toggle" aria-label="Toggle menu">
