@@ -18,7 +18,7 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
 $slug = isset($_GET['slug']) ? trim($_GET['slug']) : '';
 
 if (empty($slug)) {
-    header('Location: /blog');
+    header('Location: ' . blogListUrl());
     exit;
 }
 
@@ -1034,7 +1034,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
                 <ul class="nav-menu">
                     <li><a href="/#how-it-works">Как это работает</a></li>
                     <li><a href="/#buy-business">Купить бизнес</a></li>
-                    <li><a href="/blog">Блог</a></li>
+                    <li><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="/dashboard.php">Продать бизнес</a></li>
                         <?php if (isModerator()): ?>
@@ -1063,7 +1063,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
 
     <div class="blog-post-container">
         <div class="back-to-blog">
-            <a href="/blog">← Вернуться к списку статей</a>
+            <a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">← Вернуться к списку статей</a>
         </div>
 
         <article class="blog-post">
@@ -1301,7 +1301,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
                     "@type": "ListItem",
                     "position": 2,
                     "name": "Блог",
-                    "item": "<?php echo BASE_URL; ?>/blog"
+                    "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>"
                 },
                 {
                     "@type": "ListItem",

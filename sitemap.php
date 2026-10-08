@@ -60,7 +60,7 @@ echo "  </url>\n";
 
 // Страница блога
 echo "  <url>\n";
-echo "    <loc>{$baseUrl}/blog</loc>\n";
+echo "    <loc>{$baseUrl}" . blogListUrl() . "</loc>\n";
 echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
 echo "    <changefreq>{$changefreq['blog']}</changefreq>\n";
 echo "    <priority>{$priorities['blog']}</priority>\n";

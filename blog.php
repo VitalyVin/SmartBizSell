@@ -279,7 +279,7 @@ $pageTitle = "Блог SmartBizSell - Статьи о продаже и поку
 $pageDescription = "Полезные статьи о продаже и покупке бизнеса, M&A сделках, оценке бизнеса, финансовом моделировании, поиске инвесторов и других аспектах сделок слияний и поглощений.";
 $pageH1 = 'Блог о продаже и покупке бизнеса';
 $pageLead = 'Материалы о продаже и покупке бизнеса, оценке компании, подготовке сделки и привлечении инвестиций.';
-$canonicalPath = '/blog';
+$canonicalPath = blogListUrl();
 $sectionIntro = '';
 $visibleTopics = [];
 
@@ -309,7 +309,7 @@ $robotsMeta = 'index, follow';
 if ($isFilteredView || ($activeSection !== null && $sectionPostCount < BLOG_SECTION_INDEX_MIN)) {
     $robotsMeta = 'noindex, follow';
     if ($activeSection !== null && $sectionPostCount < BLOG_SECTION_INDEX_MIN && !$sectionNotFound) {
-        $canonicalPath = '/blog';
+        $canonicalPath = blogListUrl();
     }
 }
 
@@ -952,7 +952,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                 <ul class="nav-menu">
                     <li><a href="/#how-it-works">Как это работает</a></li>
                     <li><a href="/#buy-business">Купить бизнес</a></li>
-                    <li><a href="/blog">Блог</a></li>
+                    <li><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="/dashboard.php">Продать бизнес</a></li>
                         <?php if (isModerator()): ?>
@@ -982,14 +982,14 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     <div class="blog-container">
         <div class="blog-header">
             <?php if ($activeSection !== null): ?>
-                <p class="blog-breadcrumb"><a href="/blog">Блог</a> / <?php echo htmlspecialchars($activeSection['title'], ENT_QUOTES, 'UTF-8'); ?></p>
+                <p class="blog-breadcrumb"><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">Блог</a> / <?php echo htmlspecialchars($activeSection['title'], ENT_QUOTES, 'UTF-8'); ?></p>
             <?php endif; ?>
             <h1><?php echo htmlspecialchars($pageH1, ENT_QUOTES, 'UTF-8'); ?></h1>
             <p><?php echo htmlspecialchars($pageLead, ENT_QUOTES, 'UTF-8'); ?></p>
         </div>
 
         <nav class="blog-sections" aria-label="Разделы блога">
-            <a href="/blog" class="blog-section-link <?php echo $activeSection === null && $unmappedCategory === '' ? 'active' : ''; ?>">Все статьи</a>
+            <a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" class="blog-section-link <?php echo $activeSection === null && $unmappedCategory === '' ? 'active' : ''; ?>">Все статьи</a>
             <?php foreach (blogSections() as $slug => $section): ?>
                 <?php if (($sectionCounts[$slug] ?? 0) < 1) { continue; } ?>
                 <a href="<?php echo htmlspecialchars(blogListUrl($slug), ENT_QUOTES, 'UTF-8'); ?>" class="blog-section-link <?php echo ($activeSection !== null && $activeSection['slug'] === $slug) ? 'active' : ''; ?>">
@@ -1019,11 +1019,11 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.35-4.35"></path>
                 </svg>
-                <form method="GET" action="<?php echo htmlspecialchars($activeSection !== null ? blogListUrl($activeSection['slug']) : '/blog', ENT_QUOTES, 'UTF-8'); ?>" class="blog-search-form">
+                <form method="GET" action="<?php echo htmlspecialchars($activeSection !== null ? blogListUrl($activeSection['slug']) : blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" class="blog-search-form">
                     <input type="text" name="search" placeholder="Поиск статей..." value="<?php echo htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
                     <button type="submit" class="blog-search-submit">Найти</button>
                     <?php if (!empty($searchQuery) || $selectedTopic !== '' || $unmappedCategory !== ''): ?>
-                        <a href="<?php echo htmlspecialchars($activeSection !== null ? blogListUrl($activeSection['slug']) : '/blog', ENT_QUOTES, 'UTF-8'); ?>" class="blog-search-reset">Сбросить</a>
+                        <a href="<?php echo htmlspecialchars($activeSection !== null ? blogListUrl($activeSection['slug']) : blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" class="blog-search-reset">Сбросить</a>
                     <?php endif; ?>
                 </form>
             </div>
@@ -1046,11 +1046,11 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                 <?php if ($sectionNotFound): ?>
                     <h2>Такого раздела нет</h2>
                     <p>Выберите раздел выше или вернитесь ко всем статьям.</p>
-                    <p><a href="/blog" style="color: #667EEA; text-decoration: none; font-weight: 600;">Все статьи</a></p>
+                    <p><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" style="color: #667EEA; text-decoration: none; font-weight: 600;">Все статьи</a></p>
                 <?php elseif (!empty($searchQuery) || $selectedTopic !== '' || $unmappedCategory !== '' || $activeSection !== null): ?>
                     <h2>По вашему запросу ничего не найдено</h2>
                     <p>Попробуйте изменить формулировку запроса или сбросьте фильтры категорий.</p>
-                    <p><a href="/blog" style="color: #667EEA; text-decoration: none; font-weight: 600;">Сбросить фильтры</a></p>
+                    <p><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" style="color: #667EEA; text-decoration: none; font-weight: 600;">Сбросить фильтры</a></p>
                 <?php else: ?>
                     <h2>Статьи скоро появятся</h2>
                     <p>Мы готовим интересные материалы о продаже и покупке бизнеса, M&A сделках и инвестициях.</p>
@@ -1155,7 +1155,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
         "@context": "https://schema.org",
         "@type": "BreadcrumbList",
         "itemListElement": [
-            {"@type": "ListItem", "position": 1, "name": "Блог", "item": "<?php echo BASE_URL; ?>/blog"},
+            {"@type": "ListItem", "position": 1, "name": "Блог", "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>"},
             {"@type": "ListItem", "position": 2, "name": <?php echo json_encode($activeSection['title'], JSON_UNESCAPED_UNICODE); ?>, "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl($activeSection['slug']), ENT_QUOTES, 'UTF-8'); ?>"}
         ]
     }
