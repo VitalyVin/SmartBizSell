@@ -90,7 +90,7 @@ try {
                 continue;
             }
             echo "  <url>\n";
-            echo "    <loc>{$baseUrl}/blog/razdel/{$slug}</loc>\n";
+            echo "    <loc>{$baseUrl}" . blogListUrl($slug) . "</loc>\n";
             echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
             echo "    <changefreq>{$changefreq['blog']}</changefreq>\n";
             echo "    <priority>0.7</priority>\n";

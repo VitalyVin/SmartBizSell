@@ -105,7 +105,9 @@ function blogCategoryLabel(string $category): string {
 }
 
 function blogListUrl(?string $sectionSlug = null, array $query = []): string {
-    $path = $sectionSlug ? '/blog/razdel/' . rawurlencode($sectionSlug) : '/blog';
+    // Завершающий слэш обязателен: на nginx Reg.ru раздел — это каталог
+    // blog/razdel/{slug}/index.php, и адрес без слэша сервер перенаправляет на адрес со слэшем.
+    $path = $sectionSlug ? '/blog/razdel/' . rawurlencode($sectionSlug) . '/' : '/blog';
     $clean = [];
     foreach (['topic', 'search', 'page'] as $key) {
         if (!array_key_exists($key, $query) || $query[$key] === null || $query[$key] === '') {

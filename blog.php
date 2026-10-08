@@ -296,7 +296,7 @@ if ($sectionNotFound) {
         : $activeSection['description'];
     $pageTitle = $pageH1 . ' | Блог SmartBizSell';
     $pageDescription = $activeSection['description'];
-    $canonicalPath = '/blog/razdel/' . $activeSection['slug'];
+    $canonicalPath = blogListUrl($activeSection['slug']);
     if ($selectedTopic === '' && $searchQuery === '') {
         $sectionIntro = $activeSection['intro'];
     }
@@ -347,7 +347,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     
-    <link rel="stylesheet" href="styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="/styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1156,7 +1156,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
         "@type": "BreadcrumbList",
         "itemListElement": [
             {"@type": "ListItem", "position": 1, "name": "Блог", "item": "<?php echo BASE_URL; ?>/blog"},
-            {"@type": "ListItem", "position": 2, "name": <?php echo json_encode($activeSection['title'], JSON_UNESCAPED_UNICODE); ?>, "item": "<?php echo BASE_URL; ?>/blog/razdel/<?php echo htmlspecialchars($activeSection['slug'], ENT_QUOTES, 'UTF-8'); ?>"}
+            {"@type": "ListItem", "position": 2, "name": <?php echo json_encode($activeSection['title'], JSON_UNESCAPED_UNICODE); ?>, "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl($activeSection['slug']), ENT_QUOTES, 'UTF-8'); ?>"}
         ]
     }
     </script>
@@ -1176,7 +1176,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     }
     </script>
 
-    <script src="script.js?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script src="/script.js?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
     <script>
         // Обработка скролла для навигации (как на главной странице)
         (function() {
