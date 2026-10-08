@@ -10,6 +10,7 @@
  */
 
 require_once 'config.php';
+require_once __DIR__ . '/blog_sections.php';
 
 header('Content-Type: application/xml; charset=utf-8');
 
@@ -64,6 +65,41 @@ echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
 echo "    <changefreq>{$changefreq['blog']}</changefreq>\n";
 echo "    <priority>{$priorities['blog']}</priority>\n";
 echo "  </url>\n";
+
+// Разделы блога, в которых достаточно статей для отдельной страницы
+try {
+    $pdo = getDBConnection();
+    $stmt = $pdo->query("SHOW TABLES LIKE 'blog_posts'");
+    if ($stmt->rowCount() > 0) {
+        $stmt = $pdo->query("
+            SELECT category, COUNT(*) AS total
+            FROM blog_posts
+            WHERE status = 'published' AND published_at IS NOT NULL AND published_at <= NOW() AND category IS NOT NULL AND category != ''
+            GROUP BY category
+        ");
+        $sectionTotals = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $resolved = blogResolveCategory($row['category']);
+            if ($resolved['slug'] === null) {
+                continue;
+            }
+            $sectionTotals[$resolved['slug']] = ($sectionTotals[$resolved['slug']] ?? 0) + (int)$row['total'];
+        }
+        foreach (blogSections() as $slug => $section) {
+            if (($sectionTotals[$slug] ?? 0) < BLOG_SECTION_INDEX_MIN) {
+                continue;
+            }
+            echo "  <url>\n";
+            echo "    <loc>{$baseUrl}/blog/razdel/{$slug}</loc>\n";
+            echo "    <lastmod>" . date('Y-m-d') . "</lastmod>\n";
+            echo "    <changefreq>{$changefreq['blog']}</changefreq>\n";
+            echo "    <priority>0.7</priority>\n";
+            echo "  </url>\n";
+        }
+    }
+} catch (PDOException $e) {
+    error_log("Blog sections sitemap skipped: " . $e->getMessage());
+}
 
 // Страницы услуг
 $services = [

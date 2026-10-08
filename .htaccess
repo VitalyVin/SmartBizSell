@@ -20,6 +20,11 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^blog/?$ blog.php [L]
 
+# Разделы блога. Должно быть раньше правила статьи /blog/slug.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^blog/razdel/([a-z0-9-]+)/?$ blog.php?section=$1 [L,QSA]
+
 # Blog post routing (blog/slug) - для отдельных статей
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

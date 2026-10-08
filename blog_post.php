@@ -10,6 +10,7 @@
  */
 
 require_once 'config.php';
+require_once __DIR__ . '/blog_sections.php';
 
 $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
 
@@ -225,6 +226,10 @@ function generateTableOfContents(string $content): array {
     return $toc;
 }
 
+$postSection = ['slug' => null, 'topic' => ''];
+if (is_array($post) && !empty($post['category'])) {
+    $postSection = blogResolveCategory($post['category']);
+}
 $readingTime = estimateReadingTime($post['content'] ?? '');
 $toc = generateTableOfContents($post['content'] ?? '');
 $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8');
@@ -250,7 +255,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
     <meta property="article:published_time" content="<?php echo date('c', strtotime($post['published_at'])); ?>">
     <meta property="article:modified_time" content="<?php echo date('c', strtotime($post['updated_at'])); ?>">
     <?php if (!empty($post['category'])): ?>
-        <meta property="article:section" content="<?php echo htmlspecialchars($post['category'], ENT_QUOTES, 'UTF-8'); ?>">
+        <meta property="article:section" content="<?php echo htmlspecialchars($postSection['slug'] ? blogSections()[$postSection['slug']]['title'] : $post['category'], ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
     
     <!-- Twitter Card -->
@@ -439,12 +444,14 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
             color: white;
             border-radius: 10px;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             margin-bottom: 28px;
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .blog-post-category a {
+            color: white;
+            text-decoration: none;
         }
         .blog-post-title {
             font-size: 52px;
@@ -1062,7 +1069,13 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
         <article class="blog-post">
             <div class="blog-post-header">
                 <?php if (!empty($post['category'])): ?>
-                    <div class="blog-post-category"><?php echo htmlspecialchars($post['category'], ENT_QUOTES, 'UTF-8'); ?></div>
+                    <div class="blog-post-category">
+                        <?php if ($postSection['slug'] !== null): ?>
+                            <a href="<?php echo htmlspecialchars(blogListUrl($postSection['slug']), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(blogCategoryLabel($post['category']), ENT_QUOTES, 'UTF-8'); ?></a>
+                        <?php else: ?>
+                            <?php echo htmlspecialchars(blogCategoryLabel($post['category']), ENT_QUOTES, 'UTF-8'); ?>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
                 <h1 class="blog-post-title"><?php echo htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8'); ?></h1>
                 <div class="blog-post-meta">
@@ -1299,7 +1312,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
             ]
         }
         <?php if (!empty($post['category'])): ?>
-        ,"articleSection": <?php echo json_encode($post['category'], JSON_UNESCAPED_UNICODE); ?>
+        ,"articleSection": <?php echo json_encode(($postSection['slug'] ?? null) ? blogSections()[$postSection['slug']]['title'] : $post['category'], JSON_UNESCAPED_UNICODE); ?>
         <?php endif; ?>
     }
     </script>
