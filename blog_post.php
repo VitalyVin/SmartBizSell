@@ -84,10 +84,34 @@ if ($blogTableExists) {
 }
 
 if (!$post) {
+    $alias = blogPostSlugAliases()[$slug] ?? null;
+    if ($alias !== null && $alias !== $slug) {
+        header('Location: /blog/' . rawurlencode($alias), true, 301);
+        exit;
+    }
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     echo 'Not Found';
     exit;
+}
+
+/**
+ * Короткие адреса из текстов статей, которых нет в базе.
+ * В опубликованных материалах slug длиннее или записан иначе.
+ */
+function blogPostSlugAliases(): array {
+    return [
+        'chistyy-dolg-i-oborotnyy-kapital-pochemu-tsena-sdelki-ne-ravna-dengam-na-schete' => 'chistyy-dolg-i-oborotnyy-kapital-pochemu-tsena-sdelki-ne-ravna-dengam-na-schyote',
+        'earn-out-kogda-zaschischaet-prodavtsa-a-kogda-net' => 'earn-out-kogda-on-zaschischaet-prodavtsa-a-kogda-perenosit-na-nego-risk',
+        'kogda-prodazha-strategu-huzhe-samostoyatelnogo-razvitiya' => 'kogda-prodazha-strategu-huzhe-samostoyatelnogo-razvitiya-biznesa',
+        'konsolidatsiya-it-rynka-2026' => 'konsolidatsiya-rossiyskogo-it-rynka-v-2026-zachem-pokupayut-razrabotchikov-i-chto-proverit-prodavtsu',
+        'natsionalizatsii-v-statistike-m-a-pochemu-obyem-ne-raven-aktivnosti' => 'pochemu-24-07-mlrd-rynka-m-a-ne-oznachayut-rosta-aktivnosti-razbor-statistiki',
+        'nds-22-i-otsenka-biznesa' => 'nds-22-i-otsenka-biznesa-kak-izmenenie-stavki-vliyaet-na-tsenu-kompanii',
+        'rynok-m-a-v-rossii-pervoe-polugodie-2026-itogi-i-usloviya-sdelok' => 'rynok-m-a-v-rossii-v-pervom-polugodii-2026-24-07-mlrd-181-sdelka-i-chto-v-etih-tsifrah-ne-tak',
+        'due-diligence-polnyy-chek-list-dokumentov' => 'due-diligence-polnyy-chek-list-dokumentov-dlya-prodazhi-biznesa-v-2026',
+        'multiplikatory-po-otraslyam-2026' => 'multiplikatory-otsenki-biznesa-po-otraslyam-2026-tablitsa-i-formula-raschyota',
+        'chto-takoe-ebitda-prostymi-slovami' => 'chto-takoe-ebitda-prostymi-slovami-kak-schitat-i-zachem-nuzhna',
+    ];
 }
 
 // Мета-теги для SEO
