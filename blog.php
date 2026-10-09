@@ -10,14 +10,15 @@
  */
 
 require_once 'config.php';
+require_once __DIR__ . '/blog_sections.php';
 
-$assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
+$assetVersion = getenv('ASSET_VERSION') ?: '2026-10-08-blog';
 
 // Проверяем существование таблицы блога
 try {
     $pdo = getDBConnection();
-    $stmt = $pdo->query("SHOW TABLES LIKE 'blog_posts'");
-    $blogTableExists = $stmt->rowCount() > 0;
+    $pdo->query("SELECT 1 FROM blog_posts LIMIT 1");
+    $blogTableExists = true;
 } catch (PDOException $e) {
     $blogTableExists = false;
 }
@@ -26,7 +27,9 @@ try {
 $posts = [];
 $totalPosts = 0;
 $categories = [];
-$selectedCategory = isset($_GET['category']) ? trim($_GET['category']) : '';
+$sectionSlug = isset($_GET['section']) ? trim((string)$_GET['section']) : '';
+$selectedTopic = isset($_GET['topic']) ? trim((string)$_GET['topic']) : '';
+$legacyCategory = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
 $searchQuery = isset($_GET['search']) ? trim($_GET['search']) : '';
 $normalizedSearchQuery = preg_replace('/\s+/u', ' ', $searchQuery);
 if ($normalizedSearchQuery !== null) {
@@ -36,19 +39,80 @@ $currentPage = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $postsPerPage = 15;
 $offset = ($currentPage - 1) * $postsPerPage;
 
+$activeSection = $sectionSlug !== '' ? blogSectionBySlug($sectionSlug) : null;
+$sectionNotFound = $sectionSlug !== '' && $activeSection === null;
+$unmappedCategory = '';
+
+if (!$sectionNotFound && $sectionSlug === '' && $legacyCategory !== '') {
+    $resolvedLegacy = blogResolveCategory($legacyCategory);
+    if ($resolvedLegacy['slug'] !== null) {
+        $redirectQuery = [];
+        if ($resolvedLegacy['topic'] !== '') {
+            $redirectQuery['topic'] = $resolvedLegacy['topic'];
+        }
+        if ($searchQuery !== '') {
+            $redirectQuery['search'] = $searchQuery;
+        }
+        if ($currentPage > 1) {
+            $redirectQuery['page'] = $currentPage;
+        }
+        header('Location: ' . blogListUrl($resolvedLegacy['slug'], $redirectQuery), true, 301);
+        exit;
+    }
+    $unmappedCategory = $legacyCategory;
+}
+
+$sectionCounts = [];
+$topicsBySection = [];
+
 if ($blogTableExists) {
     try {
-        // Получаем все категории
-        $stmt = $pdo->query("SELECT DISTINCT category FROM blog_posts WHERE status = 'published' AND published_at IS NOT NULL AND published_at <= NOW() AND category IS NOT NULL AND category != '' ORDER BY category");
-        $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = $pdo->query("SELECT category, COUNT(*) AS total FROM blog_posts WHERE status = 'published' AND published_at IS NOT NULL AND published_at <= NOW() AND category IS NOT NULL AND category != '' GROUP BY category ORDER BY category");
+        $categoryRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($categoryRows as $row) {
+            $categories[] = $row['category'];
+            $resolved = blogResolveCategory($row['category']);
+            if ($resolved['slug'] === null) {
+                continue;
+            }
+            $sectionCounts[$resolved['slug']] = ($sectionCounts[$resolved['slug']] ?? 0) + (int)$row['total'];
+            if ($resolved['topic'] !== '') {
+                $topicsBySection[$resolved['slug']][$resolved['topic']] = ($topicsBySection[$resolved['slug']][$resolved['topic']] ?? 0) + (int)$row['total'];
+            }
+        }
+        foreach ($topicsBySection as $slug => $topics) {
+            ksort($topics, SORT_NATURAL | SORT_FLAG_CASE);
+            $topicsBySection[$slug] = $topics;
+        }
         
         // Формируем запрос с фильтрами
         $whereConditions = ["status = 'published'", "published_at IS NOT NULL", "published_at <= NOW()"];
         $params = [];
         
-        if (!empty($selectedCategory)) {
+        if ($activeSection !== null) {
+            $sectionParts = [];
+            foreach ($activeSection['match'] as $index => $root) {
+                $eqKey = 'section_eq_' . $index;
+                $likeKey = 'section_like_' . $index;
+                $params[$eqKey] = $root;
+                $params[$likeKey] = blogCategoryLikePrefix($root);
+                $sectionParts[] = "(category = :{$eqKey} OR category LIKE :{$likeKey})";
+            }
+            $whereConditions[] = '(' . implode(' OR ', $sectionParts) . ')';
+        } elseif ($unmappedCategory !== '') {
             $whereConditions[] = "category = :category";
-            $params['category'] = $selectedCategory;
+            $params['category'] = $unmappedCategory;
+        }
+        
+        if ($activeSection !== null && $selectedTopic !== '') {
+            $topicParts = ["category = :topic_exact"];
+            $params['topic_exact'] = $selectedTopic;
+            foreach ($activeSection['match'] as $index => $root) {
+                $topicKey = 'topic_full_' . $index;
+                $params[$topicKey] = $root . ' / ' . $selectedTopic;
+                $topicParts[] = "category = :{$topicKey}";
+            }
+            $whereConditions[] = '(' . implode(' OR ', $topicParts) . ')';
         }
         
         if (!empty($searchQuery)) {
@@ -61,6 +125,10 @@ if ($blogTableExists) {
         
         $whereClause = implode(' AND ', $whereConditions);
         
+        if ($sectionNotFound) {
+            $totalPosts = 0;
+            $posts = [];
+        } else {
         // Общее количество статей с учетом фильтров
         $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM blog_posts WHERE {$whereClause}");
         foreach ($params as $key => $value) {
@@ -88,6 +156,7 @@ if ($blogTableExists) {
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
     } catch (PDOException $e) {
         error_log("Error loading blog posts: " . $e->getMessage());
     }
@@ -96,29 +165,20 @@ if ($blogTableExists) {
 $totalPages = $blogTableExists && $totalPosts > 0 ? ceil($totalPosts / $postsPerPage) : 1;
 
 /**
- * Строит URL блога с сохранением активных фильтров.
+ * Строит URL списка блога с сохранением поиска и темы.
  */
 function buildBlogUrl(array $overrides = []): string {
-    global $selectedCategory, $searchQuery;
+    global $activeSection, $selectedTopic, $searchQuery;
 
-    $params = [];
-    if ($selectedCategory !== '') {
-        $params['category'] = $selectedCategory;
-    }
-    if ($searchQuery !== '') {
-        $params['search'] = $searchQuery;
-    }
-
+    $query = [
+        'topic' => $selectedTopic,
+        'search' => $searchQuery,
+    ];
     foreach ($overrides as $key => $value) {
-        if ($value === null || $value === '') {
-            unset($params[$key]);
-            continue;
-        }
-        $params[$key] = $value;
+        $query[$key] = $value;
     }
-
-    $queryString = http_build_query($params);
-    return '/blog' . ($queryString !== '' ? '?' . $queryString : '');
+    $slug = ($activeSection !== null) ? $activeSection['slug'] : null;
+    return blogListUrl($slug, $query);
 }
 
 /**
@@ -213,15 +273,44 @@ function estimateReadingTime(?string $content): int {
     return max(1, $readingTime);
 }
 
-// Мета-теги для SEO
+// Мета-теги для SEO. Индексируются /blog и разделы с несколькими статьями.
+// Поиск, узкая тема и страницы пагинации остаются noindex.
 $pageTitle = "Блог SmartBizSell - Статьи о продаже и покупке бизнеса, M&A, инвестициях";
 $pageDescription = "Полезные статьи о продаже и покупке бизнеса, M&A сделках, оценке бизнеса, финансовом моделировании, поиске инвесторов и других аспектах сделок слияний и поглощений.";
+$pageH1 = 'Блог о продаже и покупке бизнеса';
+$pageLead = 'Материалы о продаже и покупке бизнеса, оценке компании, подготовке сделки и привлечении инвестиций.';
+$canonicalPath = blogListUrl();
+$sectionIntro = '';
+$visibleTopics = [];
 
-// Для SEO: индексируем только основной список (/blog), а пагинацию/фильтры делаем noindex,
-// чтобы не размножать дубликаты страниц по параметрам.
+if ($sectionNotFound) {
+    http_response_code(404);
+    $pageTitle = 'Раздел не найден | Блог SmartBizSell';
+    $pageDescription = 'Такого раздела в блоге SmartBizSell нет.';
+    $pageH1 = 'Раздел не найден';
+    $pageLead = 'Вернитесь к списку статей или выберите один из основных разделов.';
+} elseif ($activeSection !== null) {
+    $pageH1 = $selectedTopic !== '' ? $selectedTopic : $activeSection['h1'];
+    $pageLead = $selectedTopic !== ''
+        ? 'Тема в разделе «' . $activeSection['title'] . '».'
+        : $activeSection['description'];
+    $pageTitle = $pageH1 . ' | Блог SmartBizSell';
+    $pageDescription = $activeSection['description'];
+    $canonicalPath = blogListUrl($activeSection['slug']);
+    if ($selectedTopic === '' && $searchQuery === '') {
+        $sectionIntro = $activeSection['intro'];
+    }
+    $visibleTopics = $topicsBySection[$activeSection['slug']] ?? [];
+}
+
+$sectionPostCount = ($activeSection !== null) ? (int)($sectionCounts[$activeSection['slug']] ?? 0) : 0;
+$isFilteredView = $searchQuery !== '' || $selectedTopic !== '' || $unmappedCategory !== '' || $currentPage > 1 || $sectionNotFound;
 $robotsMeta = 'index, follow';
-if ($currentPage > 1 || $selectedCategory !== '' || $searchQuery !== '') {
+if ($isFilteredView || ($activeSection !== null && $sectionPostCount < BLOG_SECTION_INDEX_MIN)) {
     $robotsMeta = 'noindex, follow';
+    if ($activeSection !== null && $sectionPostCount < BLOG_SECTION_INDEX_MIN && !$sectionNotFound) {
+        $canonicalPath = blogListUrl();
+    }
 }
 
 $prevHref = $currentPage > 1 ? (BASE_URL . buildBlogUrl(['page' => $currentPage - 1])) : '';
@@ -236,7 +325,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     <meta name="description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="keywords" content="блог о продаже бизнеса, статьи M&A, как продать бизнес, как купить бизнес, оценка бизнеса, инвестиции">
     <meta name="robots" content="<?php echo htmlspecialchars($robotsMeta, ENT_QUOTES, 'UTF-8'); ?>">
-    <link rel="canonical" href="<?php echo BASE_URL; ?>/blog">
+    <link rel="canonical" href="<?php echo BASE_URL . $canonicalPath; ?>">
 
     <?php if (!empty($prevHref)): ?>
         <link rel="prev" href="<?php echo htmlspecialchars($prevHref, ENT_QUOTES, 'UTF-8'); ?>">
@@ -247,7 +336,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="<?php echo BASE_URL; ?>/blog">
+    <meta property="og:url" content="<?php echo BASE_URL . $canonicalPath; ?>">
     <meta property="og:title" content="<?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta property="og:image" content="<?php echo BASE_URL; ?>/og-image.svg">
@@ -258,7 +347,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     <meta name="twitter:description" content="<?php echo htmlspecialchars($pageDescription, ENT_QUOTES, 'UTF-8'); ?>">
     <meta name="twitter:image" content="<?php echo BASE_URL; ?>/og-image.svg">
     
-    <link rel="stylesheet" href="styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="/styles.css?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -273,8 +362,8 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
         .blog-header {
             position: relative;
             text-align: center;
-            margin-bottom: 60px;
-            padding: 80px 40px;
+            margin-bottom: 28px;
+            padding: 36px 32px 28px;
             border-radius: 24px;
             overflow: hidden;
             background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
@@ -297,9 +386,9 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
             z-index: 1;
         }
         .blog-header h1 {
-            font-size: 56px;
+            font-size: 40px;
             font-weight: 800;
-            margin-bottom: 24px;
+            margin-bottom: 12px;
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -307,11 +396,71 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
             letter-spacing: -1px;
         }
         .blog-header p {
-            font-size: 20px;
+            font-size: 18px;
             color: var(--text-secondary);
-            max-width: 700px;
+            max-width: 720px;
             margin: 0 auto;
             line-height: 1.6;
+        }
+        .blog-sections {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 0 20px;
+        }
+        .blog-section-link {
+            padding: 10px 16px;
+            border: 1px solid rgba(102, 126, 234, 0.25);
+            border-radius: 999px;
+            background: white;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 15px;
+            text-decoration: none;
+            line-height: 1.3;
+        }
+        .blog-section-link:hover,
+        .blog-section-link.active {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border-color: transparent;
+        }
+        .blog-topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 0 24px;
+        }
+        .blog-topic-link {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(102, 126, 234, 0.08);
+            color: #4338ca;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .blog-topic-link.active,
+        .blog-topic-link:hover {
+            background: #4338ca;
+            color: white;
+        }
+        .blog-section-intro {
+            max-width: 760px;
+            margin: 0 0 28px;
+            color: var(--text-secondary);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+        .blog-header .blog-breadcrumb {
+            margin: 0 0 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .blog-breadcrumb a {
+            color: #4f46e5;
+            text-decoration: none;
+            font-weight: 600;
         }
         .blog-filters {
             display: flex;
@@ -499,18 +648,25 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
             position: absolute;
             top: 16px;
             left: 16px;
-            padding: 8px 16px;
+            max-width: calc(100% - 120px);
+            padding: 8px 12px;
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             color: #667EEA;
             border-radius: 8px;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            line-height: 1.3;
             z-index: 2;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .blog-card-category a {
+            color: inherit;
+            text-decoration: none;
         }
         .blog-card-content {
             padding: 28px;
@@ -680,13 +836,17 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                 padding: 100px 16px 60px;
             }
             .blog-header {
-                padding: 50px 24px;
+                padding: 28px 16px 22px;
             }
             .blog-header h1 {
-                font-size: 36px;
+                font-size: 30px;
             }
             .blog-header p {
                 font-size: 16px;
+            }
+            .blog-section-link,
+            .blog-topic-link {
+                font-size: 14px;
             }
             .blog-filters {
                 flex-direction: column;
@@ -792,7 +952,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                 <ul class="nav-menu">
                     <li><a href="/#how-it-works">Как это работает</a></li>
                     <li><a href="/#buy-business">Купить бизнес</a></li>
-                    <li><a href="/blog">Блог</a></li>
+                    <li><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="/dashboard.php">Продать бизнес</a></li>
                         <?php if (isModerator()): ?>
@@ -821,9 +981,37 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     
     <div class="blog-container">
         <div class="blog-header">
-            <h1>Блог SmartBizSell</h1>
-            <p>Полезные статьи о продаже и покупке бизнеса, M&A сделках, оценке бизнеса и инвестициях</p>
+            <?php if ($activeSection !== null): ?>
+                <p class="blog-breadcrumb"><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">Блог</a> / <?php echo htmlspecialchars($activeSection['title'], ENT_QUOTES, 'UTF-8'); ?></p>
+            <?php endif; ?>
+            <h1><?php echo htmlspecialchars($pageH1, ENT_QUOTES, 'UTF-8'); ?></h1>
+            <p><?php echo htmlspecialchars($pageLead, ENT_QUOTES, 'UTF-8'); ?></p>
         </div>
+
+        <nav class="blog-sections" aria-label="Разделы блога">
+            <a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" class="blog-section-link <?php echo $activeSection === null && $unmappedCategory === '' ? 'active' : ''; ?>">Все статьи</a>
+            <?php foreach (blogSections() as $slug => $section): ?>
+                <?php if (($sectionCounts[$slug] ?? 0) < 1) { continue; } ?>
+                <a href="<?php echo htmlspecialchars(blogListUrl($slug), ENT_QUOTES, 'UTF-8'); ?>" class="blog-section-link <?php echo ($activeSection !== null && $activeSection['slug'] === $slug) ? 'active' : ''; ?>">
+                    <?php echo htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8'); ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+
+        <?php if ($sectionIntro !== ''): ?>
+            <p class="blog-section-intro"><?php echo htmlspecialchars($sectionIntro, ENT_QUOTES, 'UTF-8'); ?></p>
+        <?php endif; ?>
+
+        <?php if ($activeSection !== null && count($visibleTopics) > 1): ?>
+            <nav class="blog-topics" aria-label="Темы раздела">
+                <a href="<?php echo htmlspecialchars(blogListUrl($activeSection['slug']), ENT_QUOTES, 'UTF-8'); ?>" class="blog-topic-link <?php echo $selectedTopic === '' ? 'active' : ''; ?>">Все темы</a>
+                <?php foreach ($visibleTopics as $topic => $topicCount): ?>
+                    <a href="<?php echo htmlspecialchars(blogListUrl($activeSection['slug'], ['topic' => $topic]), ENT_QUOTES, 'UTF-8'); ?>" class="blog-topic-link <?php echo $selectedTopic === $topic ? 'active' : ''; ?>">
+                        <?php echo htmlspecialchars($topic, ENT_QUOTES, 'UTF-8'); ?>
+                    </a>
+                <?php endforeach; ?>
+            </nav>
+        <?php endif; ?>
 
         <div class="blog-filters">
             <div class="blog-search">
@@ -831,48 +1019,38 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.35-4.35"></path>
                 </svg>
-                <form method="GET" action="/blog" class="blog-search-form">
-                    <?php if (!empty($selectedCategory)): ?>
-                        <input type="hidden" name="category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
-                    <?php endif; ?>
+                <form method="GET" action="<?php echo htmlspecialchars($activeSection !== null ? blogListUrl($activeSection['slug']) : blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" class="blog-search-form">
                     <input type="text" name="search" placeholder="Поиск статей..." value="<?php echo htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
                     <button type="submit" class="blog-search-submit">Найти</button>
-                    <?php if (!empty($searchQuery) || !empty($selectedCategory)): ?>
-                        <a href="/blog" class="blog-search-reset">Сбросить</a>
+                    <?php if (!empty($searchQuery) || $selectedTopic !== '' || $unmappedCategory !== ''): ?>
+                        <a href="<?php echo htmlspecialchars($activeSection !== null ? blogListUrl($activeSection['slug']) : blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" class="blog-search-reset">Сбросить</a>
                     <?php endif; ?>
                 </form>
             </div>
-            <div class="blog-category-filter">
-                <a href="<?php echo buildBlogUrl(['category' => null, 'page' => null]); ?>" class="category-btn <?php echo empty($selectedCategory) ? 'active' : ''; ?>">
-                    Все статьи
-                </a>
-                <?php foreach ($categories as $cat): ?>
-                    <a href="<?php echo buildBlogUrl(['category' => $cat, 'page' => null]); ?>" 
-                       class="category-btn <?php echo $selectedCategory === $cat ? 'active' : ''; ?>">
-                        <?php echo htmlspecialchars($cat, ENT_QUOTES, 'UTF-8'); ?>
-                    </a>
-                <?php endforeach; ?>
-            </div>
         </div>
 
-        <?php if (!empty($posts) || !empty($searchQuery) || !empty($selectedCategory)): ?>
+        <?php if ($searchQuery !== '' || $selectedTopic !== '' || $unmappedCategory !== ''): ?>
             <div class="blog-results-count">
                 Найдено статей: <strong><?php echo number_format($totalPosts, 0, '.', ' '); ?></strong>
                 <?php if (!empty($searchQuery)): ?>
                     по запросу "<?php echo htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8'); ?>"
                 <?php endif; ?>
-                <?php if (!empty($selectedCategory)): ?>
-                    в категории "<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>"
+                <?php if ($unmappedCategory !== ''): ?>
+                    в категории "<?php echo htmlspecialchars($unmappedCategory, ENT_QUOTES, 'UTF-8'); ?>"
                 <?php endif; ?>
             </div>
         <?php endif; ?>
 
         <?php if (empty($posts)): ?>
             <div class="empty-blog">
-                <?php if (!empty($searchQuery) || !empty($selectedCategory)): ?>
+                <?php if ($sectionNotFound): ?>
+                    <h2>Такого раздела нет</h2>
+                    <p>Выберите раздел выше или вернитесь ко всем статьям.</p>
+                    <p><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" style="color: #667EEA; text-decoration: none; font-weight: 600;">Все статьи</a></p>
+                <?php elseif (!empty($searchQuery) || $selectedTopic !== '' || $unmappedCategory !== '' || $activeSection !== null): ?>
                     <h2>По вашему запросу ничего не найдено</h2>
                     <p>Попробуйте изменить формулировку запроса или сбросьте фильтры категорий.</p>
-                    <p><a href="/blog" style="color: #667EEA; text-decoration: none; font-weight: 600;">Сбросить фильтры</a></p>
+                    <p><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>" style="color: #667EEA; text-decoration: none; font-weight: 600;">Сбросить фильтры</a></p>
                 <?php else: ?>
                     <h2>Статьи скоро появятся</h2>
                     <p>Мы готовим интересные материалы о продаже и покупке бизнеса, M&A сделках и инвестициях.</p>
@@ -892,7 +1070,14 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
                                 <div class="blog-card-illustration">
                                     <?php echo generateBlogCategoryIllustration($post['category'], $post['id']); ?>
                                 </div>
-                                <div class="blog-card-category"><?php echo htmlspecialchars($post['category'], ENT_QUOTES, 'UTF-8'); ?></div>
+                                <?php $cardResolved = blogResolveCategory($post['category']); ?>
+                                <div class="blog-card-category">
+                                    <?php if ($cardResolved['slug'] !== null): ?>
+                                        <a href="<?php echo htmlspecialchars(blogListUrl($cardResolved['slug']), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(blogCategoryLabel($post['category']), ENT_QUOTES, 'UTF-8'); ?></a>
+                                    <?php else: ?>
+                                        <?php echo htmlspecialchars(blogCategoryLabel($post['category']), ENT_QUOTES, 'UTF-8'); ?>
+                                    <?php endif; ?>
+                                </div>
                             <?php endif; ?>
                             <?php if ($isNew): ?>
                                 <div class="blog-card-badge">НОВОЕ</div>
@@ -964,13 +1149,25 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     </div>
 
     <!-- Структурированные данные для блога -->
+    <?php if ($activeSection !== null && !$sectionNotFound): ?>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "Блог", "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>"},
+            {"@type": "ListItem", "position": 2, "name": <?php echo json_encode($activeSection['title'], JSON_UNESCAPED_UNICODE); ?>, "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl($activeSection['slug']), ENT_QUOTES, 'UTF-8'); ?>"}
+        ]
+    }
+    </script>
+    <?php endif; ?>
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "Blog",
         "name": "Блог SmartBizSell",
         "description": "Полезные статьи о продаже и покупке бизнеса, M&A сделках, оценке бизнеса и инвестициях",
-        "url": "<?php echo BASE_URL; ?>/blog",
+        "url": "<?php echo BASE_URL . $canonicalPath; ?>",
         "publisher": {
             "@type": "Organization",
             "name": "SmartBizSell",
@@ -979,7 +1176,7 @@ $nextHref = $currentPage < $totalPages ? (BASE_URL . buildBlogUrl(['page' => $cu
     }
     </script>
 
-    <script src="script.js?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script src="/script.js?v=<?php echo htmlspecialchars($assetVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
     <script>
         // Обработка скролла для навигации (как на главной странице)
         (function() {

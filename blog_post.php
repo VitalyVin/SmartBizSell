@@ -10,6 +10,7 @@
  */
 
 require_once 'config.php';
+require_once __DIR__ . '/blog_sections.php';
 
 $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
 
@@ -17,7 +18,7 @@ $assetVersion = getenv('ASSET_VERSION') ?: '2026-04-29';
 $slug = isset($_GET['slug']) ? trim($_GET['slug']) : '';
 
 if (empty($slug)) {
-    header('Location: /blog');
+    header('Location: ' . blogListUrl());
     exit;
 }
 
@@ -83,10 +84,34 @@ if ($blogTableExists) {
 }
 
 if (!$post) {
+    $alias = blogPostSlugAliases()[$slug] ?? null;
+    if ($alias !== null && $alias !== $slug) {
+        header('Location: /blog/' . rawurlencode($alias), true, 301);
+        exit;
+    }
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     echo 'Not Found';
     exit;
+}
+
+/**
+ * Короткие адреса из текстов статей, которых нет в базе.
+ * В опубликованных материалах slug длиннее или записан иначе.
+ */
+function blogPostSlugAliases(): array {
+    return [
+        'chistyy-dolg-i-oborotnyy-kapital-pochemu-tsena-sdelki-ne-ravna-dengam-na-schete' => 'chistyy-dolg-i-oborotnyy-kapital-pochemu-tsena-sdelki-ne-ravna-dengam-na-schyote',
+        'earn-out-kogda-zaschischaet-prodavtsa-a-kogda-net' => 'earn-out-kogda-on-zaschischaet-prodavtsa-a-kogda-perenosit-na-nego-risk',
+        'kogda-prodazha-strategu-huzhe-samostoyatelnogo-razvitiya' => 'kogda-prodazha-strategu-huzhe-samostoyatelnogo-razvitiya-biznesa',
+        'konsolidatsiya-it-rynka-2026' => 'konsolidatsiya-rossiyskogo-it-rynka-v-2026-zachem-pokupayut-razrabotchikov-i-chto-proverit-prodavtsu',
+        'natsionalizatsii-v-statistike-m-a-pochemu-obyem-ne-raven-aktivnosti' => 'pochemu-24-07-mlrd-rynka-m-a-ne-oznachayut-rosta-aktivnosti-razbor-statistiki',
+        'nds-22-i-otsenka-biznesa' => 'nds-22-i-otsenka-biznesa-kak-izmenenie-stavki-vliyaet-na-tsenu-kompanii',
+        'rynok-m-a-v-rossii-pervoe-polugodie-2026-itogi-i-usloviya-sdelok' => 'rynok-m-a-v-rossii-v-pervom-polugodii-2026-24-07-mlrd-181-sdelka-i-chto-v-etih-tsifrah-ne-tak',
+        'due-diligence-polnyy-chek-list-dokumentov' => 'due-diligence-polnyy-chek-list-dokumentov-dlya-prodazhi-biznesa-v-2026',
+        'multiplikatory-po-otraslyam-2026' => 'multiplikatory-otsenki-biznesa-po-otraslyam-2026-tablitsa-i-formula-raschyota',
+        'chto-takoe-ebitda-prostymi-slovami' => 'chto-takoe-ebitda-prostymi-slovami-kak-schitat-i-zachem-nuzhna',
+    ];
 }
 
 // Мета-теги для SEO
@@ -225,6 +250,10 @@ function generateTableOfContents(string $content): array {
     return $toc;
 }
 
+$postSection = ['slug' => null, 'topic' => ''];
+if (is_array($post) && !empty($post['category'])) {
+    $postSection = blogResolveCategory($post['category']);
+}
 $readingTime = estimateReadingTime($post['content'] ?? '');
 $toc = generateTableOfContents($post['content'] ?? '');
 $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 'UTF-8');
@@ -250,7 +279,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
     <meta property="article:published_time" content="<?php echo date('c', strtotime($post['published_at'])); ?>">
     <meta property="article:modified_time" content="<?php echo date('c', strtotime($post['updated_at'])); ?>">
     <?php if (!empty($post['category'])): ?>
-        <meta property="article:section" content="<?php echo htmlspecialchars($post['category'], ENT_QUOTES, 'UTF-8'); ?>">
+        <meta property="article:section" content="<?php echo htmlspecialchars($postSection['slug'] ? blogSections()[$postSection['slug']]['title'] : $post['category'], ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
     
     <!-- Twitter Card -->
@@ -439,12 +468,14 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
             background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
             color: white;
             border-radius: 10px;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             margin-bottom: 28px;
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .blog-post-category a {
+            color: white;
+            text-decoration: none;
         }
         .blog-post-title {
             font-size: 52px;
@@ -1027,7 +1058,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
                 <ul class="nav-menu">
                     <li><a href="/#how-it-works">Как это работает</a></li>
                     <li><a href="/#buy-business">Купить бизнес</a></li>
-                    <li><a href="/blog">Блог</a></li>
+                    <li><a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">Блог</a></li>
                     <?php if (isLoggedIn()): ?>
                         <li><a href="/dashboard.php">Продать бизнес</a></li>
                         <?php if (isModerator()): ?>
@@ -1056,13 +1087,19 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
 
     <div class="blog-post-container">
         <div class="back-to-blog">
-            <a href="/blog">← Вернуться к списку статей</a>
+            <a href="<?php echo htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>">← Вернуться к списку статей</a>
         </div>
 
         <article class="blog-post">
             <div class="blog-post-header">
                 <?php if (!empty($post['category'])): ?>
-                    <div class="blog-post-category"><?php echo htmlspecialchars($post['category'], ENT_QUOTES, 'UTF-8'); ?></div>
+                    <div class="blog-post-category">
+                        <?php if ($postSection['slug'] !== null): ?>
+                            <a href="<?php echo htmlspecialchars(blogListUrl($postSection['slug']), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars(blogCategoryLabel($post['category']), ENT_QUOTES, 'UTF-8'); ?></a>
+                        <?php else: ?>
+                            <?php echo htmlspecialchars(blogCategoryLabel($post['category']), ENT_QUOTES, 'UTF-8'); ?>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
                 <h1 class="blog-post-title"><?php echo htmlspecialchars($post['title'], ENT_QUOTES, 'UTF-8'); ?></h1>
                 <div class="blog-post-meta">
@@ -1288,7 +1325,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
                     "@type": "ListItem",
                     "position": 2,
                     "name": "Блог",
-                    "item": "<?php echo BASE_URL; ?>/blog"
+                    "item": "<?php echo BASE_URL . htmlspecialchars(blogListUrl(), ENT_QUOTES, 'UTF-8'); ?>"
                 },
                 {
                     "@type": "ListItem",
@@ -1299,7 +1336,7 @@ $currentUrl = BASE_URL . '/blog/' . htmlspecialchars($post['slug'], ENT_QUOTES, 
             ]
         }
         <?php if (!empty($post['category'])): ?>
-        ,"articleSection": <?php echo json_encode($post['category'], JSON_UNESCAPED_UNICODE); ?>
+        ,"articleSection": <?php echo json_encode(($postSection['slug'] ?? null) ? blogSections()[$postSection['slug']]['title'] : $post['category'], JSON_UNESCAPED_UNICODE); ?>
         <?php endif; ?>
     }
     </script>
